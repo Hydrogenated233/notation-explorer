@@ -1,18 +1,4 @@
-;var sequence_compare = (seq1,seq2)=>{
-   if(seq1.length===0){
-      if(seq2.length===0) return 0
-      else return -1
-   }else{
-      if(seq2.length===0) return 1
-      else{
-         if(seq1[0]<seq2[0]) return -1
-         else if(seq1[0]>seq2[0]) return 1
-         else return sequence_compare(seq1.slice(1),seq2.slice(1))
-      }
-   }
-}
-,sequence_display = expr=>''+expr==='Infinity'?'Limit':''+expr
-,fromDisplay = (str) => {
+var fromDisplay = (str) => {
    if (str === 'Limit') return [Infinity];
    let result = str.split(',').map((s) => parseInt(s.trim(), 10));
    if (result.find(Number.isNaN) !== undefined) throw new Error("Illegal omega-Y sequence");
