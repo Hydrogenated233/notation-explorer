@@ -42,6 +42,7 @@ const app = Vue.createApp({
       analysis_fs_target:undefined,
       lang:'en',
       auto_scroll:true,
+      export_hide:true,
    }),
    computed:{
       current_notation_name() { return register[this.current_tab].id },
@@ -63,6 +64,7 @@ const app = Vue.createApp({
                auto_fs_limit:'Auto expansion FS terms limit',
                tooltip_fs:'FS terms shown in tooltip',
                analysis_notation:'Analysis notation',
+               export_hide:'Export hide state',
             },
             zh: {
                show_hotkeys:'快捷键',
@@ -79,6 +81,7 @@ const app = Vue.createApp({
                auto_fs_limit:'自动展开基本列项数限制',
                tooltip_fs:'提示框显示基本列项数',
                analysis_notation:'分析记号',
+               export_hide:'导出隐藏状态',
             },
          };
          return t[this.lang] || t.en;
@@ -139,7 +142,11 @@ Ctrl + E: expand analysis fundamental sequence
 
             let text = node.analysis
             if (text !== undefined) {
-               result.push([register[root.current_tab].display(node.expr), text])
+               if (root.export_hide && node.hide_child) {
+                  result.push([register[root.current_tab].display(node.expr), text, 'true'])
+               } else {
+                  result.push([register[root.current_tab].display(node.expr), text])
+               }
             }
          }
 
@@ -183,7 +190,8 @@ Ctrl + E: expand analysis fundamental sequence
                   if (!analysis.length) continue
                   let expr = safeFromDisplay(notation, expr_str)
                   if (expr === undefined) continue
-                  objects.push([expr, analysis]);
+                  let hidden = (row[2] || '').trim() === 'true'
+                  objects.push([expr, analysis, hidden]);
                }
             }
 
@@ -285,6 +293,7 @@ function import_analysis(root_item, analysis_list, notation, use_short, auto_foc
       }
 
       if (analysis_list[index][1] !== undefined) item.analysis = analysis_list[index][1]
+      if (analysis_list[index][2] !== undefined) item.hide_child = !!analysis_list[index][2]
 
       if (index === 0 && auto_focus) {
          let node = node_map.get(item.path)

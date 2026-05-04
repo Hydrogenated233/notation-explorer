@@ -30,6 +30,7 @@
    <div>
       <input type="checkbox" v-model="diagram_follow"/> {{ L.diagram_follow }}
       <input type="checkbox" v-model="auto_scroll"/> {{ L.auto_scroll }}
+      <input type="checkbox" v-model="export_hide"/> {{ L.export_hide }}
       <input type="range" min="-5" max="5" step="0.1" v-model="diagram_scale"
              @focus="showCanvas = true" @blur="showCanvas = false">
       {{ L.diagram_size }}: {{diagram_scale}}
