@@ -210,8 +210,22 @@ ul {
   min-width: 120px;
   pointer-events: auto;
 }
-.tooltip div {
+.tooltip-row {
+  display: flex;
   margin: 2px 0;
+}
+.tooltip-expr {
+  text-align: left;
+  white-space: pre;
+  flex-shrink: 0;
+  padding-right: 8px;
+  overflow: hidden;
+}
+.tooltip-cmnt {
+  text-align: left;
+  white-space: nowrap;
+  color: #666;
+  flex-shrink: 0;
 }
 
 /* ---------- Floating Canvas ---------- */

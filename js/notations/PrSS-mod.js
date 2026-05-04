@@ -31,14 +31,11 @@ function findDoubleBadRoot_PrSS(arr, lastVal) {
 }
 
 function expand_PrSS(seq, FSterm) {
-   // FSterm = how many B copies to append
    if (seq.length === 0) return [];
    const last = seq[seq.length - 1];
    if (last === 1) {
-      // +1 expansion
       return seq.slice(0, -1);
    }
-   // last > 1
    const k = findDoubleBadRoot_PrSS(seq, last);
    if (k === null) {
       return seq.slice(0, -1).concat(last - 1);
@@ -48,7 +45,6 @@ function expand_PrSS(seq, FSterm) {
    if (B.length === 0) {
       return seq.slice(0, -1).concat(last - 1);
    }
-   // G + B + B + ... + B (FSterm times)
    let result = G.slice();
    for (let i = 0; i < FSterm; i++) {
       result = result.concat(B);
@@ -79,7 +75,6 @@ function expand_PrSS(seq, FSterm) {
       FS: function(seq, FSterm) {
          var datakey = '' + seq;
          if (datakey === 'Infinity') {
-            // Limit: 1, 1,2, 1,2,3, 1,2,3,4, ...
             var result = [];
             for (var i = 0; i < FSterm; i++) result.push(i + 1);
             return result;
@@ -90,7 +85,6 @@ function expand_PrSS(seq, FSterm) {
          return data[datakey][FSterm] = expand_PrSS(seq, FSterm);
       },
       FSalter: function(seq, FSterm) {
-         // same as FS for this notation
          return this.FS(seq, FSterm);
       },
       init: function() {

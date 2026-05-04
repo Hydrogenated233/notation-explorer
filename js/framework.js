@@ -494,7 +494,35 @@ register.forEach((notation,index)=>{
             if(!this.notation.able(this.item.expr)) return;
             var FS = get_FS(this.notation, root.use_alternative)
             var res=[], nmax=root.FS_shown[index]
-            for(let n=0; n<=nmax; ++n) res.push(n+':&nbsp;'+this.notation.display(FS(this.item.expr,n)))
+            // Build a lookup map: all analysis items by their expr
+            var commentMap = {}
+            var scanItems = function(items) {
+               for (var si = 0; si < items.length; si++) {
+                  var it = items[si]
+                  if (it.analysis) commentMap[''+it.expr] = it.analysis
+                  if (it.subitems && it.subitems.length) scanItems(it.subitems)
+               }
+            }
+            scanItems(root.datasets[root.current_tab].subitems)
+            var terms = []
+            var maxWidth = 0
+            for(let n=0; n<=nmax; ++n) {
+               var fsExpr = FS(this.item.expr,n)
+               var seqStr = n + ': ' + this.notation.display(fsExpr)
+               var childComment = commentMap[''+fsExpr] || ''
+               terms.push({ exprStr: seqStr, comment: childComment })
+            }
+            // Use CSS to align — set fixed width for expression part
+            // measured by the longest expression string
+            var maxLen = 0
+            for (var ti = 0; ti < terms.length; ti++) {
+               var l = terms[ti].exprStr.length
+               if (l > maxLen) maxLen = l
+            }
+            for (var ti = 0; ti < terms.length; ti++) {
+               terms[ti].exprWidth = (maxLen * 0.6) + 1 + 'em'
+            }
+            res = terms
             this.shownFS = res
             this.tooltipX = {left:(event.offsetX+15)+'px'}
             this.tooltip = true
@@ -643,7 +671,10 @@ register.forEach((notation,index)=>{
             <span v-html="notation.display(item.expr)"></span>
             <div class="tooltip" v-if="tooltip" :style="tooltipX" @mousedown.stop>
             <span v-html="notation.display(item.expr)"></span> fundamental sequence:
-            <div v-for="term in shownFS" v-html="term"></div>
+            <div v-for="term in shownFS" class="tooltip-row">
+               <span class="tooltip-expr" :style="{ width: term.exprWidth }" v-html="term.exprStr"></span>
+               <span class="tooltip-cmnt" v-if="term.comment" v-html="'; ' + term.comment"></span>
+            </div>
          </div></div>
          <ul v-if="!item.hide_child">
             <`+notation.id+`-list v-for="subitem in item.subitems" :item="subitem" :key="subitem.index"></`+notation.id+`-list>
