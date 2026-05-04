@@ -13,3 +13,4 @@ var sequence_compare = (seq1,seq2)=>{
    }
 }
 ,sequence_display = expr=>''+expr==='Infinity'?'Limit':''+expr
+,Y_limit = seq=>seq[seq.length-1]>1
