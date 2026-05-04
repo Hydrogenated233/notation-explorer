@@ -1,46 +1,55 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-<title>Notation Explorer</title>
-<link rel="stylesheet" type="text/css" href="index.css">
 <meta charset="UTF-8">
 <meta name="author" content="hyp_cos">
-</head><body><script src="Vue.js"></script>
+<title>Notation Explorer</title>
+<link rel="stylesheet" type="text/css" href="css/index.css">
+</head><body><script src="lib/Vue.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
 <script>var register=[]; var analysis_register=[]; </script>
 <div id="app">
-   <div class="tab">
-      <button v-for="(tab,idx) in tab_names" @mousedown="current_tab=idx" :disabled="current_tab==idx">{{tab}}</button>
+   <div class="lang-bar">
+      <button :class="{active: lang==='en'}" @mousedown="lang='en'">EN</button>
+      <button :class="{active: lang==='zh'}" @mousedown="lang='zh'">中文</button>
    </div>
-   <button @mousedown="show_hotkeys()">Show hotkeys</button>
-   <button @mousedown="reset_list()">Reset the list</button>
-   <button @mousedown="export_xlsx()">Export analysis</button>
-   <button @mousedown="import_xlsx()">Import analysis</button>
+
+   <div class="notation-select">
+      <select v-model="current_tab">
+         <option v-for="(tab,idx) in tab_names" :value="idx">{{tab}}</option>
+      </select>
+   </div>
+
+   <button @mousedown="show_hotkeys()">{{ L.show_hotkeys }}</button>
+   <button @mousedown="reset_list()">{{ L.reset }}</button>
+   <button @mousedown="export_xlsx()">{{ L.export }}</button>
+   <button @mousedown="import_xlsx()">{{ L.import }}</button>
    <input type="file" id="hiddenFileInput" style="display: none;" accept=".xlsx, .xls" ref="file_input"
-          @change="handle_import_file"
-   >
+          @change="handle_import_file">
+
    <div>
-      <input type="checkbox" value="false" v-model="diagram_follow"/> Diagram follows
+      <input type="checkbox" v-model="diagram_follow"/> {{ L.diagram_follow }}
+      <input type="checkbox" v-model="auto_scroll"/> {{ L.auto_scroll }}
       <input type="range" min="-5" max="5" step="0.1" v-model="diagram_scale"
-             @focus="showCanvas = true" @blur="showCanvas = false"
-      > Diagram size: {{diagram_scale}}
+             @focus="showCanvas = true" @blur="showCanvas = false">
+      {{ L.diagram_size }}: {{diagram_scale}}
       <br>
-      <input type="checkbox" value="true" v-model="use_alternative"/> Use alternative (short) fundamental sequence <br>
+      <input type="checkbox" v-model="use_alternative"/> {{ L.use_alternative }} <br>
    </div>
    <div>
-      Navigate to notation: <input type="text" ref="navigate_input" @keydown="navigate_keydown"> <button @mousedown="(e) => {e.preventDefault(); find_notation()}"> Find </button>
+      {{ L.navigate }}: <input type="text" ref="navigate_input" @keydown="navigate_keydown"> <button @mousedown="(e) => {e.preventDefault(); find_notation()}">{{ L.find }}</button>
    </div>
    <div>
-      Expansion tier: <button @mousedown="decr_tier()">-</button> {{tiername}} <button @mousedown="incr_tier()">+</button>
+      {{ L.expansion_tier }}: <button @mousedown="decr_tier()">-</button> {{tiername}} <button @mousedown="incr_tier()">+</button>
    </div>
    <div>
-      Auto expansion FS terms limit: <button @mousedown="length_limit--">-</button> {{length_limit}} <button @mousedown="length_limit++">+</button>
+      {{ L.auto_fs_limit }}: <button @mousedown="length_limit--">-</button> {{length_limit}} <button @mousedown="length_limit++">+</button>
    </div>
    <div>
-      FS terms shown in tooltip: <button @mousedown="decrFS()">-</button> {{FS_shown[current_tab]}} <button @mousedown="incrFS()">+</button>
+      {{ L.tooltip_fs }}: <button @mousedown="decrFS()">-</button> {{FS_shown[current_tab]}} <button @mousedown="incrFS()">+</button>
    </div>
    <div>
-      Analysis notation:
+      {{ L.analysis_notation }}:
       <select v-model="current_analysis_index">
          <option disabled :value="-1"/>
          <option v-for="(name, idx) in analysis_names" :value="idx">{{ name }}</option>
@@ -52,42 +61,44 @@
    </div>
    <fs-dialog v-model="show_fs_dialog" :init="current_analysis_notation.fs_default" @confirm="calc_analysis_fs"/>
 </div>
-<script src="omega-Y.js"></script>
-<script src="omega-Y-magma.js"></script>
-<script src="1-Y.js"></script>
-<script src="BM.js"></script>
-<script src="BHM.js"></script>
-<script src="BSM.js"></script>
-<script src="BLM.js"></script>
-<script src="CM.js"></script>
-<script src="wMM.js"></script>
-<script src="TomegaMN.js"></script>
-<script src="TomegaDMN.js"></script>
-<script src="MomegaMN.js"></script>
-<script src="MTomegaMN.js"></script>
-<script src="Domega2MN.js"></script>
-<script src="Aomega2MN.js"></script>
-<script src="Tomega^omegaMN.js"></script>
-<script src="DEN.js"></script>
-<script src="DEN2.js"></script>
-<script src="DEN3.js"></script>
-<script src="TON-main.js"></script>
-<script src="TON-DoR.js"></script>
-<script src="TON-DRP.js"></script>
-<script src="TON-I.js"></script>
-<script src="TON-IBP.js"></script>
-<script src="TON-MC.js"></script>
-<script src="TON-MPC.js"></script>
-<script src="TON-DRC.js"></script>
-<script src="TON-DRPC.js"></script>
-<script src="aSAN-1.js"></script>
-<script src="aSAN-2.js"></script>
-<script src="aSAN-3.js"></script>
-<script src="aSAN~3+.js"></script>
-<script src="LMN.js"></script>
-<script src="LON.js"></script>
-<script src="HSPN.js"></script>
-<script src="cOCF.js"></script>
-<script src="framework.js"></script>
+<script src="js/notations/omega-Y.js"></script>
+<script src="js/notations/omega-Y-magma.js"></script>
+<script src="js/notations/1-Y.js"></script>
+<script src="js/notations/BM.js"></script>
+<script src="js/notations/BHM.js"></script>
+<script src="js/notations/BSM.js"></script>
+<script src="js/notations/BLM.js"></script>
+<script src="js/notations/CM.js"></script>
+<script src="js/notations/wMM.js"></script>
+<script src="js/notations/TomegaMN.js"></script>
+<script src="js/notations/TomegaDMN.js"></script>
+<script src="js/notations/MomegaMN.js"></script>
+<script src="js/notations/MTomegaMN.js"></script>
+<script src="js/notations/Domega2MN.js"></script>
+<script src="js/notations/Aomega2MN.js"></script>
+<script src="js/notations/Tomega^omegaMN.js"></script>
+<script src="js/notations/DEN.js"></script>
+<script src="js/notations/DEN2.js"></script>
+<script src="js/notations/DEN3.js"></script>
+<script src="js/notations/TON-main.js"></script>
+<script src="js/notations/TON-DoR.js"></script>
+<script src="js/notations/TON-DRP.js"></script>
+<script src="js/notations/TON-I.js"></script>
+<script src="js/notations/TON-IBP.js"></script>
+<script src="js/notations/TON-MC.js"></script>
+<script src="js/notations/TON-MPC.js"></script>
+<script src="js/notations/TON-DRC.js"></script>
+<script src="js/notations/TON-DRPC.js"></script>
+<script src="js/notations/aSAN-1.js"></script>
+<script src="js/notations/aSAN-2.js"></script>
+<script src="js/notations/aSAN-3.js"></script>
+<script src="js/notations/aSAN~3+.js"></script>
+<script src="js/notations/LMN.js"></script>
+<script src="js/notations/LON.js"></script>
+<script src="js/notations/HSPN.js"></script>
+<script src="js/notations/cOCF.js"></script>
+<script src="js/notations/PrSS-mod.js"></script>
+<script src="js/notations/Diagram.js"></script>
+<script src="js/framework.js"></script>
 </body>
 </html>
