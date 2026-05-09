@@ -18,6 +18,7 @@ body::after {
 #app {
   max-width: 1400px;
   margin: 0 auto;
+  color: #1e1e1e;
 }
 
 /* ---------- Language Bar ---------- */
@@ -44,6 +45,37 @@ body::after {
   background: #2563eb;
   border-color: #2563eb;
   color: #fff;
+}
+
+/* ---------- Nav Bar ---------- */
+.nav-bar {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.nav-bar > button {
+  padding: 6px 18px;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  background: #fff;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.nav-bar > button:hover {
+  background: #f0f1f3;
+}
+.nav-bar > button.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+.nav-bar .lang-bar {
+  margin-bottom: 0;
+  margin-left: auto;
 }
 
 /* ---------- Notation Select Menu ---------- */
@@ -90,6 +122,10 @@ button:not(.tab > button):hover {
 }
 button:not(.tab > button):active {
   background: #e4e5e7;
+}
+.small-btn {
+  padding: 2px 8px;
+  min-width: 24px;
 }
 
 /* ---------- Checkbox & Range ---------- */
@@ -235,6 +271,32 @@ ul {
   z-index: 100;
 }
 
+/* ---------- Settings Page ---------- */
+.settings-page {
+  max-width: 500px;
+  margin: 20px 0;
+}
+.settings-page h3 {
+  font-weight: 500;
+  color: #1e1e1e;
+  margin: 0 0 16px 0;
+}
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #e5e7eb;
+  cursor: pointer;
+}
+.setting-row span {
+  font-size: 14px;
+  color: #344054;
+}
+.setting-row select {
+  max-width: 200px;
+}
+
 /* ---------- Analysis Table ---------- */
 .preview-container {
   max-height: 400px;
@@ -329,4 +391,152 @@ th {
 .fs-dialog-btn-primary:hover {
   background: #1d4ed8;
   border-color: #1d4ed8;
+}
+
+/* ===== Dark Mode ===== */
+html.dark {
+  background: #1a1a2e;
+  color: #e0e0e0;
+}
+html.dark body {
+  background: #1a1a2e;
+}
+html.dark #app {
+  color: #e0e0e0;
+}
+html.dark select {
+  background: #2d2d44;
+  color: #e0e0e0;
+  border-color: #4a4a6a;
+}
+html.dark select:focus {
+  border-color: #5b7fcf;
+}
+html.dark input[type="text"] {
+  background: #2d2d44;
+  color: #e0e0e0;
+  border-color: #4a4a6a;
+}
+html.dark input[type="text"]:focus {
+  border-color: #5b7fcf;
+  box-shadow: 0 0 0 2px rgba(91, 127, 207, 0.2);
+}
+html.dark button:not(.tab > button) {
+  background: #2d2d44;
+  color: #c0c0d0;
+  border-color: #4a4a6a;
+}
+html.dark button:not(.tab > button):hover {
+  background: #3a3a55;
+}
+html.dark .lang-bar button {
+  background: #2d2d44;
+  color: #8888aa;
+  border-color: #4a4a6a;
+}
+html.dark .lang-bar button.active {
+  background: #5b7fcf;
+  border-color: #5b7fcf;
+  color: #fff;
+}
+html.dark .nav-bar > button {
+  background: #2d2d44;
+  color: #8888aa;
+  border-color: #4a4a6a;
+}
+html.dark .nav-bar > button.active {
+  background: #5b7fcf;
+  border-color: #5b7fcf;
+  color: #fff;
+}
+html.dark .nav-bar > button:hover {
+  background: #3a3a55;
+}
+html.dark .notation-select select {
+  background: #2d2d44;
+  color: #e0e0e0;
+  border-color: #4a4a6a;
+}
+html.dark .notation-select select:focus {
+  border-color: #5b7fcf;
+}
+html.dark .shown-item:hover {
+  background: #2a2a45;
+}
+html.dark .shown-item.analyzed {
+  background: #25253a;
+}
+html.dark .shown-item.analyzed:hover {
+  background: #2a2a45;
+}
+html.dark .shown-item > input[type="text"] {
+  background: transparent;
+  color: #e0e0e0;
+  border-color: transparent;
+}
+html.dark .shown-item > input[type="text"]:focus {
+  background: #2d2d44;
+  border-color: #5b7fcf;
+}
+html.dark .shown-item > span {
+  color: #c0c0d0;
+}
+html.dark .tooltip {
+  background: #2d2d44;
+  border-color: #4a4a6a;
+  color: #e0e0e0;
+}
+html.dark .tooltip-cmnt {
+  color: #8888aa;
+}
+html.dark .preview-container {
+  border-color: #4a4a6a;
+}
+html.dark table th,
+html.dark table td {
+  border-color: #4a4a6a;
+}
+html.dark table th {
+  background: #2d2d44;
+  color: #e0e0e0;
+}
+html.dark .selected-row {
+  background: #2a2a45;
+}
+html.dark .fs-dialog-container {
+  background: #2d2d44;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+html.dark .fs-dialog-title {
+  color: #e0e0e0;
+}
+html.dark .fs-dialog-input {
+  background: #1a1a2e;
+  color: #e0e0e0;
+  border-color: #4a4a6a;
+}
+html.dark .fs-dialog-btn {
+  background: #2d2d44;
+  color: #c0c0d0;
+  border-color: #4a4a6a;
+}
+html.dark .fs-dialog-btn:hover {
+  background: #3a3a55;
+}
+html.dark .fs-dialog-btn-primary {
+  background: #5b7fcf;
+  border-color: #5b7fcf;
+  color: #fff;
+}
+html.dark .fs-dialog-btn-primary:hover {
+  background: #4a6fb0;
+}
+html.dark .setting-row {
+  border-bottom-color: #4a4a6a;
+}
+html.dark .setting-row span {
+  color: #c0c0d0;
+}
+html.dark .settings-page h3 {
+  color: #e0e0e0;
 }

@@ -43,6 +43,8 @@ const app = Vue.createApp({
       lang:'en',
       auto_scroll:true,
       export_hide:true,
+      page:'explore',
+      darkMode:false,
    }),
    computed:{
       current_notation_name() { return register[this.current_tab].id },
@@ -65,6 +67,10 @@ const app = Vue.createApp({
                tooltip_fs:'FS terms shown in tooltip',
                analysis_notation:'Analysis notation',
                export_hide:'Export hide state',
+               explore:'Explore',
+               settings:'Settings',
+               settings_title:'Settings',
+               dark_mode:'Dark Mode',
             },
             zh: {
                show_hotkeys:'快捷键',
@@ -82,6 +88,10 @@ const app = Vue.createApp({
                tooltip_fs:'提示框显示基本列项数',
                analysis_notation:'分析记号',
                export_hide:'导出隐藏状态',
+               explore:'探索',
+               settings:'设置',
+               settings_title:'设置',
+               dark_mode:'黑夜模式',
             },
          };
          return t[this.lang] || t.en;
@@ -101,6 +111,15 @@ const app = Vue.createApp({
          let scale = 0.1 / this.pCanvas.s * Math.pow(1.25, this.diagram_scale)
          return { w: this.pCanvas.w * scale, h: this.pCanvas.h * scale }
       }
+   },
+   watch:{
+      darkMode(val) {
+         document.documentElement.classList.toggle('dark', val)
+         localStorage.setItem('ne-dark', val)
+      },
+      lang(val) {
+         localStorage.setItem('ne-lang', val)
+      },
    },
    methods:{
       show_hotkeys() {
@@ -235,6 +254,13 @@ Ctrl + E: expand analysis fundamental sequence
       incrFS() { this.FS_shown[this.current_tab]++ },
       decrFS() { this.FS_shown[this.current_tab] = Math.max(this.FS_shown[this.current_tab] - 1, 0) },
 
+      loadSettings() {
+         var dark = localStorage.getItem('ne-dark')
+         if (dark !== null) this.darkMode = dark === 'true'
+         var lang = localStorage.getItem('ne-lang')
+         if (lang !== null) this.lang = lang
+         document.documentElement.classList.toggle('dark', this.darkMode)
+      },
    },
    mounted() {
       const canvasEl = document.getElementById('hoverCanvas');
@@ -244,6 +270,8 @@ Ctrl + E: expand analysis fundamental sequence
          type: "init",
          canvas: offscreen
       }, [offscreen])
+
+      this.loadSettings()
    }
 })
 

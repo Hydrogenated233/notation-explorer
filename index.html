@@ -9,54 +9,81 @@
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
 <script>var register=[]; var analysis_register=[]; </script>
 <div id="app">
-   <div class="lang-bar">
-      <button :class="{active: lang==='en'}" @mousedown="lang='en'">EN</button>
-      <button :class="{active: lang==='zh'}" @mousedown="lang='zh'">中文</button>
+   <div class="nav-bar">
+      <button :class="{active: page==='explore'}" @mousedown="page='explore'">{{ L.explore }}</button>
+      <button :class="{active: page==='settings'}" @mousedown="page='settings'">{{ L.settings }}</button>
+      <span class="lang-bar">
+         <button :class="{active: lang==='en'}" @mousedown="lang='en'">EN</button>
+         <button :class="{active: lang==='zh'}" @mousedown="lang='zh'">中文</button>
+      </span>
    </div>
 
-   <div class="notation-select">
-      <select v-model="current_tab">
-         <option v-for="(tab,idx) in tab_names" :value="idx">{{tab}}</option>
-      </select>
+   <div v-if="page==='explore'">
+      <div class="notation-select">
+         <select v-model="current_tab">
+            <option v-for="(tab,idx) in tab_names" :value="idx">{{tab}}</option>
+         </select>
+      </div>
+
+      <button @mousedown="show_hotkeys()">{{ L.show_hotkeys }}</button>
+      <button @mousedown="reset_list()">{{ L.reset }}</button>
+      <button @mousedown="export_xlsx()">{{ L.export }}</button>
+      <button @mousedown="import_xlsx()">{{ L.import }}</button>
+      <input type="file" id="hiddenFileInput" style="display: none;" accept=".xlsx, .xls" ref="file_input"
+             @change="handle_import_file">
+
+      <div>
+         {{ L.navigate }}: <input type="text" ref="navigate_input" @keydown="navigate_keydown"> <button @mousedown="(e) => {e.preventDefault(); find_notation()}">{{ L.find }}</button>
+      </div>
+      <component :is="current_notation_name" :subitems="datasets[current_tab].subitems" ref="list"></component>
    </div>
 
-   <button @mousedown="show_hotkeys()">{{ L.show_hotkeys }}</button>
-   <button @mousedown="reset_list()">{{ L.reset }}</button>
-   <button @mousedown="export_xlsx()">{{ L.export }}</button>
-   <button @mousedown="import_xlsx()">{{ L.import }}</button>
-   <input type="file" id="hiddenFileInput" style="display: none;" accept=".xlsx, .xls" ref="file_input"
-          @change="handle_import_file">
-
-   <div>
-      <input type="checkbox" v-model="diagram_follow"/> {{ L.diagram_follow }}
-      <input type="checkbox" v-model="auto_scroll"/> {{ L.auto_scroll }}
-      <input type="checkbox" v-model="export_hide"/> {{ L.export_hide }}
-      <input type="range" min="-5" max="5" step="0.1" v-model="diagram_scale"
-             @focus="showCanvas = true" @blur="showCanvas = false">
-      {{ L.diagram_size }}: {{diagram_scale}}
-      <br>
-      <input type="checkbox" v-model="use_alternative"/> {{ L.use_alternative }} <br>
+   <div v-if="page==='settings'" class="settings-page">
+      <h3>{{ L.settings_title }}</h3>
+      <label class="setting-row">
+         <span>{{ L.dark_mode }}</span>
+         <input type="checkbox" v-model="darkMode"/>
+      </label>
+      <label class="setting-row">
+         <span>{{ L.diagram_follow }}</span>
+         <input type="checkbox" v-model="diagram_follow"/>
+      </label>
+      <label class="setting-row">
+         <span>{{ L.auto_scroll }}</span>
+         <input type="checkbox" v-model="auto_scroll"/>
+      </label>
+      <label class="setting-row">
+         <span>{{ L.export_hide }}</span>
+         <input type="checkbox" v-model="export_hide"/>
+      </label>
+      <label class="setting-row">
+         <span>{{ L.use_alternative }}</span>
+         <input type="checkbox" v-model="use_alternative"/>
+      </label>
+      <label class="setting-row">
+         <span>{{ L.diagram_size }}: {{diagram_scale}}</span>
+         <input type="range" min="-5" max="5" step="0.1" v-model="diagram_scale"/>
+      </label>
+      <label class="setting-row">
+         <span>{{ L.expansion_tier }}</span>
+         <span><button @mousedown="decr_tier()" class="small-btn">-</button> {{tiername}} <button @mousedown="incr_tier()" class="small-btn">+</button></span>
+      </label>
+      <label class="setting-row">
+         <span>{{ L.auto_fs_limit }}</span>
+         <span><button @mousedown="length_limit--" class="small-btn">-</button> {{length_limit}} <button @mousedown="length_limit++" class="small-btn">+</button></span>
+      </label>
+      <label class="setting-row">
+         <span>{{ L.tooltip_fs }}</span>
+         <span><button @mousedown="decrFS()" class="small-btn">-</button> {{FS_shown[current_tab]}} <button @mousedown="incrFS()" class="small-btn">+</button></span>
+      </label>
+      <label class="setting-row">
+         <span>{{ L.analysis_notation }}</span>
+         <select v-model="current_analysis_index">
+            <option disabled :value="-1"/>
+            <option v-for="(name, idx) in analysis_names" :value="idx">{{ name }}</option>
+         </select>
+      </label>
    </div>
-   <div>
-      {{ L.navigate }}: <input type="text" ref="navigate_input" @keydown="navigate_keydown"> <button @mousedown="(e) => {e.preventDefault(); find_notation()}">{{ L.find }}</button>
-   </div>
-   <div>
-      {{ L.expansion_tier }}: <button @mousedown="decr_tier()">-</button> {{tiername}} <button @mousedown="incr_tier()">+</button>
-   </div>
-   <div>
-      {{ L.auto_fs_limit }}: <button @mousedown="length_limit--">-</button> {{length_limit}} <button @mousedown="length_limit++">+</button>
-   </div>
-   <div>
-      {{ L.tooltip_fs }}: <button @mousedown="decrFS()">-</button> {{FS_shown[current_tab]}} <button @mousedown="incrFS()">+</button>
-   </div>
-   <div>
-      {{ L.analysis_notation }}:
-      <select v-model="current_analysis_index">
-         <option disabled :value="-1"/>
-         <option v-for="(name, idx) in analysis_names" :value="idx">{{ name }}</option>
-      </select>
-   </div>
-   <component :is="current_notation_name" :subitems="datasets[current_tab].subitems" ref="list"></component>
    <div class="floating-canvas" id="floatingCanvas" :style="{ left: pCanvas.x + 'px', top: pCanvas.y + 'px' }" v-show="showCanvas && !pCanvasModifier.hide">
       <canvas id="hoverCanvas" width="10" height="10" :style="{ width: pCanvasScaled.w + 'px', height: pCanvasScaled.h + 'px' }"/>
    </div>
@@ -64,12 +91,12 @@
 </div>
 <script src="js/notations/shared-seq.js"></script>
 <script src="js/notations/shared-matrix.js"></script>
-<!-- <script src="js/notations/omega-Y.js"></script>
-<script src="js/notations/omega-Y-magma.js"></script>
+<script src="js/notations/omega-Y.js"></script>
 <script src="js/notations/1-Y.js"></script>
 <script src="js/notations/BM.js"></script>
-<script src="js/notations/BHM.js"></script>
 <script src="js/notations/BSM.js"></script>
+<!-- <script src="js/notations/BHM.js"></script>
+<script src="js/notations/omega-Y-magma.js"></script>
 <script src="js/notations/BLM.js"></script>
 <script src="js/notations/CM.js"></script>
 <script src="js/notations/wMM.js"></script>
@@ -99,10 +126,10 @@
 <script src="js/notations/LMN.js"></script>
 <script src="js/notations/LON.js"></script>
 <script src="js/notations/HSPN.js"></script>
-<script src="js/notations/cOCF.js"></script> -->
+<script src="js/notations/cOCF.js"></script> 
 <script src="js/notations/PrSS-mod.js"></script>
 <script src="js/notations/DFSS.js"></script>
-<script src="js/notations/PPS.js"></script>
+<script src="js/notations/PPS.js"></script>-->
 <script src="js/notations/PPS4.js"></script>
 <script src="js/notations/Diagram.js"></script>
 <script src="js/framework.js"></script>

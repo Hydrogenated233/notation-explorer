@@ -2,11 +2,11 @@
 /**
  * Parented Predecessor Sequence 4 (PPS4)
  *
- * 极限表达式：0,1,2,3,4,5,...
+ * 极限表达式：0,1,2,3,4,5,... (0开头)
  * 列标从1开始。
  *
  * 坏根：列标等于(末项的值)的项。如果末项是0，则表示后继序数。
- * L = y - b  (末项列标 - 坏根的值)
+ * L = y - x  (末项列标 - 末项的值)
  * b = 坏根的值
  * x = 末项的值
  * y = 末项的列标
@@ -14,9 +14,9 @@
  * 末项展开：
  *   弱展开条件：末项和坏根之间(两边都不含)存在一项，它的值等于b
  *   弱展开：将末项的值换成b
- *   强展开：在第b列和第x列(都不含)之间找到最右侧的值≤b的项，将末项的值换为这个项的列标；如果找不到，则等同弱展开
+ *   强展开：在第b列和第x列(都不含)之间找到最右侧的值小于等于b的项，将末项的值换为这个项的列标；如果找不到，则等同弱展开
  *
- * 其他项展开：对任意的 i > y - L，如果第i项的值 ≥ x，则第i+L项的值 = 第i项的值 + L，否则第i+L项的值 = 第i项的值
+ * 其他项展开：对任意的 i > y-L（即 i > x），如果第i项的值大于等于x，那么第i+L项的值 = 第i项的值 + L，否则第i+L项的值 = 第i项的值
  *
  * 基本列[n]：展开到第 y + n*L - 1 项
  */
@@ -36,72 +36,65 @@
     }
 
     // 坏根列标 = x（1-indexed），索引 = x - 1
-    var badRootIndex = x - 1;
-    if (badRootIndex < 0 || badRootIndex >= y - 1) {
-      // 坏根不在序列中，删末项
+    if (x > y) {
       return seq.slice(0, -1);
     }
 
-    var b = seq[badRootIndex];  // 坏根的值
-    var L = y - b;              // L = 末项列标 - 坏根的值
+    var b = seq[x - 1];  // 坏根的值
+    var L = y - x;        // L = y - x
 
     // --- 末项展开 ---
-    // 检查弱展开：末项和坏根之间(两边都不含)是否存在一项值等于b
+    // 弱展开检测：末项和坏根之间(两边都不含) —— 即第 x+1 列到第 y-1 列
     var weakExpand = false;
-    for (var i = badRootIndex + 2; i < y; i++) {
+    for (var i = x + 1; i < y; i++) {
       if (seq[i - 1] === b) {
         weakExpand = true;
         break;
       }
     }
 
-    // 先拷贝序列，再修改末项
-    var result = seq.slice();
-
+    // 确定末项新值 v
+    var v;
     if (weakExpand) {
-      // 弱展开：末项值换成b
-      result[y - 1] = b;
+      // 弱展开
+      v = b;
     } else {
       // 强展开：在第b列和第x列(都不含)之间找最右侧的值≤b的项
-      // 索引范围：b 到 x-2（1-indexed的b到x-1之间）
-      var found = -1;
+      // 列标范围：b+1 到 x-1 (1-indexed)
+      // 索引范围：b 到 x-2 (0-indexed)
+      var foundCol = -1;
       for (var i = x - 2; i >= b; i--) {
         if (seq[i] <= b) {
-          found = i + 1;  // 列标
+          foundCol = i + 1;
           break;
         }
       }
-      if (found !== -1) {
-        result[y - 1] = found;  // 末项值换为找到项的列标
-      } else {
-        // 找不到，等同弱展开
-        result[y - 1] = b;
-      }
+      v = (foundCol !== -1) ? foundCol : b;
     }
 
-    // --- 其他项展开 ---
-    // 目标长度：y + FSterm * L - 1
-    var targetLen = y + FSterm * L - 1;
-    // 从 i > y - L 开始，即 i = y - L + 1 (1-indexed)
-    var startI = y - L + 1; // 1-indexed
+    // --- 构造结果 ---
+    var totalLen = y + FSterm * L - 1;
+    var res = seq.slice(0, y - 1); // 拷贝前 y-1 项
+    res.push(v);                   // 设置末项
 
-    // 从原始序列的索引 startI-1 开始，追加到 targetLen
-    // 注意此时 result 长度 = y（末项已修改但没追加新项）
-    for (var i = startI; result.length < targetLen; i++) {
+    // 对任意的 i > y-L（即 i >= y-L+1），循环展开到 totalLen
+    var startI = y - L + 1; // i > y-L 的第一个 i
+
+    for (var i = startI; res.length < totalLen; i++) {
       var idx = i - 1; // 0-indexed
-      if (idx >= result.length) break;
+      if (idx >= res.length) break;
 
-      var val = result[idx];
+      var val = res[idx];
       var newVal;
       if (val >= x) {
         newVal = val + L;
       } else {
         newVal = val;
       }
-      result.push(newVal);
+      res.push(newVal);
     }
 
-    return result;
+    return res;
   }
 
   function sequence_compare(seq1, seq2) {
@@ -120,7 +113,7 @@
 
   register.push({
     id: 'pps4',
-    name: 'Parented Predecessor Sequence 4',
+    name: 'PPS4',
     display: function (expr) {
       if ('' + expr === 'Infinity') return 'Limit';
       return '' + expr;
