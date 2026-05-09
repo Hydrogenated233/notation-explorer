@@ -25,12 +25,15 @@
          </select>
       </div>
 
-      <button @mousedown="show_hotkeys()">{{ L.show_hotkeys }}</button>
-      <button @mousedown="reset_list()">{{ L.reset }}</button>
-      <button @mousedown="export_xlsx()">{{ L.export }}</button>
-      <button @mousedown="import_xlsx()">{{ L.import }}</button>
-      <input type="file" id="hiddenFileInput" style="display: none;" accept=".xlsx, .xls" ref="file_input"
-             @change="handle_import_file">
+      <div>
+         <input type="checkbox" v-model="export_hide"/> {{ L.export_hide }}<br>
+         <button @mousedown="show_hotkeys()">{{ L.show_hotkeys }}</button>
+         <button @mousedown="reset_list()">{{ L.reset }}</button>
+         <button @mousedown="export_xlsx()">{{ L.export }}</button>
+         <button @mousedown="import_xlsx()">{{ L.import }}</button>
+         <input type="file" id="hiddenFileInput" style="display: none;" accept=".xlsx, .xls" ref="file_input"
+                @change="handle_import_file">
+      </div>
 
       <div>
          {{ L.navigate }}: <input type="text" ref="navigate_input" @keydown="navigate_keydown"> <button @mousedown="(e) => {e.preventDefault(); find_notation()}">{{ L.find }}</button>
@@ -51,10 +54,6 @@
       <label class="setting-row">
          <span>{{ L.auto_scroll }}</span>
          <input type="checkbox" v-model="auto_scroll"/>
-      </label>
-      <label class="setting-row">
-         <span>{{ L.export_hide }}</span>
-         <input type="checkbox" v-model="export_hide"/>
       </label>
       <label class="setting-row">
          <span>{{ L.use_alternative }}</span>

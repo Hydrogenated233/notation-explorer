@@ -67,28 +67,28 @@ const app = Vue.createApp({
                tooltip_fs:'FS terms shown in tooltip',
                analysis_notation:'Analysis notation',
                export_hide:'Export hide state',
-               explore:'Explore',
+               explore:'Analysis',
                settings:'Settings',
                settings_title:'Settings',
                dark_mode:'Dark Mode',
             },
             zh: {
                show_hotkeys:'快捷键',
-               reset:'重置列表',
+               reset:'重置分析',
                export:'导出分析',
                import:'导入分析',
                diagram_follow:'图表跟随',
                diagram_size:'图表大小',
                use_alternative:'使用短基本列（备用）',
                auto_scroll:'焦点自动滚动/居中',
-               navigate:'跳转到记号',
+               navigate:'跳转到',
                find:'查找',
                expansion_tier:'展开层级',
                auto_fs_limit:'自动展开基本列项数限制',
                tooltip_fs:'提示框显示基本列项数',
                analysis_notation:'分析记号',
                export_hide:'导出隐藏状态',
-               explore:'探索',
+               explore:'分析',
                settings:'设置',
                settings_title:'设置',
                dark_mode:'黑夜模式',
@@ -120,6 +120,15 @@ const app = Vue.createApp({
       lang(val) {
          localStorage.setItem('ne-lang', val)
       },
+      diagram_follow(val) { localStorage.setItem('ne-diagram-follow', val) },
+      auto_scroll(val) { localStorage.setItem('ne-auto-scroll', val) },
+      export_hide(val) { localStorage.setItem('ne-export-hide', val) },
+      use_alternative(val) { localStorage.setItem('ne-use-alternative', val) },
+      diagram_scale(val) { localStorage.setItem('ne-diagram-scale', val) },
+      'tier': { handler(val) { localStorage.setItem('ne-tier', JSON.stringify(val)) }, deep: true },
+      length_limit(val) { localStorage.setItem('ne-length-limit', val) },
+      'FS_shown': { handler(val) { localStorage.setItem('ne-fs-shown', JSON.stringify(val)) }, deep: true },
+      current_analysis_index(val) { localStorage.setItem('ne-analysis-idx', val) },
    },
    methods:{
       show_hotkeys() {
@@ -255,10 +264,29 @@ Ctrl + E: expand analysis fundamental sequence
       decrFS() { this.FS_shown[this.current_tab] = Math.max(this.FS_shown[this.current_tab] - 1, 0) },
 
       loadSettings() {
-         var dark = localStorage.getItem('ne-dark')
-         if (dark !== null) this.darkMode = dark === 'true'
-         var lang = localStorage.getItem('ne-lang')
-         if (lang !== null) this.lang = lang
+         var v
+         v = localStorage.getItem('ne-dark')
+         if (v !== null) this.darkMode = v === 'true'
+         v = localStorage.getItem('ne-lang')
+         if (v !== null) this.lang = v
+         v = localStorage.getItem('ne-diagram-follow')
+         if (v !== null) this.diagram_follow = v === 'true'
+         v = localStorage.getItem('ne-auto-scroll')
+         if (v !== null) this.auto_scroll = v === 'true'
+         v = localStorage.getItem('ne-export-hide')
+         if (v !== null) this.export_hide = v === 'true'
+         v = localStorage.getItem('ne-use-alternative')
+         if (v !== null) this.use_alternative = v === 'true'
+         v = localStorage.getItem('ne-diagram-scale')
+         if (v !== null) this.diagram_scale = parseFloat(v)
+         v = localStorage.getItem('ne-tier')
+         if (v !== null) this.tier = JSON.parse(v)
+         v = localStorage.getItem('ne-length-limit')
+         if (v !== null) this.length_limit = parseInt(v, 10)
+         v = localStorage.getItem('ne-fs-shown')
+         if (v !== null) this.FS_shown = JSON.parse(v)
+         v = localStorage.getItem('ne-analysis-idx')
+         if (v !== null) this.current_analysis_index = parseInt(v, 10)
          document.documentElement.classList.toggle('dark', this.darkMode)
       },
    },
