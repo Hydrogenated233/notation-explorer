@@ -302,6 +302,28 @@ if (this.notation.drawDiagram != null) {
 
 > 注意：`register` 中记号出现的顺序就是选项卡菜单中的顺序。`index.html` 中的加载顺序决定了 `register` 数组中各记号的 index。
 
+## 设置信息持久化
+
+所有用户设置压缩为单个 `localStorage` 键 `ne-config`（JSON 格式），不再分多个键。
+
+**存储的字段：**
+
+| 键名 | 类型 | 说明 |
+|------|------|------|
+| `darkMode` | boolean | 暗黑模式 |
+| `lang` | string | 语言 (`'en'` / `'zh'`) |
+| `diagramFollow` | boolean | 画布跟随鼠标 |
+| `autoScroll` | boolean | 焦点自动滚动/居中 |
+| `exportHide` | boolean | 导出包含隐藏状态 |
+| `useAlt` | boolean | 使用短基本列 |
+| `diagramScale` | number | 画布缩放 |
+| `tier` | number | 全局展开层级（不再按记号分别保存） |
+| `lengthLimit` | number | 自动展开项数限制 |
+| `fsShown` | number | 提示框 FS 项数（全局统一） |
+| `analysisIdx` | number | 分析记号索引 |
+
+所有设置仅在框架 (`framework.js`) 中管理，记号文件无需关心。
+
 ## 常见模式与最佳实践
 
 ### 1. IIFE 包裹

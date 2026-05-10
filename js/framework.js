@@ -28,8 +28,8 @@ const app = Vue.createApp({
    data:()=>({
       current_tab:0,
       current_analysis_index:-1,
-      FS_shown:register.map(()=>3),
-      tier:register.map(()=>0),
+      FS_shown:3,
+      tier:0,
       length_limit:20,
       datasets:register.map(init_dataset),
       pCanvas: { x:0, y:0, w:0, h:0, s:1 },
@@ -69,6 +69,7 @@ const app = Vue.createApp({
                export_hide:'Export hide state',
                explore:'Analysis',
                settings:'Settings',
+               reset_settings:'Reset to defaults',
                settings_title:'Settings',
                dark_mode:'Dark Mode',
             },
@@ -90,6 +91,7 @@ const app = Vue.createApp({
                export_hide:'导出隐藏状态',
                explore:'分析',
                settings:'设置',
+               reset_settings:'重置到默认',
                settings_title:'设置',
                dark_mode:'黑夜模式',
             },
@@ -99,7 +101,7 @@ const app = Vue.createApp({
       tab_names:()=> register.map(notation=>notation.name),
       analysis_names:() => analysis_register.map(notation=>notation.name),
       tiername(){
-         var n = this.tier[this.current_tab]
+         var n = this.tier
          var tierEn = ['small','single','double','triple','quadruple','quintuple','sextuple','septuple','octuple'];
          var tierZh = ['零次','一次','二次','三次','四次','五次','六次','七次','八次'];
          if(0<=n&&n<=8) {
@@ -113,22 +115,17 @@ const app = Vue.createApp({
       }
    },
    watch:{
-      darkMode(val) {
-         document.documentElement.classList.toggle('dark', val)
-         localStorage.setItem('ne-dark', val)
-      },
-      lang(val) {
-         localStorage.setItem('ne-lang', val)
-      },
-      diagram_follow(val) { localStorage.setItem('ne-diagram-follow', val) },
-      auto_scroll(val) { localStorage.setItem('ne-auto-scroll', val) },
-      export_hide(val) { localStorage.setItem('ne-export-hide', val) },
-      use_alternative(val) { localStorage.setItem('ne-use-alternative', val) },
-      diagram_scale(val) { localStorage.setItem('ne-diagram-scale', val) },
-      'tier': { handler(val) { localStorage.setItem('ne-tier', JSON.stringify(val)) }, deep: true },
-      length_limit(val) { localStorage.setItem('ne-length-limit', val) },
-      'FS_shown': { handler(val) { localStorage.setItem('ne-fs-shown', JSON.stringify(val)) }, deep: true },
-      current_analysis_index(val) { localStorage.setItem('ne-analysis-idx', val) },
+      darkMode(val) { document.documentElement.classList.toggle('dark', val); this.saveSettings() },
+      lang() { this.saveSettings() },
+      diagram_follow() { this.saveSettings() },
+      auto_scroll() { this.saveSettings() },
+      export_hide() { this.saveSettings() },
+      use_alternative() { this.saveSettings() },
+      diagram_scale() { this.saveSettings() },
+      tier() { this.saveSettings() },
+      length_limit() { this.saveSettings() },
+      FS_shown() { this.saveSettings() },
+      current_analysis_index() { this.saveSettings() },
    },
    methods:{
       show_hotkeys() {
@@ -258,36 +255,64 @@ Ctrl + E: expand analysis fundamental sequence
          target.setSelectionRange(result.length, result.length);
       },
 
-      incr_tier() { this.tier[this.current_tab]++ },
-      decr_tier() { this.tier[this.current_tab] = Math.max(this.tier[this.current_tab] - 1, 0) },
-      incrFS() { this.FS_shown[this.current_tab]++ },
-      decrFS() { this.FS_shown[this.current_tab] = Math.max(this.FS_shown[this.current_tab] - 1, 0) },
+      incr_tier() { this.tier++ },
+      decr_tier() { this.tier = Math.max(this.tier - 1, 0) },
+      incrFS() { this.FS_shown++ },
+      decrFS() { this.FS_shown = Math.max(this.FS_shown - 1, 0) },
 
+      saveSettings() {
+         localStorage.setItem('ne-config', JSON.stringify({
+            darkMode: this.darkMode,
+            lang: this.lang,
+            diagramFollow: this.diagram_follow,
+            autoScroll: this.auto_scroll,
+            exportHide: this.export_hide,
+            useAlt: this.use_alternative,
+            diagramScale: this.diagram_scale,
+            tier: this.tier,
+            lengthLimit: this.length_limit,
+            fsShown: this.FS_shown,
+            analysisIdx: this.current_analysis_index,
+         }))
+      },
       loadSettings() {
-         var v
-         v = localStorage.getItem('ne-dark')
-         if (v !== null) this.darkMode = v === 'true'
-         v = localStorage.getItem('ne-lang')
-         if (v !== null) this.lang = v
-         v = localStorage.getItem('ne-diagram-follow')
-         if (v !== null) this.diagram_follow = v === 'true'
-         v = localStorage.getItem('ne-auto-scroll')
-         if (v !== null) this.auto_scroll = v === 'true'
-         v = localStorage.getItem('ne-export-hide')
-         if (v !== null) this.export_hide = v === 'true'
-         v = localStorage.getItem('ne-use-alternative')
-         if (v !== null) this.use_alternative = v === 'true'
-         v = localStorage.getItem('ne-diagram-scale')
-         if (v !== null) this.diagram_scale = parseFloat(v)
-         v = localStorage.getItem('ne-tier')
-         if (v !== null) this.tier = JSON.parse(v)
-         v = localStorage.getItem('ne-length-limit')
-         if (v !== null) this.length_limit = parseInt(v, 10)
-         v = localStorage.getItem('ne-fs-shown')
-         if (v !== null) this.FS_shown = JSON.parse(v)
-         v = localStorage.getItem('ne-analysis-idx')
-         if (v !== null) this.current_analysis_index = parseInt(v, 10)
+         try {
+            var raw = localStorage.getItem('ne-config')
+            if (raw) {
+               var s = JSON.parse(raw)
+               function valid(v, fallback) {
+                  if (v === null || v === undefined || v === '') return fallback
+                  if (typeof v === 'number' && isNaN(v)) return fallback
+                  return v
+               }
+               if (s.darkMode !== undefined) this.darkMode = valid(s.darkMode, false)
+               if (s.lang !== undefined) this.lang = valid(s.lang, 'en')
+               if (s.diagramFollow !== undefined) this.diagram_follow = valid(s.diagramFollow, false)
+               if (s.autoScroll !== undefined) this.auto_scroll = valid(s.autoScroll, true)
+               if (s.exportHide !== undefined) this.export_hide = valid(s.exportHide, true)
+               if (s.useAlt !== undefined) this.use_alternative = valid(s.useAlt, true)
+               if (s.diagramScale !== undefined) this.diagram_scale = valid(s.diagramScale, 0)
+               if (s.tier !== undefined) this.tier = valid(s.tier, 0)
+               if (s.lengthLimit !== undefined) this.length_limit = valid(s.lengthLimit, 20)
+               if (s.fsShown !== undefined) this.FS_shown = valid(s.fsShown, 3)
+               if (s.analysisIdx !== undefined) this.current_analysis_index = valid(s.analysisIdx, -1)
+            }
+         } catch(e) {}
          document.documentElement.classList.toggle('dark', this.darkMode)
+      },
+      resetSettings() {
+         this.darkMode = false
+         this.lang = 'en'
+         this.diagram_follow = false
+         this.auto_scroll = true
+         this.export_hide = true
+         this.use_alternative = true
+         this.diagram_scale = 0
+         this.tier = 0
+         this.length_limit = 20
+         this.FS_shown = 3
+         this.current_analysis_index = -1
+         this.saveSettings()
       },
    },
    mounted() {
@@ -558,7 +583,7 @@ register.forEach((notation,index)=>{
 
             if(!this.notation.able(this.item.expr)) return;
             var FS = get_FS(this.notation, root.use_alternative)
-            var res=[], nmax=root.FS_shown[index]
+            var res=[], nmax=root.FS_shown
             // Build a lookup map: all analysis items by their expr
             var commentMap = {}
             var scanItems = function(items) {
@@ -608,7 +633,7 @@ register.forEach((notation,index)=>{
          onmousedown(event){
             if (event.button === 0) {
                let FS = root.use_alternative ? this.FSalter : this.FS;
-               expand_item(this.item, this.notation, root.use_alternative, root.tier[index])
+               expand_item(this.item, this.notation, root.use_alternative, root.tier)
             } else if (event.button === 2) {
                console.log(this.notation, this.item)
             }
@@ -681,7 +706,7 @@ register.forEach((notation,index)=>{
                input.scrollLeft = input.scrollWidth - input.clientWidth
             } else if (event.key === 'Enter') {
                event.preventDefault()
-               let tier = event.shiftKey ? 1 : root.tier[index]
+               let tier = event.shiftKey ? 1 : root.tier
                let FS = root.use_alternative ? this.FSalter : this.FS;
                expand_item(this.item, this.notation, root.use_alternative, tier, true)
             } else if (event.key === 'Delete') {

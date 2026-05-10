@@ -73,7 +73,7 @@
       </label>
       <label class="setting-row">
          <span>{{ L.tooltip_fs }}</span>
-         <span><button @mousedown="decrFS()" class="small-btn">-</button> {{FS_shown[current_tab]}} <button @mousedown="incrFS()" class="small-btn">+</button></span>
+         <span><button @mousedown="decrFS()" class="small-btn">-</button> {{FS_shown}} <button @mousedown="incrFS()" class="small-btn">+</button></span>
       </label>
       <label class="setting-row">
          <span>{{ L.analysis_notation }}</span>
@@ -82,6 +82,7 @@
             <option v-for="(name, idx) in analysis_names" :value="idx">{{ name }}</option>
          </select>
       </label>
+      <button @mousedown="resetSettings()" class="reset-btn">{{ L.reset_settings }}</button>
    </div>
    <div class="floating-canvas" id="floatingCanvas" :style="{ left: pCanvas.x + 'px', top: pCanvas.y + 'px' }" v-show="showCanvas && !pCanvasModifier.hide">
       <canvas id="hoverCanvas" width="10" height="10" :style="{ width: pCanvasScaled.w + 'px', height: pCanvasScaled.h + 'px' }"/>

@@ -540,3 +540,27 @@ html.dark .setting-row span {
 html.dark .settings-page h3 {
   color: #e0e0e0;
 }
+.reset-btn {
+  margin-top: 16px;
+  padding: 6px 16px;
+  border: 1px solid #e53e3e;
+  border-radius: 5px;
+  background: #fff;
+  color: #e53e3e;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.reset-btn:hover {
+  background: #fff5f5;
+  border-color: #c53030;
+  color: #c53030;
+}
+html.dark .reset-btn {
+  background: #2d2d44;
+  border-color: #e53e3e;
+  color: #e53e3e;
+}
+html.dark .reset-btn:hover {
+  background: #3a2a2a;
+}
