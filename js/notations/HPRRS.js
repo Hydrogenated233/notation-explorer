@@ -147,7 +147,7 @@
       return result;
     },
     able: function (seq) {
-      return seq.length > 0 && seq[seq.length - 1] > seq[0];
+      return seq.length > 0 && seq[seq.length - 1] > 0;
     },
     compare: sequence_compare,
     FS: (function () {
