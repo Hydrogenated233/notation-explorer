@@ -280,17 +280,23 @@ Ctrl + E: expand analysis fundamental sequence
             var raw = localStorage.getItem('ne-config')
             if (raw) {
                var s = JSON.parse(raw)
-               if (s.darkMode != null && s.darkMode !== '') this.darkMode = s.darkMode
-               if (s.lang != null && s.lang !== '') this.lang = s.lang
-               if (s.diagramFollow != null && s.diagramFollow !== '') this.diagram_follow = s.diagramFollow
-               if (s.autoScroll != null && s.autoScroll !== '') this.auto_scroll = s.autoScroll
-               if (s.exportHide != null && s.exportHide !== '') this.export_hide = s.exportHide
-               if (s.useAlt != null && s.useAlt !== '') this.use_alternative = s.useAlt
-               if (s.diagramScale != null && !isNaN(s.diagramScale) && s.diagramScale !== '') this.diagram_scale = s.diagramScale
-               if (s.tier != null && !isNaN(s.tier) && s.tier !== '') this.tier = s.tier
-               if (s.lengthLimit != null && !isNaN(s.lengthLimit) && s.lengthLimit !== '') this.length_limit = s.lengthLimit
-               if (s.fsShown != null && !isNaN(s.fsShown) && s.fsShown !== '') this.FS_shown = s.fsShown
-               if (s.analysisIdx != null && !isNaN(s.analysisIdx) && s.analysisIdx !== '') this.current_analysis_index = s.analysisIdx
+               var self = this
+               function getOr(k, fallback) {
+                  var v = s[k]
+                  return (v === null || v === undefined || v === '' || (typeof v === 'number' && isNaN(v)))
+                     ? fallback : v
+               }
+               self.darkMode = getOr('darkMode', false)
+               self.lang = getOr('lang', 'en')
+               self.diagram_follow = getOr('diagramFollow', false)
+               self.auto_scroll = getOr('autoScroll', true)
+               self.export_hide = getOr('exportHide', true)
+               self.use_alternative = getOr('useAlt', true)
+               self.diagram_scale = getOr('diagramScale', 0)
+               self.tier = getOr('tier', 0)
+               self.length_limit = getOr('lengthLimit', 20)
+               self.FS_shown = getOr('fsShown', 3)
+               self.current_analysis_index = getOr('analysisIdx', -1)
             }
          } catch(e) {}
          document.documentElement.classList.toggle('dark', this.darkMode)
