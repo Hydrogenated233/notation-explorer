@@ -40,6 +40,14 @@ const app = Vue.createApp({
       use_alternative:true,
       show_fs_dialog:false,
       analysis_fs_target:undefined,
+      showSummary:false,
+      noteSheets:[{ name: 'Sheet2', text: '' }],
+      currentSheet:0,
+      editingTitle:false,
+      summaryX:undefined,
+      summaryY:undefined,
+      summaryW:440,
+      summaryH:400,
       lang:'en',
       auto_scroll:true,
       export_hide:true,
@@ -70,6 +78,7 @@ const app = Vue.createApp({
                explore:'Analysis',
                settings:'Settings',
                reset_settings:'Reset to defaults',
+               note:'Note',
                settings_title:'Settings',
                dark_mode:'Dark Mode',
             },
@@ -92,6 +101,7 @@ const app = Vue.createApp({
                explore:'分析',
                settings:'设置',
                reset_settings:'重置到默认',
+               note:'笔记',
                settings_title:'设置',
                dark_mode:'黑夜模式',
             },
@@ -126,6 +136,7 @@ const app = Vue.createApp({
       length_limit() { this.saveSettings() },
       FS_shown() { this.saveSettings() },
       current_analysis_index() { this.saveSettings() },
+      current_tab() { this.initSheets(); },
    },
    methods:{
       show_hotkeys() {
@@ -177,10 +188,53 @@ Ctrl + E: expand analysis fundamental sequence
 
          find_result(root.datasets[root.current_tab])
 
-         const worksheet = XLSX.utils.aoa_to_sheet(result);
-
+         // Sheet1: 分析树
+         const ws1 = XLSX.utils.aoa_to_sheet(result);
          const workbook = XLSX.utils.book_new();
-         XLSX.utils.book_append_sheet(workbook, worksheet, "1");
+         XLSX.utils.book_append_sheet(workbook, ws1, "sheet1");
+         // Sheet2+: 便利贴的每个 Sheet（每行作为 CSV 解析）
+         for (var si = 0; si < this.noteSheets.length; si++) {
+            var ns = this.noteSheets[si];
+            var lines = (ns.text || '').split('\n');
+            var rows = [];
+            for (var li = 0; li < lines.length; li++) {
+               var line = lines[li].trim();
+               if (!line) continue;
+               // 简易 CSV 解析：支持双引号包裹的字段（含逗号）
+               var fields = [];
+               var cur = '';
+               var inQ = false;
+               for (var ci = 0; ci < line.length; ci++) {
+                  var ch = line[ci];
+                  if (inQ) {
+                     if (ch === '"') {
+                        if (ci + 1 < line.length && line[ci + 1] === '"') {
+                           cur += '"';
+                           ci++;
+                        } else {
+                           inQ = false;
+                        }
+                     } else {
+                        cur += ch;
+                     }
+                  } else {
+                     if (ch === '"') {
+                        inQ = true;
+                     } else if (ch === ',') {
+                        fields.push(cur);
+                        cur = '';
+                     } else {
+                        cur += ch;
+                     }
+                  }
+               }
+               fields.push(cur);
+               rows.push(fields);
+            }
+            if (rows.length) {
+               XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), ns.name);
+            }
+         }
 
          XLSX.writeFile(workbook, "output.xlsx");
       },
@@ -221,6 +275,38 @@ Ctrl + E: expand analysis fundamental sequence
             }
 
             import_analysis(root.datasets[root.current_tab], objects, notation, root.use_alternative)
+
+            // 导入便利贴 Sheet（从 Sheet2 开始，跳过 sheet1）
+            var names = workbook.SheetNames;
+            var sheets = [];
+            for (var si = 1; si < names.length; si++) {
+               var sRows = XLSX.utils.sheet_to_json(workbook.Sheets[names[si]], { header: 1 });
+               var text = '';
+               if (sRows && sRows.length > 0) {
+                  var lines = [];
+                  for (var ri = 0; ri < sRows.length; ri++) {
+                     var r = sRows[ri];
+                     if (!r || !r.length) continue;
+                     // 将 XLSX 行转为 CSV 一行：字段含逗号或引号时加双引号包裹
+                     var csvFields = [];
+                     for (var fi = 0; fi < r.length; fi++) {
+                        var fv = r[fi];
+                        var s = (fv === null || fv === undefined) ? '' : '' + fv;
+                        if (s.indexOf(',') !== -1 || s.indexOf('"') !== -1 || s.indexOf('\n') !== -1) {
+                           s = '"' + s.replace(/"/g, '""') + '"';
+                        }
+                        csvFields.push(s);
+                     }
+                     lines.push(csvFields.join(','));
+                  }
+                  text = lines.join('\n');
+               }
+               sheets.push({ name: names[si], text: text });
+            }
+            if (sheets.length > 0) {
+               root.noteSheets = sheets;
+               root.currentSheet = 0;
+            }
          };
 
          reader.onerror = function() {
@@ -299,6 +385,7 @@ Ctrl + E: expand analysis fundamental sequence
                self.current_analysis_index = getOr('analysisIdx', -1)
             }
          } catch(e) {}
+         this.loadPos()
          document.documentElement.classList.toggle('dark', this.darkMode)
       },
       resetSettings() {
@@ -315,15 +402,96 @@ Ctrl + E: expand analysis fundamental sequence
          this.current_analysis_index = -1
          this.saveSettings()
       },
+
+      // ===== 规律总结便利贴（多 Sheet，不持久化） =====
+      initSheets() {
+         this.noteSheets = [{ name: 'Sheet2', text: '' }];
+         this.currentSheet = 0;
+      },
+      toggleSummary() {
+         if (this.showSummary) {
+            this.savePos();
+         }
+         if (!this.noteSheets.length) this.initSheets();
+         this.showSummary = !this.showSummary;
+      },
+      prevSheet() {
+         if (this.currentSheet > 0) this.currentSheet--;
+      },
+      nextSheet() {
+         if (this.currentSheet < this.noteSheets.length - 1) this.currentSheet++;
+      },
+      addSheet() {
+         var n = this.noteSheets.length + 2;
+         this.noteSheets.push({ name: 'Sheet' + n, text: '' });
+         this.currentSheet = this.noteSheets.length - 1;
+      },
+      savePos() {
+         localStorage.setItem('ne-summary-pos', JSON.stringify({
+            x: this.summaryX, y: this.summaryY,
+            w: this.summaryW, h: this.summaryH
+         }));
+      },
+      loadPos() {
+         try {
+            var p = JSON.parse(localStorage.getItem('ne-summary-pos') || '{}');
+            if (p.x !== undefined) this.summaryX = p.x;
+            if (p.y !== undefined) this.summaryY = p.y;
+            if (p.w) this.summaryW = p.w;
+            if (p.h) this.summaryH = p.h;
+         } catch(e){}
+      },
+      // 拖拽
+      startDragSummary(event) {
+         event.preventDefault();
+         this.dragOffX = event.clientX - (this.summaryX !== undefined ? this.summaryX : window.innerWidth - 480);
+         this.dragOffY = event.clientY - (this.summaryY !== undefined ? this.summaryY : 60);
+         this.draggingSummary = true;
+         var self = this;
+         document.addEventListener('mousemove', function(e) { self.onDragSummary(e); });
+         document.addEventListener('mouseup', function() { self.endDragSummary(); });
+      },
+      onDragSummary(event) {
+         if (!this.draggingSummary) return;
+         this.summaryX = event.clientX - this.dragOffX;
+         this.summaryY = event.clientY - this.dragOffY;
+      },
+      endDragSummary() {
+         this.draggingSummary = false;
+         document.removeEventListener('mousemove', this.onDragSummary);
+         document.removeEventListener('mouseup', this.endDragSummary);
+      },
+      // 缩放
+      startResizeSummary(event) {
+         event.preventDefault();
+         this.resizeStartX = event.clientX;
+         this.resizeStartY = event.clientY;
+         this.resizeStartW = this.summaryW;
+         this.resizeStartH = this.summaryH;
+         this.resizingSummary = true;
+         var self = this;
+         document.addEventListener('mousemove', function(e) { self.onResizeSummary(e); });
+         document.addEventListener('mouseup', function() { self.endResizeSummary(); });
+      },
+      onResizeSummary(event) {
+         if (!this.resizingSummary) return;
+         this.summaryW = Math.max(260, this.resizeStartW + event.clientX - this.resizeStartX);
+         this.summaryH = Math.max(200, this.resizeStartH + event.clientY - this.resizeStartY);
+      },
+      endResizeSummary() {
+         this.resizingSummary = false;
+         document.removeEventListener('mousemove', this.onResizeSummary);
+         document.removeEventListener('mouseup', this.endResizeSummary);
+      },
    },
    mounted() {
-      const canvasEl = document.getElementById('hoverCanvas');
-      const offscreen = canvasEl.transferControlToOffscreen()
-
-      worker.postMessage({
-         type: "init",
-         canvas: offscreen
-      }, [offscreen])
+      var canvasEl = document.getElementById('hoverCanvas');
+      if (canvasEl) {
+         try {
+            const offscreen = canvasEl.transferControlToOffscreen();
+            worker.postMessage({ type: "init", canvas: offscreen }, [offscreen]);
+         } catch(e) {}
+      }
 
       this.loadSettings()
    }

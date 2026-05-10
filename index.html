@@ -31,6 +31,7 @@
          <button @mousedown="reset_list()">{{ L.reset }}</button>
          <button @mousedown="export_xlsx()">{{ L.export }}</button>
          <button @mousedown="import_xlsx()">{{ L.import }}</button>
+         <button @mousedown="toggleSummary()">{{ L.note }}</button>
          <input type="file" id="hiddenFileInput" style="display: none;" accept=".xlsx, .xls" ref="file_input"
                 @change="handle_import_file">
       </div>
@@ -86,6 +87,22 @@
    </div>
    <div class="floating-canvas" id="floatingCanvas" :style="{ left: pCanvas.x + 'px', top: pCanvas.y + 'px' }" v-show="showCanvas && !pCanvasModifier.hide">
       <canvas id="hoverCanvas" width="10" height="10" :style="{ width: pCanvasScaled.w + 'px', height: pCanvasScaled.h + 'px' }"/>
+   </div>
+   <div class="summary-window" v-show="showSummary"
+      :style="{ left: summaryX + 'px', top: summaryY + 'px', width: summaryW + 'px', height: summaryH + 'px' }">
+      <div class="summary-header" @mousedown.prevent="startDragSummary($event)">
+         <div class="summary-title-row">
+            <button class="summary-nav-btn" @mousedown.stop.prevent="prevSheet()" :disabled="currentSheet <= 0">−</button>
+            <input class="summary-title-input" v-model="noteSheets[currentSheet].name" @mousedown.stop @click.stop
+              @focus="editingTitle=true" @blur="editingTitle=false" />
+            <button class="summary-nav-btn" @mousedown.stop.prevent="nextSheet()" :disabled="currentSheet >= noteSheets.length - 1">+</button>
+            <button class="summary-nav-btn" @mousedown.stop.prevent="addSheet()" title="添加 Sheet">＋</button>
+         </div>
+         <button @mousedown.stop="toggleSummary()">×</button>
+      </div>
+      <textarea class="summary-textarea" v-model="noteSheets[currentSheet].text" placeholder="在此输入笔记..."
+        :style="{ height: (summaryH - 44) + 'px' }"></textarea>
+      <div class="summary-resize-handle" @mousedown.prevent="startResizeSummary($event)"></div>
    </div>
    <fs-dialog v-model="show_fs_dialog" :init="current_analysis_notation.fs_default" @confirm="calc_analysis_fs"/>
 </div>

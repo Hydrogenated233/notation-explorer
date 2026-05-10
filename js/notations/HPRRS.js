@@ -134,7 +134,7 @@
 
   register.push({
     id: 'hprrs',
-    name: 'HPRRS',
+    name: 'HPRRS 1.0',
     display: function (expr) {
       if ('' + expr === 'Infinity') return 'Limit';
       return '' + expr;
