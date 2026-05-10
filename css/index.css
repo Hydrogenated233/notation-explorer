@@ -570,7 +570,7 @@ html.dark .reset-btn:hover {
   position: fixed;
   background: #fff;
   border: 1px solid #d0d5dd;
-  border-radius: 10px;
+  border-radius: 8px;
   box-shadow: 0 2px 12px rgba(0,0,0,0.12);
   z-index: 1000;
   display: flex;
@@ -582,10 +582,11 @@ html.dark .reset-btn:hover {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 14px;
+  padding: 4px 10px;
+  min-height: 20px;
   background: #f9fafb;
   border-bottom: 1px solid #e5e7eb;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
   color: #1e1e1e;
   cursor: grab;
@@ -603,13 +604,13 @@ html.dark .reset-btn:hover {
 .summary-title-input {
   border: none;
   background: transparent;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: inherit;
   outline: none;
   width: auto;
-  min-width: 50px;
-  padding: 2px 4px;
+  min-width: 40px;
+  padding: 1px 3px;
   border-radius: 3px;
 }
 .summary-title-input:focus {
@@ -619,16 +620,16 @@ html.dark .summary-title-input:focus {
   background: rgba(255,255,255,0.1);
 }
 .summary-nav-btn {
-  padding: 0 5px;
-  font-size: 14px;
+  padding: 0 4px;
+  font-size: 12px;
   line-height: 1;
   border: 1px solid #d0d5dd;
   border-radius: 3px;
   background: #fff;
   cursor: pointer;
   color: #344054;
-  min-width: 22px;
-  height: 22px;
+  min-width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -649,8 +650,8 @@ html.dark .summary-nav-btn:hover:not(:disabled) {
   background: #333333;
 }
 .summary-header button {
-  padding: 2px 8px;
-  font-size: 16px;
+  padding: 0 6px;
+  font-size: 14px;
   line-height: 1;
   border: none;
   background: none;
@@ -663,6 +664,7 @@ html.dark .summary-nav-btn:hover:not(:disabled) {
 html.dark .summary-window {
   background: #1e1e1e;
   border-color: #3a3a3a;
+  border-radius: 6px;
   box-shadow: 0 2px 12px rgba(0,0,0,0.4);
 }
 html.dark .summary-header {
@@ -683,10 +685,10 @@ html.dark .summary-header {
   outline: none;
   background: #fafbfc;
   color: #1e1e1e;
-}
-.summary-textarea:focus {
+} 
+.summary-textarea:focus { 
   background: #fff;
-}
+} 
 html.dark .summary-textarea {
   background: #111111;
   color: #d0d0d0;
