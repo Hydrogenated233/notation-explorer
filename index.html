@@ -100,7 +100,7 @@
          </div>
          <button @mousedown.stop="toggleSummary()">×</button>
       </div>
-      <textarea class="summary-textarea" v-model="noteSheets[currentSheet].text" placeholder="在此输入笔记..."
+      <textarea class="summary-textarea" v-model="noteSheets[currentSheet].text" :placeholder="L.note_placeholder"
         :style="{ height: (summaryH - 44) + 'px' }"></textarea>
       <div class="summary-resize-handle" @mousedown.prevent="startResizeSummary($event)"></div>
    </div>
