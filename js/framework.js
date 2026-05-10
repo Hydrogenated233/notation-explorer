@@ -150,6 +150,7 @@ Shift + ↑/↓, Ctrl + ↑/↓：快速移动（跳过子项/兄弟项）
 Alt + ↑/↓：移动到有分析内容的项
 Enter：执行展开
 Ctrl + H：隐藏/显示当前节点的子树
+Ctrl + Backspace：删除当前节点
 Ctrl + S：导出分析
 Ctrl + E：展开分析的基本列
          ` : `
@@ -161,6 +162,7 @@ ignoring subitems (resp. sibling items)
 Alt + ↑/↓: move up or down to an item that has an analysis
 Enter: perform an expansion
 Ctrl + H: hide/unhide subtree of current node
+Ctrl + Backspace: delete focused node
 Ctrl + S: export analysis
 Ctrl + E: expand analysis fundamental sequence
          `;
@@ -880,6 +882,22 @@ register.forEach((notation,index)=>{
                let tier = event.shiftKey ? 1 : root.tier
                let FS = root.use_alternative ? this.FSalter : this.FS;
                expand_item(this.item, this.notation, root.use_alternative, tier, true)
+            } else if (event.key === 'Backspace' && event.ctrlKey) {
+              event.preventDefault()
+              var par = this.item.parent
+              if (par && !par.is_root) {
+                var idx = par.subitems.indexOf(this.item)
+                if (idx !== -1) {
+                  par.subitems.splice(idx, 1)
+                  // 回退父节点的基本列计数，使被删子项可重新生成
+                  if (par.fs_index !== undefined && par.fs_index > 0) {
+                    par.fs_index--
+                  }
+                }
+                // 聚焦到父节点
+                var parNode = node_map.get(par.path)
+                if (parNode) setTimeout(function() { parNode.$refs?.input?.focus({ preventScroll: true }); }, 0)
+              }
             } else if (event.key === 'Delete') {
                event.preventDefault()
                delete this.item.analysis
