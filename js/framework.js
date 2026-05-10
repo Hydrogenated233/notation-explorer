@@ -280,22 +280,17 @@ Ctrl + E: expand analysis fundamental sequence
             var raw = localStorage.getItem('ne-config')
             if (raw) {
                var s = JSON.parse(raw)
-               function valid(v, fallback) {
-                  if (v === null || v === undefined || v === '') return fallback
-                  if (typeof v === 'number' && isNaN(v)) return fallback
-                  return v
-               }
-               if (s.darkMode !== undefined) this.darkMode = valid(s.darkMode, false)
-               if (s.lang !== undefined) this.lang = valid(s.lang, 'en')
-               if (s.diagramFollow !== undefined) this.diagram_follow = valid(s.diagramFollow, false)
-               if (s.autoScroll !== undefined) this.auto_scroll = valid(s.autoScroll, true)
-               if (s.exportHide !== undefined) this.export_hide = valid(s.exportHide, true)
-               if (s.useAlt !== undefined) this.use_alternative = valid(s.useAlt, true)
-               if (s.diagramScale !== undefined) this.diagram_scale = valid(s.diagramScale, 0)
-               if (s.tier !== undefined) this.tier = valid(s.tier, 0)
-               if (s.lengthLimit !== undefined) this.length_limit = valid(s.lengthLimit, 20)
-               if (s.fsShown !== undefined) this.FS_shown = valid(s.fsShown, 3)
-               if (s.analysisIdx !== undefined) this.current_analysis_index = valid(s.analysisIdx, -1)
+               if (s.darkMode != null && s.darkMode !== '') this.darkMode = s.darkMode
+               if (s.lang != null && s.lang !== '') this.lang = s.lang
+               if (s.diagramFollow != null && s.diagramFollow !== '') this.diagram_follow = s.diagramFollow
+               if (s.autoScroll != null && s.autoScroll !== '') this.auto_scroll = s.autoScroll
+               if (s.exportHide != null && s.exportHide !== '') this.export_hide = s.exportHide
+               if (s.useAlt != null && s.useAlt !== '') this.use_alternative = s.useAlt
+               if (s.diagramScale != null && !isNaN(s.diagramScale) && s.diagramScale !== '') this.diagram_scale = s.diagramScale
+               if (s.tier != null && !isNaN(s.tier) && s.tier !== '') this.tier = s.tier
+               if (s.lengthLimit != null && !isNaN(s.lengthLimit) && s.lengthLimit !== '') this.length_limit = s.lengthLimit
+               if (s.fsShown != null && !isNaN(s.fsShown) && s.fsShown !== '') this.FS_shown = s.fsShown
+               if (s.analysisIdx != null && !isNaN(s.analysisIdx) && s.analysisIdx !== '') this.current_analysis_index = s.analysisIdx
             }
          } catch(e) {}
          document.documentElement.classList.toggle('dark', this.darkMode)
