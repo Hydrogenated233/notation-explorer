@@ -7,7 +7,7 @@
 <link rel="stylesheet" type="text/css" href="css/index.css">
 </head><body><script src="lib/Vue.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-<script>var register=[]; var analysis_register=[]; </script>
+<script>var register=[]; var analysis_register=[]; var nCpSN=2;</script>
 <div id="app">
    <div class="nav-bar">
       <button :class="{active: page==='explore'}" @mousedown="page='explore'">{{ L.explore }}</button>
@@ -20,9 +20,14 @@
 
    <div v-if="page==='explore'">
       <div class="notation-select">
-         <select v-model="current_tab">
+         <select v-model="current_tab" id="notation-select">
             <option v-for="(tab,idx) in tab_names" :value="idx">{{tab}}</option>
          </select>
+      </div>
+      <div v-if="showNParam" class="n-param" style="margin-bottom:8px">
+        {{ L.n_param_label }} <input type="number" v-model.number="nParamInput" min="1" class="n-input" />
+        <button @mousedown="confirmNParam()" class="n-help-btn">{{ L.n_param_confirm }}</button>
+        <button @mousedown="alert(nHelp)" class="n-help-btn">?</button>
       </div>
 
       <div>
@@ -158,6 +163,8 @@
 <script src="js/notations/PrSS-mod.js"></script>
 <script src="js/notations/DFSS.js"></script>
 <script src="js/notations/PPS.js"></script>-->
+<script src="js/notations/CpS.js"></script>
+<script src="js/notations/n-CpS.js"></script>
 <script src="js/notations/Diagram.js"></script>
 <script src="js/framework.js"></script>
 </body>

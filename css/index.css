@@ -154,7 +154,7 @@ select:focus {
 }
 
 /* ---------- Text Input ---------- */
-input[type="text"] {
+input{
   padding: 3px 8px;
   border: 1px solid #d0d5dd;
   border-radius: 4px;
@@ -163,7 +163,7 @@ input[type="text"] {
   color: #1e1e1e;
   transition: border-color 0.12s;
 }
-input[type="text"]:focus {
+input:focus {
   outline: none;
   border-color: #2563eb;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
@@ -412,12 +412,12 @@ html.dark select {
 html.dark select:focus {
   border-color: #5b7fcf;
 }
-html.dark input[type="text"] {
+html.dark input {
   background: #2d2d2d;
   color: #e0e0e0;
   border-color: #4a4a4a;
 }
-html.dark input[type="text"]:focus {
+html.dark input:focus {
   border-color: #5b7fcf;
   box-shadow: 0 0 0 2px rgba(91, 127, 207, 0.2);
 }

@@ -53,10 +53,14 @@ const app = Vue.createApp({
       export_hide:true,
       page:'explore',
       darkMode:false,
+      nParamVal:2,
+      nParamInput:2,
    }),
    computed:{
       current_notation_name() { return register[this.current_tab].id },
       current_analysis_notation() { return analysis_register[this.current_analysis_index] || {} },
+      showNParam() { return register[this.current_tab] && register[this.current_tab].nParam },
+      nHelp() { return register[this.current_tab] && register[this.current_tab].nHelp ? register[this.current_tab].nHelp : '' },
       L() {
          const t = {
             en: {
@@ -82,6 +86,8 @@ const app = Vue.createApp({
                note_placeholder:'Enter notes here...',
                settings_title:'Settings',
                dark_mode:'Dark Mode',
+               n_param_label:'n =',
+               n_param_confirm:'Apply',
             },
             zh: {
                show_hotkeys:'快捷键',
@@ -106,6 +112,8 @@ const app = Vue.createApp({
                note_placeholder:'在此输入笔记...',
                settings_title:'设置',
                dark_mode:'黑夜模式',
+               n_param_label:'n =',
+               n_param_confirm:'确定',
             },
          };
          return t[this.lang] || t.en;
@@ -139,6 +147,10 @@ const app = Vue.createApp({
       FS_shown() { this.saveSettings() },
       current_analysis_index() { this.saveSettings() },
       current_tab() { this.initSheets(); },
+      nParamVal(val) {
+        window.nCpSN = val;
+        this.saveSettings();
+      },
    },
    methods:{
       show_hotkeys() {
@@ -167,6 +179,14 @@ Ctrl + S: export analysis
 Ctrl + E: expand analysis fundamental sequence
          `;
          alert(msg)
+      },
+      confirmNParam() {
+        this.nParamVal = this.nParamInput;
+        window.nCpSN = this.nParamVal;
+        this.datasets.splice(this.current_tab,1, init_dataset(register[this.current_tab]));
+      },
+      alert(msg) {
+        window.alert(msg);
       },
       reset_list(){
          this.datasets.splice(this.current_tab,1, init_dataset(register[this.current_tab]))
@@ -498,6 +518,7 @@ Ctrl + E: expand analysis fundamental sequence
       }
 
       this.loadSettings()
+      window.nCpSN = this.nParamVal;
    }
 })
 
@@ -1030,4 +1051,5 @@ app.component('fs-dialog', {
    }
 })
 
+app.config.globalProperties.nCpSN = 2;
 const root=app.mount('#app')
