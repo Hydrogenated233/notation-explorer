@@ -73,7 +73,7 @@
     }
 
     // --- 构造结果 ---
-    var totalLen = y + FSterm * L - 1;
+    var totalLen = y + FSterm * L;
     var res = seq.slice(0, y - 1); // 拷贝前 y-1 项
     res.push(v);                   // 设置末项
 
