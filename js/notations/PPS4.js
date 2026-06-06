@@ -135,7 +135,7 @@
         var key = '' + seq;
         if (key === 'Infinity') {
           var result = [];
-          for (var i = 0; i < FSterm; i++) result.push(i);
+          for (var i = 0; i <= FSterm; i++) result.push(i);
           return result;
         }
         if (seq.length === 0) return [];

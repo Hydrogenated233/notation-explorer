@@ -55,6 +55,12 @@ const app = Vue.createApp({
       darkMode:false,
       nParamVal:2,
       nParamInput:2,
+      debugNotation:0,
+      debugOpts:{limitTerm:6, maxSteps:50, maxN:1, preview:8, maxVisited:2000},
+      debugDiffA:0,
+      debugDiffB:1,
+      debugDiffOpts:{limitTerm:6, maxSteps:10, maxN:3, maxVisited:200},
+      debugOutput:'',
    }),
    computed:{
       current_notation_name() { return register[this.current_tab].id },
@@ -86,6 +92,24 @@ const app = Vue.createApp({
                note_placeholder:'Enter notes here...',
                settings_title:'Settings',
                dark_mode:'Dark Mode',
+               debug:'Debug',
+               debug_title:'Debug Tools',
+               debug_notation_select:'Notation',
+               debug_limit:'Limit',
+               debug_steps:'Max steps',
+               debug_maxn:'Max n',
+               debug_preview:'Preview',
+               debug_inf_chain:'Inf Chain Detection',
+               debug_run:'Run',
+               debug_run_all:'Run All',
+               debug_maxvisited:'Max visited',
+               debug_bfs_diff:'DFS Diff',
+               debug_notation_a:'Notation A',
+               debug_notation_b:'Notation B',
+               debug_diff_limit:'DFS limit',
+               debug_diff_maxpos:'Max FS pos',
+               debug_diff_run:'Diff',
+               debug_placeholder:'Click \"Run\" to detect infinite descending chains',
                n_param_label:'n =',
                n_param_confirm:'Apply',
             },
@@ -112,6 +136,24 @@ const app = Vue.createApp({
                note_placeholder:'在此输入笔记...',
                settings_title:'设置',
                dark_mode:'黑夜模式',
+               debug:'调试',
+               debug_title:'调试工具',
+               debug_notation_select:'记号',
+               debug_limit:'基本列数',
+               debug_steps:'最大步数',
+               debug_maxn:'最大 n',
+               debug_preview:'预览项数',
+               debug_inf_chain:'无穷降链检测',
+               debug_run:'运行',
+               debug_run_all:'全部运行',
+               debug_maxvisited:'最大访问数',
+               debug_bfs_diff:'DFS 差异对比',
+               debug_notation_a:'记号 A',
+               debug_notation_b:'记号 B',
+               debug_diff_limit:'DFS 上限',
+               debug_diff_maxpos:'最大 FS 位置',
+               debug_diff_run:'对比',
+               debug_placeholder:'点击「运行」检测无穷降链',
                n_param_label:'n =',
                n_param_confirm:'确定',
             },
@@ -120,6 +162,7 @@ const app = Vue.createApp({
       },
       tab_names:()=> register.map(notation=>notation.name),
       analysis_names:() => analysis_register.map(notation=>notation.name),
+      debugNotations() { return register; },
       tiername(){
          var n = this.tier
          var tierEn = ['small','single','double','triple','quadruple','quintuple','sextuple','septuple','octuple'];
@@ -506,6 +549,105 @@ Ctrl + E: expand analysis fundamental sequence
          this.resizingSummary = false;
          document.removeEventListener('mousemove', this.onResizeSummary);
          document.removeEventListener('mouseup', this.endResizeSummary);
+      },
+
+      // ===== Debug Tools =====
+      runDebug() {
+        var self = this;
+        var id = self.debugNotation;
+        var notation = register[id];
+        if (!notation) { self.debugOutput = 'Notation not found'; return; }
+        var display = notation.display || function(x) { return JSON.stringify(x); };
+        var results = window.debugTools.detectInfChain(notation, self.debugOpts);
+        var lines = [];
+        lines.push('=== ' + notation.name + ' (' + notation.id + ') ===');
+        var anyFound = false;
+        results.forEach(function(r, idx) {
+          var statusLabel = r.reason === 'INF' ? '>>> INF' : (r.reason === 'LIMIT' ? '! limit' : 'ok');
+          lines.push('Limit FS(' + idx + ') = ' + display(r.start) + '  (visited: ' + r.visited + ') [' + statusLabel + ']');
+          if (r.found) {
+            anyFound = true;
+            lines.push('  first ' + r.chain.length + ' entries:');
+            r.chain.forEach(function(c, i) {
+              lines.push('    ' + i + ': ' + display(c) + '  (len=' + c.length + ')');
+            });
+          } else if (r.reason === 'LIMIT') {
+            lines.push('  (visited limit reached, partial chain below)');
+            r.chain.forEach(function(c, i) {
+              lines.push('    ' + i + ': ' + display(c) + '  (len=' + c.length + ')');
+            });
+          } else {
+            lines.push('  (terminated)');
+          }
+          lines.push('');
+        });
+        if (!anyFound) lines.push('All branches terminated.');
+        self.debugOutput = lines.join('\n');
+        console.log('=== DFS Inf Chain Detection ===');
+        console.log('Notation:', notation.name);
+        console.log(lines.join('\n'));
+      },
+      runDebugAll() {
+        var self = this;
+        var lines = [];
+        register.forEach(function(notation) {
+          lines.push('--- ' + notation.name + ' ---');
+          var results = window.debugTools.detectInfChain(notation, { limitTerm: 2, maxSteps: 30, maxN: 2, preview: 5 });
+          var any = false;
+          results.forEach(function(r) {
+            if (r.found) { any = true; }
+          });
+          if (any) {
+            lines.push('  Found inf chains!');
+            results.forEach(function(r, idx) {
+              if (r.found) {
+                lines.push('  FS(' + idx + '): ' + r.start + ' -> INF');
+              }
+            });
+          } else {
+            lines.push('  All terminated');
+          }
+          lines.push('');
+        });
+        self.debugOutput = lines.join('\n');
+        console.log('=== DFS Inf Chain Detection (All) ===');
+        console.log(lines.join('\n'));
+      },
+      runDiff() {
+        var self = this;
+        var nA = register[self.debugDiffA];
+        var nB = register[self.debugDiffB];
+        if (!nA || !nB) { self.debugOutput = 'Notation not found'; return; }
+        function safeDisplay(fn, x) {
+          if (x === null || x === undefined) return 'null';
+          if (Array.isArray(x) && x.length === 0) return '[]';
+          var s;
+          try { s = fn(x); } catch(e) { s = JSON.stringify(x); }
+          return s || JSON.stringify(x);
+        }
+        var displayA = function(x) { return safeDisplay(nA.display || JSON.stringify, x); };
+        var displayB = function(x) { return safeDisplay(nB.display || JSON.stringify, x); };
+        var result = window.debugTools.dfsDiff(nA, nB, self.debugDiffOpts);
+        var lines = [];
+        lines.push('DFS Diff: ' + nA.name + ' vs ' + nB.name);
+        lines.push('Visited: ' + result.totalVisited + ', Mismatches: ' + result.mismatches.length + (result.timedOut ? ' (TIMEOUT)' : ''));
+        lines.push('');
+        if (result.mismatches.length === 0) {
+          lines.push('All expressions match!');
+        } else {
+          result.mismatches.slice(0, 20).forEach(function(m, i) {
+            lines.push('[' + i + '] expr: ' + m.exprJSON + '  (fs=' + m.fsPos + ')');
+            lines.push('  A: ' + (m.aResult === null ? 'null' : JSON.stringify(m.aResult)));
+            lines.push('  B: ' + (m.bResult === null ? 'null' : JSON.stringify(m.bResult)));
+            lines.push('');
+          });
+          if (result.mismatches.length > 20) {
+            lines.push('... and ' + (result.mismatches.length - 20) + ' more mismatches');
+          }
+        }
+        self.debugOutput = lines.join('\n');
+        console.log('=== DFS Diff ===');
+        console.log(lines.join('\n'));
       },
    },
    mounted() {
@@ -1053,3 +1195,153 @@ app.component('fs-dialog', {
 
 app.config.globalProperties.nCpSN = 2;
 const root=app.mount('#app')
+
+// ===== Debug Tools =====
+window.debugTools = (function() {
+  function detectInfChain(notation, opts) {
+    var opt = opts || {};
+    var limitTerm = opt.limitTerm || 6;
+    var maxSteps = opt.maxSteps || 50;
+    var maxN = opt.maxN || 1;
+    var preview = opt.preview || 8;
+    var maxVisited = opt.maxVisited || 2000;
+    var display = notation.display || JSON.stringify;
+    var FS = notation.FS;
+    var results = [];
+    for (var fsIdx = 0; fsIdx < limitTerm; fsIdx++) {
+      var seq;
+      try { seq = FS([Infinity], fsIdx); } catch(e) {}
+      if (!Array.isArray(seq)) {
+        seq = [1];
+        for (var i = 1; i <= fsIdx; i++) seq.push(i + 1);
+      }
+      // parentMap: key(JSON) -> {parentKey, seq, step}
+      var parentMap = {};
+      var startKey = JSON.stringify(seq);
+      var stack = [{ seq: seq, steps: 0, key: startKey }];
+      var visitedCount = 0;
+      var found = false;
+      var chain = [];
+      var limitReached = false;
+      var lastKey = startKey;
+      var lastSteps = 0;
+      parentMap[startKey] = { parentKey: null, seq: seq, step: 0 };
+      while (stack.length > 0) {
+        var item = stack.pop();
+        var s = item.seq, steps = item.steps, key = item.key;
+        visitedCount++;
+        lastKey = key;
+        lastSteps = steps;
+        if (steps >= maxSteps) { found = true; break; }
+        if (visitedCount >= maxVisited) { limitReached = true; break; }
+        if (s.length <= 1) continue;
+        if (s[s.length - 1] === 1) {
+          var ns = s.slice(0, -1);
+          var nskey = JSON.stringify(ns);
+          if (!parentMap[nskey]) {
+            parentMap[nskey] = { parentKey: key, seq: ns, step: steps + 1 };
+            stack.push({ seq: ns, steps: steps + 1, key: nskey });
+          }
+          continue;
+        }
+        for (var n = 0; n <= maxN; n++) {
+          try {
+            var ns = FS(s, n);
+            if (!Array.isArray(ns)) continue;
+            var nskey2 = JSON.stringify(ns);
+            if (!parentMap[nskey2]) {
+              parentMap[nskey2] = { parentKey: key, seq: ns, step: steps + 1 };
+              stack.push({ seq: ns, steps: steps + 1, key: nskey2 });
+            }
+          } catch(e) {}
+        }
+      }
+      // 重建路径
+      if (found || limitReached) {
+        var curKey = lastKey;
+        var backwards = [];
+        while (curKey && backwards.length < preview) {
+          var node = parentMap[curKey];
+          if (!node) break;
+          backwards.unshift(node.seq);
+          curKey = node.parentKey;
+        }
+        chain = backwards;
+        // 如果还没满，从 start 补充
+        while (chain.length < preview && chain.length > 0) {
+          break;
+        }
+      }
+      var reason = found ? 'INF' : (limitReached ? 'LIMIT' : 'TERM');
+      results.push({ start: seq, found: found, chain: chain, visited: visitedCount, reason: reason });
+    }
+    return results;
+  }
+  function dfsDiff(notationA, notationB, opts) {
+    var opt = opts || {};
+    var maxN = opt.maxN || 3;
+    var maxVisited = opt.maxVisited || 200;
+    var maxSteps = opt.maxSteps || 10;
+    var FSA = notationA.FS;
+    var FSB = notationB.FS;
+    var visited = {};
+    var queue = [];
+    var head = 0;
+    // 先处理 [Infinity]，得到 limFS(0), limFS(1), ... 并按序入队
+    for (var i = 0; i <= maxN; i++) {
+      try {
+        var expr = FSA([Infinity], i);
+        if (Array.isArray(expr) && expr.length > 0) {
+          var k = JSON.stringify(expr);
+          if (!visited[k]) { visited[k] = 1; queue.push(expr); }
+        }
+      } catch(e) {}
+    }
+    var mismatches = [];
+    var total = 0;
+    var stepDepth = {};
+    var startTime = Date.now();
+    var timeLimit = 3000;
+    while (head < queue.length && total < maxVisited && mismatches.length < 50) {
+      if (Date.now() - startTime > timeLimit) break;
+      var expr = queue[head++];
+      var exprKey = JSON.stringify(expr);
+      total++;
+      var d = stepDepth[exprKey] || 0;
+      if (d >= maxSteps) continue;
+      for (var pos = 0; pos <= maxN; pos++) {
+        var rA = null, rB = null;
+        try { rA = FSA(expr, pos); } catch(e) {}
+        if (rA === null || (Array.isArray(rA) && rA.length === 0)) continue;
+        try { rB = FSB(expr, pos); } catch(e) {}
+        var sA = JSON.stringify(rA);
+        var sB = rB === null ? 'null' : JSON.stringify(rB);
+        if (sA !== sB) {
+          mismatches.push({
+            exprJSON: exprKey,
+            fsPos: pos,
+            aResult: rA,
+            bResult: rB,
+          });
+        }
+        var pushChild = function(x) {
+          var k = JSON.stringify(x);
+          if (!visited[k]) { visited[k] = 1; stepDepth[k] = d + 1; queue.push(x); }
+        };
+        if (rA !== null) pushChild(rA);
+        if (rB !== null) pushChild(rB);
+      }
+    }
+    var timedOut = Date.now() - startTime > timeLimit;
+    return { totalVisited: total, mismatches: mismatches, timedOut: timedOut };
+  }
+  return {
+    detectInfChain: detectInfChain,
+    detectById: function(id, opts) {
+      var n = register.find(function(r) { return r.id === id; });
+      if (!n) { console.error('Notation "' + id + '" not found'); return; }
+      return detectInfChain(n, opts);
+    },
+    dfsDiff: dfsDiff
+  };
+})();
