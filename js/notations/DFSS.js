@@ -1,4 +1,4 @@
-// DFSS — Double-First Sequence System
+// DFSS
 // A PrSS variant: bad root is the second occurrence of (last-1) from the right,
 // if it exists; otherwise the first (standard PrSS bad root).
 ;(()=>{
@@ -62,7 +62,7 @@
 
    register.push({
       id: 'dfss',
-      name: 'DFSS (Double-First Sequence System)',
+      name: 'DFSS',
       display: function(expr) {
          if ('' + expr === 'Infinity') return 'Limit';
          return '' + expr;
