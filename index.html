@@ -110,10 +110,35 @@
                   <input type="number" v-model.number="debugDiffOpts.maxN" min="0" style="width:60px" />
                </label>
                <label class="debug-label">{{ L.debug_maxvisited }}<br>
-                  <input type="number" v-model.number="debugDiffOpts.maxVisited" min="100" step="100" style="width:80px" />
+                  <input type="number" v-model.number="debugDiffOpts.maxVisited" min="100" step="100"
+                     style="width:80px" />
                </label>
                <div class="debug-actions" style="display:block;margin-top:8px">
                   <button @click="runDiff()" class="debug-btn">{{ L.debug_diff_run }}</button>
+               </div>
+            </div>
+         </div>
+
+         <!-- 直接展开 -->
+         <div class="debug-section">
+            <h4 class="debug-section-title">{{ L.debug_direct_expand }}</h4>
+            <div class="debug-toolbar">
+               <label class="debug-label">{{ L.debug_notation_select }}<br>
+                  <select v-model="debugExpandNotation">
+                     <option v-for="(name,idx) in tab_names" :value="idx">{{ name }}</option>
+                  </select>
+               </label>
+               <label class="debug-label">{{ L.debug_expand_expr }}<br>
+                  <input type="text" v-model="debugExpandExpr" placeholder="e.g. 0,1,2,3" style="width:220px" />
+               </label>
+               <label class="debug-label">{{ L.debug_expand_n }}<br>
+                  <input type="number" v-model.number="debugExpandN" min="0" style="width:60px" />
+               </label>
+               <label class="debug-label">{{ L.debug_expand_count }}<br>
+                  <input type="number" v-model.number="debugExpandCount" min="1" style="width:60px" />
+               </label>
+               <div class="debug-actions" style="display:block;margin-top:8px">
+                  <button @click="runExpand()" class="debug-btn">{{ L.debug_expand_run }}</button>
                </div>
             </div>
          </div>

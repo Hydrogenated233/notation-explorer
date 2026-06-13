@@ -356,9 +356,56 @@ FS 计算通常较慢，统一使用闭包缓存模式。注意对 `Infinity` �
 
 ## 调试技巧
 
+### 浏览器 DevTools
+
 1. **打开浏览器 DevTools Console**，检查 `register` 和 `analysis_register` 数组
 2. 输入框聚焦时，观察 `showCanvas` 和 `diagram` 数据是否正确
 3. FS 缓存可以通过 `console.log` 在 IIFE 闭包内输出调试
+
+### 调试页面（Debug）
+
+应用自带的 Debug 页面（顶部导航栏 → Debug）提供了三个调试工具，直接在前端运行：
+
+#### 1. 无穷降链检测（Inf Chain Detection）
+
+从 Limit 的基本列出发，DFS 检测记号是否存在无穷降链。
+
+- **Notation** — 选择要检测的记号
+- **Limit** — 取 Limit 的前 N 个基本列（默认 6）
+- **Max steps** — 每个分支最多展开步数（默认 50）
+- **Max n** — 尝试展开 n=0..N（默认 1）
+- **Preview** — 检测到无限时输出前 N 项（默认 8）
+- **Max visited** — 最大访问节点数（默认 2000）
+- 点击 **Run** 执行检测，结果输出到下方黑色终端区域
+
+#### 2. DFS 差异对比（DFS Diff）
+
+比较两个记号的 FS 展开结果差异。
+
+- **Notation A / B** — 选择要对比的两个记号
+- **DFS limit** — 每个分支最大深度（默认 10）
+- **Max FS pos** — 最大 FS 位置（默认 3）
+- **Max visited** — 最大访问节点数（默认 200）
+- 点击 **Diff** 执行对比，结果输出到下方黑色终端区域
+
+#### 3. 直接展开（Direct Expansion）
+
+直接展开指定记号的指定表达式，查看其基本列结果。
+
+- **Notation** — 选择要展开的记号
+- **Expression** — 输入表达式字符串（如 `0,1,2,3`，或 `Limit`）
+- **Start n** — 起始 FS 位置（默认 0）
+- **Count** — 连续展开几项（默认 1）
+- 点击 **Expand** 执行展开，结果输出到下方黑色终端区域
+
+支持 `Limit` / `Infinity` / `∞` 作为极限表达式。
+
+### CLI 脚本
+
+项目根目录下提供两个 Node.js CLI 脚本，功能与调试页面同步：
+
+- **`dfs-detect.js`** — DFS 无穷降链检测器，详见 `docs/dfs-diff.md`
+- **`dfs-diff.js`** — DFS 差异对比，详见 `docs/dfs-diff.md`
 
 ## 参考文件
 
