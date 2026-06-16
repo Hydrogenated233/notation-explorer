@@ -2,6 +2,7 @@
    id:'bsm'
    ,name:'Bashicu sudden matrix'
    ,display:matrix_display
+   ,fromDisplay:matrix_fromDisplay
    ,able:matrix_limit
    ,compare:matrix_compare
    ,FS:(()=>{

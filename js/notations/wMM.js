@@ -206,6 +206,7 @@
                 
                 return JSON.stringify(m);
             },
+            fromDisplay: typeof matrix_fromDisplay !== 'undefined' ? matrix_fromDisplay : undefined,
             able: typeof matrix_limit !== 'undefined' ? matrix_limit : function(m) {
                
                 return true;

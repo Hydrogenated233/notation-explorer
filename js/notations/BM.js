@@ -21,6 +21,7 @@ register.push({
    id:'bm4'
    ,name:'Bashicu matrix'
    ,display:matrix_display
+   ,fromDisplay:matrix_fromDisplay
    ,able:matrix_limit
    ,compare:matrix_compare
    ,FS:(()=>{

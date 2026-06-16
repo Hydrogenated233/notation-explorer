@@ -2,6 +2,7 @@ register.push({
   id:'y-seq'
   ,name:'Y sequence'
   ,display:sequence_display
+  ,fromDisplay:function(str){str=str.trim();if(str==='Limit'||str==='Infinity'||str==='\u221e')return[Infinity];return str.split(',').map(function(s){return parseInt(s.trim(),10)})}
   ,able:Y_limit
   ,compare:sequence_compare
   ,FS:(()=>{

@@ -433,6 +433,7 @@
     id: 'upms',
     name: 'Unupgrading projection matrix system',
     display: matrixDisplay,
+    fromDisplay: matrix_fromDisplay,
     able: upmsLimit,
     compare: matrixCompare,
     FS: UPMS_FS,

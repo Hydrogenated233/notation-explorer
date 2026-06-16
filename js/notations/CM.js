@@ -2,6 +2,7 @@
    id:'cm'
    ,name:'Crane matrix system'
    ,display:matrix_display
+   ,fromDisplay:matrix_fromDisplay
    ,able:matrix_limit
    ,compare:matrix_compare
    ,FS:(()=>{
