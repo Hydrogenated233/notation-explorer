@@ -78,31 +78,132 @@ body::after {
   margin-left: auto;
 }
 
-/* ---------- Notation Select Menu ---------- */
+/* ---------- Notation Select Menu (custom dropdown) ---------- */
 .notation-select {
+  position: relative;
   margin-bottom: 12px;
 }
-.notation-select select {
+.ns-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 32px 6px 12px;
   border: 1px solid #d0d5dd;
   border-radius: 6px;
   background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23667085' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 10px center;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
   font-size: 15px;
   font-weight: 500;
   color: #1e1e1e;
   cursor: pointer;
   min-width: 220px;
+  user-select: none;
 }
-.notation-select select:hover {
+.ns-trigger:hover {
   border-color: #98a2b3;
 }
-.notation-select select:focus {
-  outline: none;
+.ns-trigger:focus-within {
   border-color: #2563eb;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+.ns-trigger-name {
+  flex: 0 1 auto;
+}
+.ns-trigger-id {
+  font-size: 12px;
+  color: #98a2b3;
+}
+.ns-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 1000;
+  margin-top: 4px;
+  min-width: 280px;
+  max-width: 400px;
+  background: #fff;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  overflow: hidden;
+}
+.ns-search-wrap {
+  padding: 8px;
+  border-bottom: 1px solid #eaeaea;
+}
+.ns-search-input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #d0d5dd;
+  border-radius: 5px;
+  font-size: 13px;
+  color: #1e1e1e;
+  background: #fff;
+  box-sizing: border-box;
+  outline: none;
+}
+.ns-search-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+.ns-search-input::placeholder {
+  color: #98a2b3;
+}
+.ns-options {
+  max-height: 320px;
+  overflow-y: auto;
+}
+.ns-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.ns-option:hover {
+  background: #f0f4ff;
+}
+.ns-option.selected {
+  background: #e8f0fe;
+  font-weight: 600;
+}
+.ns-option.selected .ns-opt-id {
+  font-weight: 400;
+}
+.ns-opt-name {
+  font-size: 14px;
+  color: #1e1e1e;
+}
+.ns-opt-id {
+  font-size: 11px;
+  color: #98a2b3;
+  flex-shrink: 0;
+}
+.ns-backdrop {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 999;
+}
+
+/* ---------- Save Status Indicator ---------- */
+.save-status {
+  position: fixed;
+  left: 16px;
+  bottom: 12px;
+  z-index: 100;
+  pointer-events: none;
+}
+.save-status-text {
+  font-size: 11px;
+  color: #98a2b3;
+  background: rgba(255,255,255,0.85);
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+html.dark .save-status-text {
+  background: rgba(30,30,30,0.85);
+  color: #666;
 }
 
 /* ---------- Inline Action Buttons ---------- */
@@ -452,13 +553,49 @@ html.dark .nav-bar > button.active {
 html.dark .nav-bar > button:hover {
   background: #3a3a3a;
 }
-html.dark .notation-select select {
+html.dark .ns-trigger {
   background: #2d2d2d;
   color: #e0e0e0;
   border-color: #4a4a4a;
 }
-html.dark .notation-select select:focus {
+html.dark .ns-trigger:hover {
+  border-color: #5a5a5a;
+}
+html.dark .ns-trigger:focus-within {
   border-color: #5b7fcf;
+  box-shadow: 0 0 0 2px rgba(91, 127, 207, 0.2);
+}
+html.dark .ns-trigger-id {
+  color: #666;
+}
+html.dark .ns-dropdown {
+  background: #1e1e1e;
+  border-color: #3a3a3a;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+html.dark .ns-search-wrap {
+  border-bottom-color: #333;
+}
+html.dark .ns-search-input {
+  background: #2d2d2d;
+  color: #e0e0e0;
+  border-color: #4a4a4a;
+}
+html.dark .ns-search-input:focus {
+  border-color: #5b7fcf;
+  box-shadow: 0 0 0 2px rgba(91, 127, 207, 0.2);
+}
+html.dark .ns-option:hover {
+  background: #2a2a2a;
+}
+html.dark .ns-option.selected {
+  background: #2d3748;
+}
+html.dark .ns-opt-name {
+  color: #e0e0e0;
+}
+html.dark .ns-opt-id {
+  color: #666;
 }
 html.dark .shown-item:hover {
   background: #2a2a2a;

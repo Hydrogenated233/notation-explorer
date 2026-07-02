@@ -25,9 +25,24 @@
 
       <div v-if="page==='explore'">
          <div class="notation-select">
-            <select v-model="current_tab" id="notation-select">
-               <option v-for="(tab,idx) in tab_names" :value="idx">{{tab}}</option>
-            </select>
+            <div class="ns-trigger" @mousedown="toggleDropdown">
+               <span class="ns-trigger-name">{{ currentNotation.name }}</span>
+               <span class="ns-trigger-id">{{ currentNotation.id }}</span>
+            </div>
+            <div v-if="dropdownOpen" class="ns-dropdown" @mousedown.stop>
+               <div class="ns-search-wrap">
+                  <input type="text" v-model="notationSearch" :placeholder="L.notation_search_placeholder"
+                     class="ns-search-input" ref="notationSearchInput" />
+               </div>
+               <div class="ns-options">
+                  <div v-for="item in filteredNotations" :key="item.idx" class="ns-option"
+                     :class="{ selected: item.idx === current_tab }" @mousedown="selectNotation(item.idx)">
+                     <span class="ns-opt-name">{{ item.name }}</span>
+                     <span class="ns-opt-id">{{ item.id }}</span>
+                  </div>
+               </div>
+            </div>
+            <div v-if="dropdownOpen" class="ns-backdrop" @mousedown="closeDropdown"></div>
          </div>
          <div v-if="showNParam" class="n-param" style="margin-bottom:8px">
             {{ L.n_param_label }} <input type="number" v-model.number="nParamInput" min="1" class="n-input" />
@@ -189,6 +204,15 @@
                <option v-for="(name, idx) in analysis_names" :value="idx">{{ name }}</option>
             </select>
          </label>
+         <h4 style="margin:12px 0 4px;font-size:13px;color:#667085;">{{ L.auto_save }}</h4>
+         <label class="setting-row">
+            <span>{{ L.auto_save_interval }}</span>
+            <input type="number" v-model.number="autoSaveInterval" min="10" class="n-input" style="width:70px" />
+         </label>
+         <label class="setting-row">
+            <span>{{ L.auto_save_hidden }}</span>
+            <input type="checkbox" v-model="autoSaveHidden" />
+         </label>
          <button @mousedown="resetSettings()" class="reset-btn">{{ L.reset_settings }}</button>
       </div>
       <div class="floating-canvas" id="floatingCanvas" :style="{ left: pCanvas.x + 'px', top: pCanvas.y + 'px' }"
@@ -213,6 +237,9 @@
          <textarea class="summary-textarea" v-model="noteSheets[currentSheet].text" :placeholder="L.note_placeholder"
             :style="{ height: (summaryH - 30) + 'px' }"></textarea>
          <div class="summary-resize-handle" @mousedown.prevent="startResizeSummary($event)"></div>
+      </div>
+      <div class="save-status" v-if="lastSaveLabel">
+         <span class="save-status-text">{{ lastSaveLabel }}</span>
       </div>
       <fs-dialog v-model="show_fs_dialog" :init="current_analysis_notation.fs_default" @confirm="calc_analysis_fs" />
    </div>
