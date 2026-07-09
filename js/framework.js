@@ -55,15 +55,15 @@ const app = Vue.createApp({
       darkMode: false,
       nParamVal: 2,
       nParamInput: 2,
-      debugNotation: 0,
-      debugOpts: { limitTerm: 6, maxSteps: 50, maxN: 1, preview: 8, maxVisited: 2000 },
-      debugDiffA: 0,
-      debugDiffB: 1,
-      debugDiffOpts: { limitTerm: 6, maxSteps: 10, maxN: 3, maxVisited: 200 },
-      debugOutput: '',
-      debugExpandNotation: 0,
-      debugExpandExpr: '',
-      debugExpandN: 0,
+      toolsNotation: 0,
+      toolsOpts: { limitTerm: 6, maxSteps: 50, maxN: 1, preview: 8, maxVisited: 2000 },
+      toolsDiffA: 0,
+      toolsDiffB: 1,
+      toolsDiffOpts: { limitTerm: 6, maxSteps: 10, maxN: 3, maxVisited: 200 },
+      toolsOutput: '',
+      toolsExpandNotation: 0,
+      toolsExpandExpr: '',
+      toolsExpandN: 0,
       notationSearch: '',
       dropdownOpen: false,
       autoSaveInterval: 60,
@@ -72,7 +72,8 @@ const app = Vue.createApp({
       saveLabelTick: 0,
       saveTimerId: null,
       allNoteSheets: {},
-      debugExpandCount: 1,
+      toolsExpandCount: 1,
+      toolsPPSInput: '0, 1, 0, 2, 0, 3',
    }),
    computed: {
       current_notation_name() { return register[this.current_tab].id },
@@ -105,29 +106,32 @@ const app = Vue.createApp({
                note_placeholder: 'Enter notes here...',
                settings_title: 'Settings',
                dark_mode: 'Dark Mode',
-               debug: 'Debug',
-               debug_title: 'Debug Tools',
-               debug_notation_select: 'Notation',
-               debug_limit: 'Limit',
-               debug_steps: 'Max steps',
-               debug_maxn: 'Max n',
-               debug_preview: 'Preview',
-               debug_inf_chain: 'Inf Chain Detection',
-               debug_run: 'Run',
-               debug_run_all: 'Run All',
-               debug_maxvisited: 'Max visited',
-               debug_bfs_diff: 'DFS Diff',
-               debug_notation_a: 'Notation A',
-               debug_notation_b: 'Notation B',
-               debug_diff_limit: 'DFS limit',
-               debug_diff_maxpos: 'Max FS pos',
-               debug_diff_run: 'Diff',
-               debug_placeholder: 'Click \"Run\" to detect infinite descending chains',
-               debug_direct_expand: 'Direct Expansion',
-               debug_expand_expr: 'Expression',
-               debug_expand_n: 'Start n',
-               debug_expand_count: 'Count',
-               debug_expand_run: 'Expand',
+               tools: 'Tools',
+               tools_title: 'Tools',
+               tools_notation_select: 'Notation',
+               tools_limit: 'Limit',
+               tools_steps: 'Max steps',
+               tools_maxn: 'Max n',
+               tools_preview: 'Preview',
+               tools_inf_chain: 'Inf Chain Detection',
+               tools_run: 'Run',
+               tools_run_all: 'Run All',
+               tools_maxvisited: 'Max visited',
+               tools_bfs_diff: 'DFS Diff',
+               tools_notation_a: 'Notation A',
+               tools_notation_b: 'Notation B',
+               tools_diff_limit: 'DFS limit',
+               tools_diff_maxpos: 'Max FS pos',
+               tools_diff_run: 'Diff',
+               tools_placeholder: 'Click \"Run\" to detect infinite descending chains',
+               tools_direct_expand: 'Direct Expansion',
+               tools_expand_expr: 'Expression',
+               tools_expand_n: 'Start n',
+               tools_expand_count: 'Count',
+               tools_expand_run: 'Expand',
+               tools_pps_translate: 'PPS Translation',
+               tools_pps_input: 'PPS Sequence',
+               tools_pps_convert: 'Translate',
                n_param_label: 'n =',
                n_param_confirm: 'Apply',
                notation_search_placeholder: 'Search notation...',
@@ -159,29 +163,32 @@ const app = Vue.createApp({
                note_placeholder: '在此输入笔记...',
                settings_title: '设置',
                dark_mode: '黑夜模式',
-               debug: '调试',
-               debug_title: '调试工具',
-               debug_notation_select: '记号',
-               debug_limit: '基本列数',
-               debug_steps: '最大步数',
-               debug_maxn: '最大 n',
-               debug_preview: '预览项数',
-               debug_inf_chain: '无穷降链检测',
-               debug_run: '运行',
-               debug_run_all: '全部运行',
-               debug_maxvisited: '最大访问数',
-               debug_bfs_diff: 'DFS 差异对比',
-               debug_notation_a: '记号 A',
-               debug_notation_b: '记号 B',
-               debug_diff_limit: 'DFS 上限',
-               debug_diff_maxpos: '最大 FS 位置',
-               debug_diff_run: '对比',
-               debug_placeholder: '点击「运行」检测无穷降链',
-               debug_direct_expand: '直接展开',
-               debug_expand_expr: '表达式',
-               debug_expand_n: '起始 n',
-               debug_expand_count: '项数',
-               debug_expand_run: '展开',
+               tools: '工具',
+               tools_title: '工具',
+               tools_notation_select: '记号',
+               tools_limit: '基本列数',
+               tools_steps: '最大步数',
+               tools_maxn: '最大 n',
+               tools_preview: '预览项数',
+               tools_inf_chain: '无穷降链检测',
+               tools_run: '运行',
+               tools_run_all: '全部运行',
+               tools_maxvisited: '最大访问数',
+               tools_bfs_diff: 'DFS 差异对比',
+               tools_notation_a: '记号 A',
+               tools_notation_b: '记号 B',
+               tools_diff_limit: 'DFS 上限',
+               tools_diff_maxpos: '最大 FS 位置',
+               tools_diff_run: '对比',
+               tools_placeholder: '点击「运行」检测无穷降链',
+               tools_direct_expand: '直接展开',
+               tools_expand_expr: '表达式',
+               tools_expand_n: '起始 n',
+               tools_expand_count: '项数',
+               tools_expand_run: '展开',
+               tools_pps_translate: 'PPS 翻译',
+               tools_pps_input: 'PPS 序列',
+               tools_pps_convert: '转换',
                n_param_label: 'n =',
                n_param_confirm: '确定',
                notation_search_placeholder: '搜索记号...',
@@ -216,7 +223,7 @@ const app = Vue.createApp({
          var h = Math.floor(m / 60);
          return this.lang === 'zh' ? h + '小时前保存' : h + 'h ago';
       },
-      debugNotations() { return register; },
+      toolsNotations() { return register; },
       tiername() {
          var n = this.tier
          var tierEn = ['small', 'single', 'double', 'triple', 'quadruple', 'quintuple', 'sextuple', 'septuple', 'octuple'];
@@ -760,13 +767,13 @@ Ctrl + E: expand analysis fundamental sequence
       },
 
       // ===== Debug Tools =====
-      runDebug() {
+      runToolsDebug() {
          var self = this;
-         var id = self.debugNotation;
+         var id = self.toolsNotation;
          var notation = register[id];
-         if (!notation) { self.debugOutput = 'Notation not found'; return; }
+         if (!notation) { self.toolsOutput = 'Notation not found'; return; }
          var display = notation.display || function (x) { return JSON.stringify(x); };
-         var results = window.debugTools.detectInfChain(notation, self.debugOpts);
+         var results = window.debugTools.detectInfChain(notation, self.toolsOpts);
          var lines = [];
          lines.push('=== ' + notation.name + ' (' + notation.id + ') ===');
          var anyFound = false;
@@ -790,7 +797,7 @@ Ctrl + E: expand analysis fundamental sequence
             lines.push('');
          });
          if (!anyFound) lines.push('All branches terminated.');
-         self.debugOutput = lines.join('\n');
+         self.toolsOutput = lines.join('\n');
          console.log('=== DFS Inf Chain Detection ===');
          console.log('Notation:', notation.name);
          console.log(lines.join('\n'));
@@ -817,17 +824,17 @@ Ctrl + E: expand analysis fundamental sequence
             }
             lines.push('');
          });
-         self.debugOutput = lines.join('\n');
+         self.toolsOutput = lines.join('\n');
          console.log('=== DFS Inf Chain Detection (All) ===');
          console.log(lines.join('\n'));
       },
       // ---- 直接展开 ----
       runExpand() {
          var self = this;
-         var notation = register[self.debugExpandNotation];
-         if (!notation) { self.debugOutput = 'Notation not found'; return; }
-         var exprStr = self.debugExpandExpr.trim();
-         if (!exprStr) { self.debugOutput = 'Please enter an expression'; return; }
+         var notation = register[self.toolsExpandNotation];
+         if (!notation) { self.toolsOutput = 'Notation not found'; return; }
+         var exprStr = self.toolsExpandExpr.trim();
+         if (!exprStr) { self.toolsOutput = 'Please enter an expression'; return; }
 
          // 解析表达式
          var expr;
@@ -841,7 +848,7 @@ Ctrl + E: expand analysis fundamental sequence
                   expr = JSON.parse(exprStr);
                }
             } catch (e) {
-               self.debugOutput = 'Parse error: ' + e.message;
+               self.toolsOutput = 'Parse error: ' + e.message;
                return;
             }
          }
@@ -852,8 +859,8 @@ Ctrl + E: expand analysis fundamental sequence
           lines.push('Expression: ' + exprStr);
          lines.push('');
 
-         var nStart = self.debugExpandN;
-         var count = self.debugExpandCount;
+         var nStart = self.toolsExpandN;
+         var count = self.toolsExpandCount;
 
          for (var i = nStart; i < nStart + count; i++) {
             try {
@@ -865,16 +872,16 @@ Ctrl + E: expand analysis fundamental sequence
             }
          }
 
-         self.debugOutput = lines.join('\n');
+         self.toolsOutput = lines.join('\n');
          console.log('=== Direct Expansion ===');
          console.log(lines.join('\n'));
       },
 
       runDiff() {
          var self = this;
-         var nA = register[self.debugDiffA];
-         var nB = register[self.debugDiffB];
-         if (!nA || !nB) { self.debugOutput = 'Notation not found'; return; }
+         var nA = register[self.toolsDiffA];
+         var nB = register[self.toolsDiffB];
+         if (!nA || !nB) { self.toolsOutput = 'Notation not found'; return; }
          function safeDisplay(fn, x) {
             if (x === null || x === undefined) return 'null';
             if (Array.isArray(x) && x.length === 0) return '[]';
@@ -884,7 +891,7 @@ Ctrl + E: expand analysis fundamental sequence
          }
          var displayA = function (x) { return safeDisplay(nA.display || JSON.stringify, x); };
          var displayB = function (x) { return safeDisplay(nB.display || JSON.stringify, x); };
-         var result = window.debugTools.dfsDiff(nA, nB, self.debugDiffOpts);
+         var result = window.debugTools.dfsDiff(nA, nB, self.toolsDiffOpts);
          var lines = [];
          lines.push('DFS Diff: ' + nA.name + ' vs ' + nB.name);
          lines.push('Visited: ' + result.totalVisited + ', Mismatches: ' + result.mismatches.length + (result.timedOut ? ' (TIMEOUT)' : ''));
@@ -901,12 +908,185 @@ Ctrl + E: expand analysis fundamental sequence
             if (result.mismatches.length > 20) {
                lines.push('... and ' + (result.mismatches.length - 20) + ' more mismatches');
             }
-         }
-         self.debugOutput = lines.join('\n');
+          }
+         self.toolsOutput = lines.join('\n');
          console.log('=== DFS Diff ===');
          console.log(lines.join('\n'));
+       },
+      // ---- PPS 翻译 ----
+      runPPS() {
+         var self = this;
+         var raw = self.toolsPPSInput.trim();
+         if (!raw) { self.toolsOutput = 'Please enter a PPS sequence'; return; }
+
+         // ===== 核心转换函数 =====
+         function trim_trailing_zeros(lst) {
+            for (var i = lst.length - 1; i >= 0; i--) {
+               if (lst[i] !== 0) return lst.slice(0, i + 1);
+            }
+            return [];
+         }
+         function arrayLessThan(a, b) {
+            for (var i = 0; i < Math.min(a.length, b.length); i++) {
+               if (a[i] < b[i]) return true;
+               if (a[i] > b[i]) return false;
+            }
+            return a.length < b.length;
+         }
+         function std(L) {
+            var i = 0, l = [];
+            if (L.length < 2) return L;
+            while (i < L.length) {
+               var j = i; i++;
+               while (i < L.length && L[i] > L[0]) i++;
+               var k = std(L.slice(j + 1, i));
+               while (l.length && l[l.length - 1] < k) l.pop();
+               l.push(k);
+            }
+            var s = [];
+            for (var sub of l) { s.push(L[0]); s = s.concat(sub); }
+            return s;
+         }
+         function tran(L) {
+            var i = 0, l = [];
+            if (L.length < 1) return String(L.length);
+            while (i < L.length) {
+               var j = i; i++;
+               while (i < L.length && L[i] > L[0]) i++;
+               var k = tran(L.slice(j + 1, i));
+               if (k === '0') l.push('1');
+               else if (k === '1') l.push('\u03c9');
+               else l.push('\u03c9^{' + k + '}');
+            }
+            var s = ''; i = 0;
+            while (i < l.length) {
+               var j = i;
+               while (i < l.length && l[i] === l[j]) i++;
+               if (i - j > 1) {
+                  if (l[j] === '1') s += String(i - j);
+                  else s += l[j] + '*' + String(i - j);
+               } else { s += l[j]; }
+               if (i < l.length) s += '+';
+            }
+            return s;
+         }
+         function ppsm(l, l4, j, b) {
+            if (b === 0) {
+               if (j > 1) {
+                  var range1 = Array.from({ length: j + 2 }, function(_, idx) { return idx; });
+                  var range2 = Array.from({ length: j - 1 }, function(_, idx) { return j - idx; });
+                  l = l.concat(range1, range2);
+               } else { l = l.concat([0, 1, 2, 1, 2]); }
+            } else {
+               l = trim_trailing_zeros(l);
+               var range1 = Array.from({ length: j + 2 }, function(_, idx) { return b - 1 + idx; });
+               var range2 = Array.from({ length: j - 1 }, function(_, idx) { return j + b - 1 - idx; });
+               l = l.concat(range1, range2);
+            }
+            return l;
+         }
+         function pps(L) {
+            if (L.length < 2 || L[1] === 0) return Array(L.length).fill(0);
+            var l = [], i = 2, l3 = [], l4 = [], j = 0, b = 0;
+            if (arrayLessThan(L, [0, 1, 0, 1])) {
+               l = [0, 1];
+               for (var idx = 2; idx < L.length; idx++) {
+                  if (L[idx] === 0) l.push(0);
+                  else if (L[idx] === idx) l.push(0, 1, 2);
+                  else l.push(1);
+               }
+               return std(l);
+            } else {
+               l = []; var m = []; j = 0; b = 0;
+               for (var idx = 0; idx < L.length; idx++) {
+                  var x = L[idx];
+                  if (x === 0) { l.push(0); m.push(0); }
+                  else if (L[x - 1] === 0) {
+                     if (j !== 0) { l = ppsm(l, l4, j, b); j = 0; }
+                     if (x === idx) {
+                        if (idx === 1 || idx + 2 >= L.length || L[idx + 2] < L[idx]) {
+                           l.push(0, 1, 2); m.push(0);
+                        } else {
+                           var l2 = L.slice(idx - 1);
+                           var l3 = l2.map(function(val, idx2) {
+                              if (val === 0) return 0;
+                              else return val - L[idx] + 1;
+                           });
+                           l = l.concat(pps(l3));
+                           break;
+                        }
+                     } else if (L[x] !== 0) {
+                        l = trim_trailing_zeros(l);
+                        l.push(m[x] + 1); m.push(m[x] + 1);
+                     } else { l.push(1); m.push(1); }
+                  } else {
+                     if (x === 2) b = 0;
+                     else b = m[x - 1] + 1;
+                     l4 = l[x - 1]; m.push(b); j++;
+                  }
+               }
+               if (j !== 0) {
+                  l = ppsm(l, l4, j, b); j = 0;
+                  var trailingZeros = 0;
+                  for (var k = L.length - 1; k >= 0; k--) {
+                     if (L[k] === 0) trailingZeros++;
+                     else break;
+                  }
+                  for (var k = 0; k < trailingZeros; k++) l.push(0);
+                  return std(l);
+               }
+               return std(l);
+            }
+         }
+
+         // ===== 解析输入并执行 =====
+         var parts = raw.split(/\s*,\s*/);
+         var nums = [];
+         for (var i = 0; i < parts.length; i++) {
+            var p = parts[i];
+            if (p === '') continue;
+            var v = Number(p);
+            if (isNaN(v) || !Number.isInteger(v) || v < 0) {
+               self.toolsOutput = 'Invalid number: "' + p + '"';
+               return;
+            }
+            nums.push(v);
+         }
+         if (nums.length === 0) { self.toolsOutput = 'Please enter a PPS sequence'; return; }
+
+         try {
+            var lines = [];
+            lines.push('PPS Input: [' + nums.join(', ') + ']');
+            lines.push('');
+
+            // 特殊处理 ε₀
+            var isEpsilonZero = nums.length === 6 && nums[0] === 0 && nums[1] === 1 && nums[2] === 0 && nums[3] === 2 && nums[4] === 0 && nums[5] === 3;
+            if (isEpsilonZero) {
+               lines.push('Special case: 0,1,0,2,0,3 \u2192 \u03b5\u2080');
+               lines.push('');
+               lines.push('Cantor Normal Form: \u03b5\u2080');
+            } else {
+               var prssRaw = pps(nums);
+               if (!prssRaw || !Array.isArray(prssRaw)) {
+                  lines.push('Error: pps() returned invalid result');
+               } else {
+                  var prssStd = std(prssRaw);
+                  lines.push('PrSS Standard: [' + prssStd.join(', ') + ']');
+                  lines.push('');
+                  var cnfStr = tran(prssStd);
+                  lines.push('Cantor Normal Form: ' + cnfStr);
+               }
+            }
+
+            self.toolsOutput = lines.join('\n');
+            console.log('=== PPS Translation ===');
+            console.log(lines.join('\n'));
+         } catch (err) {
+            self.toolsOutput = 'Error during translation: ' + (err.message || String(err));
+            console.error(err);
+         }
       },
-   },
+    },
    mounted() {
       var canvasEl = document.getElementById('hoverCanvas');
       if (canvasEl) {

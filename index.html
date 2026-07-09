@@ -15,7 +15,7 @@
    <div id="app">
       <div class="nav-bar">
          <button :class="{active: page==='explore'}" @mousedown="page='explore'">{{ L.explore }}</button>
-         <button :class="{active: page==='debug'}" @mousedown="page='debug'">{{ L.debug }}</button>
+         <button :class="{active: page==='tools'}" @mousedown="page='tools'">{{ L.tools }}</button>
          <button :class="{active: page==='settings'}" @mousedown="page='settings'">{{ L.settings }}</button>
          <span class="lang-bar">
             <button :class="{active: lang==='en'}" @mousedown="lang='en'">EN</button>
@@ -67,98 +67,111 @@
          </div>
          <component :is="current_notation_name" :subitems="datasets[current_tab].subitems" ref="list"></component>
       </div>
-      <!-- Debug Page -->
-      <div v-if="page==='debug'" class="debug-page">
-         <h3>{{ L.debug_title }}</h3>
+      <!-- Tools Page -->
+      <div v-if="page==='tools'" class="tools-page">
+         <h3>{{ L.tools_title }}</h3>
 
          <!-- 无穷降链检测 -->
-         <div class="debug-section">
-            <h4 class="debug-section-title">{{ L.debug_inf_chain }}</h4>
-            <div class="debug-toolbar">
-               <label class="debug-label">{{ L.debug_notation_select }}<br>
-                  <select v-model="debugNotation">
+         <div class="tools-section">
+            <h4 class="tools-section-title">{{ L.tools_inf_chain }}</h4>
+            <div class="tools-toolbar">
+               <label class="tools-label">{{ L.tools_notation_select }}<br>
+                  <select v-model="toolsNotation">
                      <option v-for="(name,idx) in tab_names" :value="idx">{{ name }}</option>
                   </select>
                </label>
-               <label class="debug-label">{{ L.debug_limit }}<br>
-                  <input type="number" v-model.number="debugOpts.limitTerm" min="1" style="width:60px" />
+               <label class="tools-label">{{ L.tools_limit }}<br>
+                  <input type="number" v-model.number="toolsOpts.limitTerm" min="1" style="width:60px" />
                </label>
-               <label class="debug-label">{{ L.debug_steps }}<br>
-                  <input type="number" v-model.number="debugOpts.maxSteps" min="1" style="width:80px" />
+               <label class="tools-label">{{ L.tools_steps }}<br>
+                  <input type="number" v-model.number="toolsOpts.maxSteps" min="1" style="width:80px" />
                </label>
-               <label class="debug-label">{{ L.debug_maxn }}<br>
-                  <input type="number" v-model.number="debugOpts.maxN" min="0" style="width:60px" />
+               <label class="tools-label">{{ L.tools_maxn }}<br>
+                  <input type="number" v-model.number="toolsOpts.maxN" min="0" style="width:60px" />
                </label>
-               <label class="debug-label">{{ L.debug_preview }}<br>
-                  <input type="number" v-model.number="debugOpts.preview" min="1" style="width:60px" />
+               <label class="tools-label">{{ L.tools_preview }}<br>
+                  <input type="number" v-model.number="toolsOpts.preview" min="1" style="width:60px" />
                </label>
-               <label class="debug-label">{{ L.debug_maxvisited }}<br>
-                  <input type="number" v-model.number="debugOpts.maxVisited" min="100" step="100" style="width:80px" />
+               <label class="tools-label">{{ L.tools_maxvisited }}<br>
+                  <input type="number" v-model.number="toolsOpts.maxVisited" min="100" step="100" style="width:80px" />
                </label>
-               <div class="debug-actions" style="display:block;margin-top:8px">
-                  <button @click="runDebug()" class="debug-btn">{{ L.debug_run }}</button>
+               <div class="tools-actions" style="display:block;margin-top:8px">
+                  <button @click="runDebug()" class="tools-btn">{{ L.tools_run }}</button>
                </div>
             </div>
          </div>
 
          <!-- BFS Diff -->
-         <div class="debug-section">
-            <h4 class="debug-section-title">{{ L.debug_bfs_diff }}</h4>
-            <div class="debug-toolbar">
-               <label class="debug-label">{{ L.debug_notation_a }}<br>
-                  <select v-model="debugDiffA">
+         <div class="tools-section">
+            <h4 class="tools-section-title">{{ L.tools_bfs_diff }}</h4>
+            <div class="tools-toolbar">
+               <label class="tools-label">{{ L.tools_notation_a }}<br>
+                  <select v-model="toolsDiffA">
                      <option v-for="(name,idx) in tab_names" :value="idx">{{ name }}</option>
                   </select>
                </label>
-               <label class="debug-label">{{ L.debug_notation_b }}<br>
-                  <select v-model="debugDiffB">
+               <label class="tools-label">{{ L.tools_notation_b }}<br>
+                  <select v-model="toolsDiffB">
                      <option v-for="(name,idx) in tab_names" :value="idx">{{ name }}</option>
                   </select>
                </label>
-               <label class="debug-label">{{ L.debug_limit }}<br>
-                  <input type="number" v-model.number="debugDiffOpts.limitTerm" min="1" style="width:60px" />
+               <label class="tools-label">{{ L.tools_limit }}<br>
+                  <input type="number" v-model.number="toolsDiffOpts.limitTerm" min="1" style="width:60px" />
                </label>
-               <label class="debug-label">{{ L.debug_steps }}<br>
-                  <input type="number" v-model.number="debugDiffOpts.maxSteps" min="1" style="width:70px" />
+               <label class="tools-label">{{ L.tools_steps }}<br>
+                  <input type="number" v-model.number="toolsDiffOpts.maxSteps" min="1" style="width:70px" />
                </label>
-               <label class="debug-label">{{ L.debug_maxn }}<br>
-                  <input type="number" v-model.number="debugDiffOpts.maxN" min="0" style="width:60px" />
+               <label class="tools-label">{{ L.tools_maxn }}<br>
+                  <input type="number" v-model.number="toolsDiffOpts.maxN" min="0" style="width:60px" />
                </label>
-               <label class="debug-label">{{ L.debug_maxvisited }}<br>
-                  <input type="number" v-model.number="debugDiffOpts.maxVisited" min="100" step="100"
+               <label class="tools-label">{{ L.tools_maxvisited }}<br>
+                  <input type="number" v-model.number="toolsDiffOpts.maxVisited" min="100" step="100"
                      style="width:80px" />
                </label>
-               <div class="debug-actions" style="display:block;margin-top:8px">
-                  <button @click="runDiff()" class="debug-btn">{{ L.debug_diff_run }}</button>
+               <div class="tools-actions" style="display:block;margin-top:8px">
+                  <button @click="runDiff()" class="tools-btn">{{ L.tools_diff_run }}</button>
                </div>
             </div>
          </div>
 
          <!-- 直接展开 -->
-         <div class="debug-section">
-            <h4 class="debug-section-title">{{ L.debug_direct_expand }}</h4>
-            <div class="debug-toolbar">
-               <label class="debug-label">{{ L.debug_notation_select }}<br>
-                  <select v-model="debugExpandNotation">
+         <div class="tools-section">
+            <h4 class="tools-section-title">{{ L.tools_direct_expand }}</h4>
+            <div class="tools-toolbar">
+               <label class="tools-label">{{ L.tools_notation_select }}<br>
+                  <select v-model="toolsExpandNotation">
                      <option v-for="(name,idx) in tab_names" :value="idx">{{ name }}</option>
                   </select>
                </label>
-               <label class="debug-label">{{ L.debug_expand_expr }}<br>
-                  <input type="text" v-model="debugExpandExpr" placeholder="e.g. 0,1,2,3" style="width:220px" />
+               <label class="tools-label">{{ L.tools_expand_expr }}<br>
+                  <input type="text" v-model="toolsExpandExpr" placeholder="e.g. 0,1,2,3" style="width:220px" />
                </label>
-               <label class="debug-label">{{ L.debug_expand_n }}<br>
-                  <input type="number" v-model.number="debugExpandN" min="0" style="width:60px" />
+               <label class="tools-label">{{ L.tools_expand_n }}<br>
+                  <input type="number" v-model.number="toolsExpandN" min="0" style="width:60px" />
                </label>
-               <label class="debug-label">{{ L.debug_expand_count }}<br>
-                  <input type="number" v-model.number="debugExpandCount" min="1" style="width:60px" />
+               <label class="tools-label">{{ L.tools_expand_count }}<br>
+                  <input type="number" v-model.number="toolsExpandCount" min="1" style="width:60px" />
                </label>
-               <div class="debug-actions" style="display:block;margin-top:8px">
-                  <button @click="runExpand()" class="debug-btn">{{ L.debug_expand_run }}</button>
+               <div class="tools-actions" style="display:block;margin-top:8px">
+                  <button @click="runExpand()" class="tools-btn">{{ L.tools_expand_run }}</button>
                </div>
             </div>
          </div>
 
-         <pre class="debug-output">{{ debugOutput }}</pre>
+         <!-- PPS 翻译 -->
+         <div class="tools-section">
+            <h4 class="tools-section-title">{{ L.tools_pps_translate }}</h4>
+            <div class="tools-toolbar">
+               <label class="tools-label">{{ L.tools_pps_input }}<br>
+                  <input type="text" v-model="toolsPPSInput" placeholder="e.g. 0,1,0,2,0,3" style="width:280px" />
+               </label>
+               <div class="tools-actions" style="display:block;margin-top:8px">
+                  <button @click="runPPS()" class="tools-btn">{{ L.tools_pps_convert }}</button>
+               </div>
+            </div>
+         </div>
+
+         <pre class="tools-output">{{ toolsOutput }}</pre>
       </div>
       <div v-if="page==='settings'" class="settings-page">
          <h3>{{ L.settings_title }}</h3>

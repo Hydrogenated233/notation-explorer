@@ -849,34 +849,34 @@ html.dark .summary-resize-handle {
   background: linear-gradient(135deg, transparent 50%, #3a3a3a 50%, #3a3a3a 55%, transparent 55%);
 }
 
-/* ---------- Debug Page ---------- */
-.debug-page {
+/* ---------- Tools Page ---------- */
+.tools-page {
   max-width: 800px;
   margin: 20px 0;
 }
-.debug-page h3 {
+.tools-page h3 {
   font-weight: 500;
   color: #1e1e1e;
   margin: 0 0 16px 0;
 }
-.debug-toolbar {
+.tools-toolbar {
   padding: 12px;
   background: #f8f9fa;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   margin-bottom: 12px;
 }
-.debug-row {
+.tools-row {
   margin: 6px 12px 6px 0;
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
-.debug-row span {
+.tools-row span {
   font-size: 13px;
   color: #344054;
 }
-.debug-btn {
+.tools-btn {
   margin-right: 8px;
   padding: 6px 14px;
   background: #3b82f6;
@@ -886,13 +886,13 @@ html.dark .summary-resize-handle {
   cursor: pointer;
   font-size: 13px;
 }
-.debug-btn:hover {
+.tools-btn:hover {
   background: #2563eb;
 }
-.debug-section {
+.tools-section {
   margin-bottom: 16px;
 }
-.debug-section-title {
+.tools-section-title {
   font-weight: 500;
   font-size: 14px;
   color: #1e1e1e;
@@ -900,7 +900,7 @@ html.dark .summary-resize-handle {
   padding-bottom: 4px;
   border-bottom: 1px solid #e5e7eb;
 }
-.debug-label {
+.tools-label {
   font-size: 12px;
   color: #6b7280;
   margin: 4px 12px 4px 0;
@@ -908,15 +908,15 @@ html.dark .summary-resize-handle {
   flex-direction: column;
   align-items: flex-start;
 }
-.debug-label select, .debug-label input {
+.tools-label select, .tools-label input {
   margin-top: 4px;
 }
-.debug-actions {
+.tools-actions {
   display: inline-flex;
   align-items: flex-end;
   margin-left: 4px;
 }
-.debug-output {
+.tools-output {
   background: #1e1e1e;
   color: #d4d4d4;
   padding: 16px;
@@ -928,20 +928,20 @@ html.dark .summary-resize-handle {
   white-space: pre-wrap;
   line-height: 1.5;
 }
-html.dark .debug-section-title {
+html.dark .tools-section-title {
   color: #e0e0e0;
   border-bottom-color: #4a4a4a;
 }
-html.dark .debug-label {
+html.dark .tools-label {
   color: #999;
 }
-html.dark .debug-page h3 {
+html.dark .tools-page h3 {
   color: #e0e0e0;
 }
-html.dark .debug-toolbar {
+html.dark .tools-toolbar {
   background: #2d2d2d;
   border-color: #4a4a4a;
 }
-html.dark .debug-row span {
+html.dark .tools-row span {
   color: #999;
 }
