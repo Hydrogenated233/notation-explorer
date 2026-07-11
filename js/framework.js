@@ -74,6 +74,8 @@ const app = Vue.createApp({
       allNoteSheets: {},
       toolsExpandCount: 1,
       toolsPPSInput: '0, 1, 0, 2, 0, 3',
+      notationVersion: 0,
+      loadedNotationFile: '',
    }),
    computed: {
       current_notation_name() { return register[this.current_tab].id },
@@ -139,6 +141,9 @@ const app = Vue.createApp({
                auto_save: 'Auto-save',
                auto_save_interval: 'Auto-save interval (s)',
                auto_save_hidden: 'Save hidden state',
+               load_notation: 'Load Notation',
+               load_notation_desc: 'Temporarily load a notation file (.js)',
+               load_notation_btn: 'Browse',
             },
             zh: {
                show_hotkeys: '快捷键',
@@ -196,12 +201,15 @@ const app = Vue.createApp({
                auto_save: '自动保存',
                auto_save_interval: '自动保存间隔（秒）',
                auto_save_hidden: '保存隐藏状态',
+               load_notation: '加载记号文件',
+               load_notation_desc: '临时加载记号文件 (.js)',
+               load_notation_btn: '浏览',
             },
          };
          return t[this.lang] || t.en;
       },
-      tab_names: () => register.map(notation => notation.name),
-      analysis_names: () => analysis_register.map(notation => notation.name),
+      tab_names() { void this.notationVersion; return register.map(n => n.name); },
+      analysis_names() { void this.notationVersion; return analysis_register.map(n => n.name); },
       filteredNotations() {
          var q = (this.notationSearch || '').toString().toLowerCase().trim();
          var items = register.map(function(n, i) { return { name: n.name, id: n.id, idx: i }; });
@@ -766,8 +774,8 @@ Ctrl + E: expand analysis fundamental sequence
          document.removeEventListener('mouseup', this.endResizeSummary);
       },
 
-      // ===== Debug Tools =====
-      runToolsDebug() {
+      // ===== 无穷降链检测 =====
+      runInfChain() {
          var self = this;
          var id = self.toolsNotation;
          var notation = register[id];
@@ -1086,7 +1094,47 @@ Ctrl + E: expand analysis fundamental sequence
             console.error(err);
          }
       },
-    },
+      // ===== 临时加载记号文件 =====
+      handleNotationFile(event) {
+         var file = event.target.files[0];
+         if (!file) return;
+         var self = this;
+         var reader = new FileReader();
+         reader.onload = function (e) {
+            var beforeLen = register.length;
+            var beforeAnalysisLen = analysis_register.length;
+            try {
+               var script = document.createElement('script');
+               script.textContent = e.target.result;
+               document.body.appendChild(script);
+            } catch (err) {
+               console.error('Failed to load notation:', err);
+               alert('Error loading notation file: ' + err.message);
+               return;
+            }
+            var added = register.length - beforeLen;
+            var addedAnalysis = analysis_register.length - beforeAnalysisLen;
+             if (added > 0) {
+                while (self.datasets.length < register.length) {
+                   self.datasets.push(init_dataset(register[self.datasets.length]));
+                }
+                for (var i = beforeLen; i < register.length; i++) {
+                   registerNotationComponents(register[i]);
+                }
+                self.notationVersion++;
+                self.current_tab = beforeLen;
+             }
+            var msg = 'Loaded "' + file.name + '"';
+            var parts = [];
+            if (added > 0) parts.push(added + ' notation(s)');
+            if (addedAnalysis > 0) parts.push(addedAnalysis + ' analysis notation(s)');
+            if (parts.length) msg += ': ' + parts.join(', ');
+            self.loadedNotationFile = msg;
+            event.target.value = '';
+         };
+         reader.readAsText(file);
+      },
+   },
    mounted() {
       var canvasEl = document.getElementById('hoverCanvas');
       if (canvasEl) {
@@ -1333,7 +1381,7 @@ function getCaretPixelPosition(input, pos) {
    return left;
 }
 
-register.forEach((notation, index) => {
+function registerNotationComponents(notation) {
    app.component(notation.id + '-list', {
       props: ['item'],
       data: () => ({
@@ -1344,6 +1392,7 @@ register.forEach((notation, index) => {
          , inputVisited: false
       }),
       methods: {
+         // 注意：this.FS 和 this.FSalter 已废弃（由 expand_item 内部接管），保留以兼容引用
          onmouseenter(event) {
             if (this.notation.drawDiagram !== null && root.diagram_follow) {
                let diagram = this.notation.drawDiagram(this.item.expr)
@@ -1572,7 +1621,9 @@ register.forEach((notation, index) => {
       mounted() {
       }
    })
-})
+}
+
+register.forEach(notation => { registerNotationComponents(notation); });
 
 app.component('fs-dialog', {
    template: `

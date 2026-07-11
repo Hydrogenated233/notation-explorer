@@ -10,7 +10,7 @@
 
 <body>
    <script src="lib/Vue.js"></script>
-   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+   <script src="lib/xlsx.full.min.js"></script>
    <script>var register = []; var analysis_register = []; var nCpSN = 2;</script>
    <div id="app">
       <div class="nav-bar">
@@ -96,7 +96,7 @@
                   <input type="number" v-model.number="toolsOpts.maxVisited" min="100" step="100" style="width:80px" />
                </label>
                <div class="tools-actions" style="display:block;margin-top:8px">
-                  <button @click="runDebug()" class="tools-btn">{{ L.tools_run }}</button>
+                   <button @click="runInfChain()" class="tools-btn">{{ L.tools_run }}</button>
                </div>
             </div>
          </div>
@@ -226,7 +226,16 @@
             <span>{{ L.auto_save_hidden }}</span>
             <input type="checkbox" v-model="autoSaveHidden" />
          </label>
-         <button @mousedown="resetSettings()" class="reset-btn">{{ L.reset_settings }}</button>
+          <h4 style="margin:12px 0 4px;font-size:13px;color:#667085;">{{ L.load_notation }}</h4>
+          <label class="setting-row">
+             <span>{{ L.load_notation_desc }}</span>
+             <input type="file" ref="notationFileInput" accept=".js" @change="handleNotationFile" style="display:none" />
+             <button @mousedown="$refs.notationFileInput.click()" class="small-btn">{{ L.load_notation_btn }}</button>
+          </label>
+          <label class="setting-row" v-if="loadedNotationFile">
+             <span style="color:#22c55e;">{{ loadedNotationFile }}</span>
+          </label>
+          <button @mousedown="resetSettings()" class="reset-btn">{{ L.reset_settings }}</button>
       </div>
       <div class="floating-canvas" id="floatingCanvas" :style="{ left: pCanvas.x + 'px', top: pCanvas.y + 'px' }"
          v-show="showCanvas && !pCanvasModifier.hide">
