@@ -7,8 +7,12 @@ notation-explorer/
 ├── index.html              ← 入口页面
 ├── css/
 │   └── index.css           ← 全局样式
+├── lib/
+│   ├── Vue.js              ← 第三方 Vue 库
+│   └── xlsx.full.min.js    ← Excel 导出/导入（本地加载）
 ├── js/
 │   ├── framework.js        ← Vue 应用框架（UI、展开逻辑、分析）
+│   ├── debug-tools.js      ← 调试工具（无穷降链检测等）
 │   ├── notations/
 │   │   ├── shared-seq.js   ← 序列型记号通用函数
 │   │   ├── shared-matrix.js← 矩阵型记号通用函数
@@ -18,8 +22,14 @@ notation-explorer/
 │   │   ├── Diagram.js      ← 画布渲染（Worker + 主线程双重加载）
 │   │   └── PrSS-mod.js
 │   └── framework.js
-└── lib/
-    └── Vue.js              ← 第三方 Vue 库
+├── docs/
+│   ├── notation-dev-guide.md ← 本文件
+│   ├── making-a-notation.md  ← 记号文件开发入门（精简版）
+│   ├── dfs-diff.md           ← DFS 差异对比工具文档
+│   ├── example-PrSS.js       ← PrSS 最小工作示例（可用于临时加载）
+│   └── bfs-diff.md           ← （已弃用，重命名为 dfs-diff.md）
+├── dfs-detect.js           ← CLI 无穷降链检测器
+└── dfs-diff.js             ← CLI DFS 差异对比工具
 ```
 
 ## 核心概念
@@ -34,6 +44,15 @@ Notation Explorer 是一个 Vue 2 应用，用于**展开**各种大数/序数�
 | `analysis_register` | 分析窗口中的记号（用于分析被展开序列的强度） |
 
 每个记号文件通过 `register.push({...})` 或 `analysis_register.push({...})` 注册自己。
+
+### 临时加载 vs 永久加载
+
+| 方式 | 方法 | 持久性 |
+|------|------|--------|
+| **永久加载** | 在 `index.html` 中加入 `<script src="js/notations/YourName.js">` | 页面刷新后仍在 |
+| **临时加载** | 设置页 → "Load Notation" → 浏览并选择 `.js` 文件 | 仅当前会话有效，刷新后消失 |
+
+两种方式使用相同的文件格式，唯一的区别是加载时机。
 
 ## 共享函数
 
@@ -69,7 +88,7 @@ Notation Explorer 是一个 Vue 2 应用，用于**展开**各种大数/序数�
 | `able` | `(expr) => boolean` | 判断表达式是否还可以再展开（是否有极限） |
 | `compare` | `(a, b) => -1 / 0 / 1` | 比较两个表达式的大小：`-1` 小于，`0` 相等，`1` 大于 |
 | `FS` | `(expr, n) => expr` | 基本列函数：返回 `expr` 的第 `n` 项（n 从 0 开始） |
-| `init` | `() => array` | 返回初始项列表（见上方「init 输入格式」） |
+| `init` | `() => array` | 返回初始项列表（见下方「init 输入格式」） |
 
 ### 可选字段
 
@@ -249,48 +268,24 @@ if (this.notation.drawDiagram != null) {
 
 ## 编写一个完整的记号文件
 
-下面是一个**最小完整示例**——PrSS（原始数列系统）：
+### 最小工作示例：PrSS
 
-```js
-;(() => {
-  var expand = (seq, FSterm) => {
-    var last = seq[seq.length - 1];
-    if (last === 0) return seq.slice(0, -1);
-    var badRoot = seq.length - 2;
-    // ... 实际展开逻辑
-    return result;
-  };
+参见 `docs/example-PrSS.js`。文件内容是一个完整的 PrSS（原始数列系统）实现，可以直接用设置页的「Load Notation」临时加载测试。
 
-  register.push({
-    id: 'prss',
-    name: 'Primitive sequence',
-    display: sequence_display,
-    fromDisplay: function(str) {
-      if (str === 'Limit') return [Infinity];
-      return str.split(',').map(s => parseInt(s.trim(), 10));
-    },
-    able: seq => seq.length > 0 && seq[seq.length - 1] > 0,
-    compare: sequence_compare,
-    FS: (() => {
-      var data = {};
-      return (seq, n) => {
-        if ('' + seq === 'Infinity') return [0, 1, 2, ..., n];  // 极限列
-        if (seq.length === 0) return [];
-        var key = '' + seq;
-        if (!data[key]) data[key] = [];
-        else if (data[key][n] !== undefined) return data[key][n];
-        return data[key][n] = expand(seq, n);
-      };
-    })(),
-    init: () => [
-      { expr: [Infinity], low: [[]], subitems: [] },
-      { expr: [0],        low: [[]], subitems: [] },
-    ],
-  });
-})();
-```
+关键点：
 
-## 添加记号到 index.html
+- 使用 IIFE 包裹 `;(()=>{ ... })()` 避免变量污染
+- 通过 `register.push({...})` 注册
+- `display`: 对 `Infinity` 返回 `'Limit'`，否则返回 `''+expr`
+- `fromDisplay`: 解析 `'Limit'` 或逗号分隔序列
+- `able`: 最后一项 > 1 时可展开
+- `compare`: 使用 `sequence_compare`（来自 `shared-seq.js`）
+- `FS`: 带缓存的闭包模式
+- `init`: 返回 `[Limit, 空序列]` 两个根节点
+
+完整文件内容仅 ~65 行，可作为新记号的模板。
+
+### 添加记号到 index.html（永久加载）
 
 编辑 `index.html`，在 `</div>` 之后、`<script src="js/framework.js">` 之前添加一行：
 
@@ -301,6 +296,30 @@ if (this.notation.drawDiagram != null) {
 新记号会自动出现在下拉菜单中（按照 `register` 数组原始顺序，`tab_names` computed 属性按照 `register` 的 index 映射显示）。
 
 > 注意：`register` 中记号出现的顺序就是选项卡菜单中的顺序。`index.html` 中的加载顺序决定了 `register` 数组中各记号的 index。
+
+### 临时加载记号（无需修改 index.html）
+
+通过设置页「Load Notation」功能可以临时加载一个记号文件，无需编辑 `index.html`：
+
+1. 点击顶部导航栏 **Settings**
+2. 找到 **Load Notation** 区域
+3. 点击 **Browse**，选择 `.js` 文件
+4. 加载成功后自动切换到新记号
+
+**工作原理：**
+
+```
+用户选择 .js 文件 → FileReader 读取内容
+  → 创建 <script> 标签注入页面执行
+  → register.push() 注册到全局数组
+  → 初始化 datasets + 注册 Vue 组件
+  → 自动切换到新记号
+```
+
+**限制：**
+- 仅当前页面会话有效，刷新后消失
+- 加载的记号文件依赖的 shared 函数（如 `sequence_compare`）必须已通过 `index.html` 加载
+- 文件格式与永久加载的记号文件完全一致
 
 ## 设置信息持久化
 
@@ -323,6 +342,153 @@ if (this.notation.drawDiagram != null) {
 | `analysisIdx` | number | 分析记号索引 |
 
 所有设置仅在框架 (`framework.js`) 中管理，记号文件无需关心。
+
+## 分析数据持久化
+
+Notation Explorer 会自动保存和恢复用户的分析数据，包括展开树中的分析文本和便利贴内容。
+
+### 存储方式
+
+分析数据存储在 `localStorage` 的 `ne-analysis` 键中（JSON 格式），与设置数据 (`ne-config`) 分开管理。
+
+### 存储内容
+
+```json
+{
+  "version": 2,
+  "savedAt": 1700000000000,
+  "notations": [
+    {
+      "notationId": "omega-Y",
+      "items": [
+        { "expr": [0,1,2,3], "analysis": "ε₀", "hide": false },
+        { "expr": [0,1,2],   "analysis": "ω^ω" }
+      ]
+    }
+  ],
+  "noteSheets": {
+    "omega-Y": [{ "name": "Sheet2", "text": "笔记内容..." }],
+    "BM": [{ "name": "Sheet2", "text": "..." }]
+  }
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `version` | 数据格式版本（当前为 2） |
+| `savedAt` | 保存时间戳 |
+| `notations` | 每个记号的分析树 |
+| `notations[].notationId` | 记号 id，用于匹配 `register` 中的记号 |
+| `notations[].items` | 有分析内容的节点列表 |
+| `items[].expr` | 内部表达式（原始引用，非序列化字符串） |
+| `items[].analysis` | 用户输入的分析文本 |
+| `items[].hide` | （可选）是否隐藏子项 |
+| `noteSheets` | 每个记号的便利贴数据 |
+
+### 读取时机
+
+应用启动时自动恢复（`loadAnalysis()` 在 `mounted()` 中调用）：
+1. 读取 `ne-analysis` JSON
+2. 对每个记号的 items，通过 `expr` 展开分析树
+3. 将分析文本填入匹配的节点
+4. 恢复便利贴内容
+
+### 保存时机
+
+- **自动保存（周期）**：`startAutoSave()` 按 `autoSaveInterval`（设置页可调，默认 60 秒）周期性调用 `saveAnalysis()`
+- **手动导出**：通过「Export analysis」按钮调用 `export_xlsx()` 导出为 `.xlsx` 文件
+
+### exports 导出/导入分析
+
+**导出（Export analysis）：**
+- 遍历当前记号的整个展开树
+- 用 `notation.display(expr)` 生成表达式标识，与用户输入的 `analysis` 文本一起写入 xlsx
+- 便利贴内容以 Sheet2+ 形式导出
+
+**导入（Import analysis）：**
+- 读取 xlsx 的 Sheet1，每行 `[表达式字符串, 分析文本, 可选隐藏状态]`
+- 用 `safeFromDisplay(notation, str)` 还原为内部表达式
+- 执行展开直到匹配，填入分析文本
+
+> 导出/导入使用字符串作为表达式标识，因此要求记号必须实现 `display` 和 `fromDisplay`。
+
+## Vue 组件注册机制
+
+框架在加载完成后为每个记号注册两个 Vue 组件：
+
+```js
+function registerNotationComponents(notation) {
+  app.component(notation.id + '-list', { /* 列表项组件 */ });
+  app.component(notation.id,           { /* 根列表组件 */ });
+}
+```
+
+- `notation.id` — 根容器组件，被 `<component :is="current_notation_name">` 引用
+- `notation.id + '-list'` — 单个列表项组件（包含输入框、显示、tooltip、键盘快捷键等）
+
+动态加载的记号也需要执行这步，`handleNotationFile` 方法中会自动调用 `registerNotationComponents()`。
+
+## 工具页面
+
+应用通过顶部导航栏中的 **Tools** 页面提供三个调试/工具功能。
+
+### 1. 无穷降链检测（Inf Chain Detection）
+
+从 Limit 的基本列出发，DFS 检测记号是否存在无穷降链。
+
+- **Notation** — 选择要检测的记号
+- **Limit** — 取 Limit 的前 N 个基本列（默认 6）
+- **Max steps** — 每个分支最多展开步数（默认 50）
+- **Max n** — 尝试展开 n=0..N（默认 1）
+- **Preview** — 检测到无限时输出前 N 项（默认 8）
+- **Max visited** — 最大访问节点数（默认 2000）
+- 点击 **Run** 执行检测（对应 Vue 方法 `runInfChain`），结果输出到下方终端区域
+
+### 2. DFS 差异对比（DFS Diff）
+
+比较两个记号的 FS 展开结果差异。
+
+- **Notation A / B** — 选择要对比的两个记号
+- **DFS limit** — 每个分支最大深度（默认 10）
+- **Max FS pos** — 最大 FS 位置（默认 3）
+- **Max visited** — 最大访问节点数（默认 200）
+- 点击 **Diff** 执行对比（对应 Vue 方法 `runDiff`），结果输出到下方终端区域
+
+### 3. 直接展开（Direct Expansion）
+
+直接展开指定记号的指定表达式，查看其基本列结果。
+
+- **Notation** — 选择要展开的记号
+- **Expression** — 输入表达式字符串（如 `0,1,2,3`，或 `Limit`）
+- **Start n** — 起始 FS 位置（默认 0）
+- **Count** — 连续展开几项（默认 1）
+- 点击 **Expand** 执行展开（对应 Vue 方法 `runExpand`），结果输出到下方终端区域
+
+支持 `Limit` / `Infinity` / `∞` 作为极限表达式。
+
+### 4. PPS 翻译
+
+将 PPS 序列转换为 PrSS 标准形式和 Cantor Normal Form。
+
+### 底层实现
+
+工具功能对应 `js/framework.js` 中的四个 Vue 方法：
+
+| 工具 | Vue 方法 | 后端逻辑 |
+|------|---------|---------|
+| 无穷降链检测 | `runInfChain()` | `window.debugTools.detectInfChain()`（定义在 `debug-tools.js`） |
+| DFS 差异对比 | `runDiff()` | 直接调用两个记号的 `FS` 比较 |
+| 直接展开 | `runExpand()` | 直接调用记号的 `FS` |
+| PPS 翻译 | `runPPS()` | 全局函数 `pps()`、`std()`、`tran()` |
+
+## CLI 脚本
+
+项目根目录下提供两个 Node.js CLI 脚本，功能与工具页面同步：
+
+- **`dfs-detect.js`** — DFS 无穷降链检测器，详见 `docs/dfs-diff.md`
+- **`dfs-diff.js`** — DFS 差异对比，详见 `docs/dfs-diff.md`
+
+CLI 脚本独立加载 `index.html` 中引用的所有记号文件（通过 `shared-seq.js` + 全部 notation 文件），直接操作 `register` 数组。
 
 ## 常见模式与最佳实践
 
@@ -362,54 +528,25 @@ FS 计算通常较慢，统一使用闭包缓存模式。注意对 `Infinity` �
 2. 输入框聚焦时，观察 `showCanvas` 和 `diagram` 数据是否正确
 3. FS 缓存可以通过 `console.log` 在 IIFE 闭包内输出调试
 
-### 调试页面（Debug）
+### 快速测试展开逻辑
 
-应用自带的 Debug 页面（顶部导航栏 → Debug）提供了三个调试工具，直接在前端运行：
+创建 JS 后在 Node.js 中快速验证展开逻辑：
 
-#### 1. 无穷降链检测（Inf Chain Detection）
+```bash
+node -e "
+  function expand(seq, n) { /* 粘贴展开函数 */ }
+  console.log(expand([0,1,2,3], 0));
+"
+```
 
-从 Limit 的基本列出发，DFS 检测记号是否存在无穷降链。
-
-- **Notation** — 选择要检测的记号
-- **Limit** — 取 Limit 的前 N 个基本列（默认 6）
-- **Max steps** — 每个分支最多展开步数（默认 50）
-- **Max n** — 尝试展开 n=0..N（默认 1）
-- **Preview** — 检测到无限时输出前 N 项（默认 8）
-- **Max visited** — 最大访问节点数（默认 2000）
-- 点击 **Run** 执行检测，结果输出到下方黑色终端区域
-
-#### 2. DFS 差异对比（DFS Diff）
-
-比较两个记号的 FS 展开结果差异。
-
-- **Notation A / B** — 选择要对比的两个记号
-- **DFS limit** — 每个分支最大深度（默认 10）
-- **Max FS pos** — 最大 FS 位置（默认 3）
-- **Max visited** — 最大访问节点数（默认 200）
-- 点击 **Diff** 执行对比，结果输出到下方黑色终端区域
-
-#### 3. 直接展开（Direct Expansion）
-
-直接展开指定记号的指定表达式，查看其基本列结果。
-
-- **Notation** — 选择要展开的记号
-- **Expression** — 输入表达式字符串（如 `0,1,2,3`，或 `Limit`）
-- **Start n** — 起始 FS 位置（默认 0）
-- **Count** — 连续展开几项（默认 1）
-- 点击 **Expand** 执行展开，结果输出到下方黑色终端区域
-
-支持 `Limit` / `Infinity` / `∞` 作为极限表达式。
-
-### CLI 脚本
-
-项目根目录下提供两个 Node.js CLI 脚本，功能与调试页面同步：
-
-- **`dfs-detect.js`** — DFS 无穷降链检测器，详见 `docs/dfs-diff.md`
-- **`dfs-diff.js`** — DFS 差异对比，详见 `docs/dfs-diff.md`
+或直接在浏览器 DevTools Console 中检查 `register` 数组。
 
 ## 参考文件
 
-- 序列型参考：`omega-Y.js`（最完整，含 drawDiagram、FSalter、缓存）
-- 矩阵型参考：`BM.js`（典型 Matrix 实现）
-- 字符串型参考：`cOCF.js`（完整自包含记号系统）
-- 简洁型参考：`PrSS-mod.js`、`PPS.js`（较短，容易理解）
+- **记号开发入门**：`docs/making-a-notation.md`（精简版，逐字段说明 + 加载/测试方式）
+- **最小示例（带注释）**：`docs/example-PrSS.js`（~65 行，详注，适合作为新记号起点模板）
+- **序列型参考**：`js/notations/omega-Y.js`（最完整，含 drawDiagram、FSalter、缓存）
+- **矩阵型参考**：`js/notations/BM.js`（典型 Matrix 实现）
+- **字符串型参考**：`js/notations/cOCF.js`（完整自包含记号系统）
+- **简洁型参考**：`js/notations/PPS.js`（较短，容易理解）
+- **临时加载**：设置页 "Load Notation" 功能，参考 `docs/example-PrSS.js`
