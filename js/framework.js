@@ -147,7 +147,7 @@ const app = Vue.createApp({
                 latex_commands: 'LaTeX commands',
                 latex_commands_placeholder: '\\newcommand{\\foo}[1]{#1^2}',
                 latex_commands_error: 'Invalid LaTeX commands',
-                analysis_latex_preview: 'Show analysis LaTeX',
+                analysis_latex_preview: 'Render analysis as LaTeX',
                 analysis_input_visible: 'Show analysis input',
                 analysis_input_width: 'Analysis input width',
                 tools: 'Tools',
@@ -218,7 +218,7 @@ const app = Vue.createApp({
                 latex_commands: 'LaTeX 命令',
                 latex_commands_placeholder: '\\newcommand{\\foo}[1]{#1^2}',
                 latex_commands_error: 'LaTeX 命令无效',
-                analysis_latex_preview: '显示分析 LaTeX',
+                analysis_latex_preview: '分析文本 LaTeX 渲染',
                 analysis_input_visible: '显示分析输入框',
                 analysis_input_width: '分析输入框宽度',
                 tools: '工具',
@@ -373,7 +373,7 @@ const app = Vue.createApp({
       },
       renderAnalysisLatex(source) {
          if (!window.NotationLatex) return ''
-         return window.NotationLatex.renderLatex(source, this.latexCommands)
+         return window.NotationLatex.renderAnalysisText(source, true, this.latexCommands)
       },
       showAnalysisLatexPreview(source, x, y) {
          if (!this.analysisLatexPreview || !this.analysisInputVisible || !source) {
@@ -1854,6 +1854,15 @@ app.component('notation-list-item', {
          notation() { return register.get(this.notationId) || {} },
       },
       methods: {
+         renderTooltipAnalysis(comment) {
+            var source = String(comment || '')
+            if (!source) return ''
+            var asLatex = this.$root.analysisLatexPreview
+            var rendered = window.NotationLatex
+               ? window.NotationLatex.renderAnalysisText(source, asLatex, this.$root.latexCommands)
+               : source
+            return '; ' + rendered
+         },
          // 注意：this.FS 和 this.FSalter 已废弃（由 expand_item 内部接管），保留以兼容引用
          onmouseenter(event) {
             if (typeof this.notation.drawDiagram === 'function' && root.diagram_follow) {
@@ -2094,7 +2103,7 @@ app.component('notation-list-item', {
                   <notation-expression class="tooltip-expr" :notation="notation"
                      :expression="term.expr"></notation-expression>
                   <span class="tooltip-cmnt"
-                     v-html="term.comment ? '; ' + term.comment : ''"></span>
+                     v-html="renderTooltipAnalysis(term.comment)"></span>
                </div>
             </div>
          </div></div>

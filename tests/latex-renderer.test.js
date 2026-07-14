@@ -56,6 +56,15 @@ test('renderLatex passes bounded safe options and isolated macros to KaTeX', () 
    })
 })
 
+test('renderAnalysisText switches between legacy markup and LaTeX with user commands', () => {
+   latex.resetCommandCache()
+   const legacy = 'x<sup>2</sup>'
+   const commands = '\\newcommand{\\foo}[1]{\\Omega_{#1}}'
+
+   assert.equal(latex.renderAnalysisText(legacy, false, commands, katex), legacy)
+   assert.match(latex.renderAnalysisText('\\foo{3}', true, commands, katex), /class="katex"/)
+})
+
 test('KaTeX compiles parameter commands and renewcommand without built-in app macros', () => {
    latex.resetCommandCache()
    assert.deepEqual(latex.compileCommands('', katex).macros, {})

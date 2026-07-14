@@ -358,11 +358,11 @@ Settings 中的 **Local notation files** 工作区将文件和草稿保存在 `l
 
 本地文件可以使用页面已经提供的 shared 函数和内置记号，但不能依赖另一个本地文件。用户首次执行非模板源码时必须确认信任；这是函数作用域隔离，不是安全沙箱。未保存草稿单独持久化，刷新后可恢复且绝不会执行。
 
-## 分析输入与 LaTeX 预览
+## 分析输入与 LaTeX 渲染
 
 分析输入框逐节点编辑 `Analysis text`，但可见性和宽度是全局设置。输入框默认显示、默认宽度为 180px，可在 Settings 用滑杆调整，也可横向拖动任一输入框同步更新全部输入框；共享设置限制在 60..600px。窄屏可以视觉压缩输入框，但不会把该临时压缩写回共享宽度。隐藏输入框只隐藏编辑控件，不删除已保存文本。
 
-**Show analysis LaTeX** 默认关闭，并独立于表达式的 HTML/LaTeX 模式。开启后，非空分析输入框在获得焦点或编辑时显示浮动 KaTeX 预览；失焦、删除文本、关闭预览或隐藏输入框时收起。预览直接把分析文本作为 KaTeX 源处理，不经过 `htmlToLatex()`，并复用用户的 LaTeX 命令。分析预览开启时，它优先于同一输入焦点触发的图表浮窗。
+**Render analysis as LaTeX** 默认关闭，并独立于表达式的 HTML/LaTeX 模式。开启后，非空分析输入框在获得焦点或编辑时显示浮动 KaTeX 预览，基本列提示框也把分号后的分析文本渲染为 KaTeX；关闭时两处继续显示原文本。分析文本直接作为 KaTeX 源处理，不经过 `htmlToLatex()`，并复用用户的 LaTeX 命令。失焦、删除文本、关闭预览或隐藏输入框时只收起浮动预览；分析预览开启时，它优先于同一输入焦点触发的图表浮窗。
 
 ## 设置信息持久化
 
@@ -376,7 +376,7 @@ Settings 中的 **Local notation files** 工作区将文件和草稿保存在 `l
 | `lang` | string | 语言 (`'en'` / `'zh'`) |
 | `displayMode` | string | 表达式渲染模式 (`'html'` / `'latex'`) |
 | `latexCommands` | string | 用户自定义的 KaTeX 宏声明，默认空字符串 |
-| `analysisLatexPreview` | boolean | 是否显示聚焦分析输入的 LaTeX 预览 |
+| `analysisLatexPreview` | boolean | 是否在聚焦预览和基本列提示框中将分析文本渲染为 LaTeX |
 | `analysisInputVisible` | boolean | 是否显示全部分析输入框 |
 | `analysisInputWidth` | number | 全局分析输入框宽度（60..600px） |
 | `diagramFollow` | boolean | 画布跟随鼠标 |
@@ -476,7 +476,7 @@ app.component('notation-tree', { /* 根列表 */ });
 app.component('notation-list-item', { /* 递归节点 */ });
 ```
 
-递归组件通过 `notationId` 从注册表读取当前定义，并把原始表达式对象交给 `notation-expression`。基本列提示框保留 `{ index, expr, comment }`，所有条目共享 index / expression / analysis 三列；即使某项没有分析文本也保留空的第三格，因此每项表达式左对齐，所有可见分号从最长表达式之后的同一位置开始。
+递归组件通过 `notationId` 从注册表读取当前定义，并把原始表达式对象交给 `notation-expression`。基本列提示框保留 `{ index, expr, comment }`，所有条目共享 index / expression / analysis 三列；即使某项没有分析文本也保留空的第三格，因此每项表达式左对齐，所有可见分号从最长表达式之后的同一位置开始。分析列的正文随 `analysisLatexPreview` 在原文本与 KaTeX 之间切换，分号始终保留在数学公式之外。
 
 根树的 key 包含记号 ID 的运行时版本，因此同 ID 的本地源码替换会卸载旧组件实例并挂载新定义，而无关记号的树不受影响。渲染模式不属于这个 key，切换 HTML/LaTeX 不会重新挂载树。
 

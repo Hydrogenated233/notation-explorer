@@ -80,8 +80,8 @@ The presentation-only KaTeX source supplied by optional `latex(expr)` or derived
 **LaTeX command source**:
 User-authored KaTeX macro declarations retained in Settings, with no application-provided `\newcommand` or `\renewcommand` defaults.
 
-**Analysis LaTeX preview**:
-An optional floating rendering of the focused **Analysis input** that does not rewrite its **Analysis text**.
+**Analysis LaTeX rendering**:
+An optional KaTeX presentation of **Analysis text** in both the focused-input preview and the **Fundamental-sequence tooltip** that does not rewrite the text.
 
 **Fundamental-sequence tooltip**:
 The hover panel that shows a node, indexed fundamental-sequence expressions, and their associated **Analysis text**.
@@ -166,7 +166,7 @@ User-authored free-form notes associated with a **Main notation** independently 
 - A notation may provide `latex(expr)`; otherwise only the documented legacy HTML subset of its **Display string** is converted to KaTeX source
 - The default **LaTeX command source** is empty, and each expression render receives an isolated copy of the compiled user macros
 - An invalid **LaTeX command source** reports an error while the last valid macro set remains available for rendering
-- **Analysis LaTeX preview** is independent of **Expression rendering mode**, renders the saved **Analysis text** directly, and reuses the user macro set
+- **Analysis LaTeX rendering** is independent of **Expression rendering mode**, renders saved **Analysis text** directly in the focused-input preview and **Fundamental-sequence tooltip**, and reuses the user macro set
 - Hiding **Analysis inputs** or the preview never deletes **Analysis text**
 - **Analysis input** visibility and width are global presentation settings; resizing one input updates the shared width
 - A **Fundamental-sequence tooltip** uses shared index, expression, and analysis columns so every expression is left-aligned and every visible semicolon begins after the widest expression
@@ -187,5 +187,5 @@ User-authored free-form notes associated with a **Main notation** independently 
 - An ID-based registry was initially assumed to require a new file API; resolved: existing files using `register.push(...)` or `analysis_register.push(...)` remain valid.
 - Cross-file dependencies were considered for local files; resolved: every **Local notation file** is self-contained and independently unloadable.
 - "Text" during file replacement was ambiguous; resolved: it means **Analysis text**, not **Note sheets** or editor source.
-- "LaTeX display" and **Analysis LaTeX preview** were initially conflated; resolved: the former renders notation expressions and the latter renders user-authored **Analysis text**.
+- "LaTeX display" and **Analysis LaTeX rendering** were initially conflated; resolved: the former renders notation expressions and the latter renders user-authored **Analysis text**.
 - "No built-in newcommand" means the application supplies no default macro declarations; it does not remove KaTeX's native commands.

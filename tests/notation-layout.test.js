@@ -103,7 +103,8 @@ test('fundamental-sequence tooltip shares one grid across every rendered row', (
    assert.match(css, /\.tooltip-expr\s*\{[^}]*justify-self:\s*start;[^}]*text-align:\s*left;/s)
    assert.match(css, /\.tooltip-cmnt\s*\{[^}]*justify-self:\s*start;[^}]*text-align:\s*left;/s)
    assert.doesNotMatch(framework, /class="tooltip-cmnt"\s+v-if=/)
-   assert.match(framework, /class="tooltip-cmnt"\s+v-html="term\.comment \? '; ' \+ term\.comment : ''"/)
+   assert.match(framework, /renderTooltipAnalysis\(comment\)\s*\{[^}]*analysisLatexPreview[^}]*renderAnalysisText/s)
+   assert.match(framework, /class="tooltip-cmnt"\s+v-html="renderTooltipAnalysis\(term\.comment\)"/)
 })
 
 test('every discovered built-in loads and initializes in manifest order', () => {

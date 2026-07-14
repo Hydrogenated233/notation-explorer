@@ -183,6 +183,11 @@
       }
    }
 
+   function renderAnalysisText(source, asLatex, commands, engine) {
+      var text = String(source === null || source === undefined ? '' : source)
+      return asLatex ? renderLatex(text, commands, engine) : text
+   }
+
    function renderNotation(notation, expression, commands, prefix) {
       var latex = notationToLatex(notation, expression)
       if (prefix) latex = htmlToLatex(prefix) + latex
@@ -203,6 +208,7 @@
       compileCommands: compileCommands,
       resetCommandCache: resetCommandCache,
       renderLatex: renderLatex,
+      renderAnalysisText: renderAnalysisText,
       renderNotation: renderNotation,
       validateCommands: validateCommands
    }
