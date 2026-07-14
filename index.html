@@ -5,7 +5,7 @@
    <meta charset="UTF-8">
    <meta name="author" content="hyp_cos">
    <title>Notation Explorer</title>
-   <link rel="stylesheet" type="text/css" href="css/index.css">
+   <link rel="stylesheet" type="text/css" href="css/index.css?v=folder-tree-5">
 </head>
 
 <body>
@@ -26,24 +26,50 @@
 
       <div v-if="page==='explore'">
          <div class="notation-select">
-            <div class="ns-trigger" @mousedown="toggleDropdown">
+            <button ref="notationTrigger" type="button" class="ns-trigger" :aria-expanded="String(dropdownOpen)"
+               aria-haspopup="dialog" aria-controls="notation-picker" @click="toggleDropdown"
+               @keydown.down.prevent="openNotationDropdown" @keydown.enter.prevent="toggleDropdown"
+               @keydown.space.prevent="toggleDropdown">
                <span class="ns-trigger-name">{{ currentNotation.name }}</span>
                <span class="ns-trigger-id">{{ currentNotation.id }}</span>
-            </div>
-            <div v-if="dropdownOpen" class="ns-dropdown" @mousedown.stop>
+            </button>
+            <div v-if="dropdownOpen" id="notation-picker" class="ns-dropdown" role="dialog"
+               :aria-label="L.notation_select_label" @mousedown.stop @keydown.esc.stop.prevent="closeDropdown(true)">
                <div class="ns-search-wrap">
                   <input type="text" v-model="notationSearch" :placeholder="L.notation_search_placeholder"
-                     class="ns-search-input" ref="notationSearchInput" />
+                     class="ns-search-input" ref="notationSearchInput" role="searchbox" aria-controls="notation-tree"
+                     @keydown="handleNotationSearchKeydown" />
                </div>
-               <div class="ns-options">
-                   <div v-for="item in filteredNotations" :key="item.id" class="ns-option"
-                      :class="{ selected: item.id === currentNotationId }" @mousedown="selectNotation(item.id)">
-                     <span class="ns-opt-name">{{ item.name }}</span>
-                     <span class="ns-opt-id">{{ item.id }}</span>
-                  </div>
+               <div id="notation-tree" class="ns-options" role="tree" :aria-label="L.notation_select_label">
+                  <button v-for="(row, index) in notationMenuRows" :key="row.key" ref="notationMenuRows"
+                     type="button" role="treeitem" class="ns-tree-row"
+                     :class="{
+                        'is-folder': row.kind === 'folder',
+                        'is-notation': row.kind === 'notation',
+                        'is-expanded': row.kind === 'folder' && row.expanded,
+                        'selected': row.kind === 'notation' && row.id === currentNotationId
+                     }"
+                     :style="{ paddingLeft: (10 + row.depth * 16) + 'px' }" :aria-level="row.level"
+                     :aria-expanded="row.kind === 'folder' ? String(row.expanded) : null"
+                     :aria-selected="row.kind === 'notation' ? String(row.id === currentNotationId) : null"
+                     :tabindex="notationMenuFocusIndex === index ? 0 : -1"
+                     :title="row.kind === 'folder'
+                        ? (row.expanded ? L.notation_collapse_folder : L.notation_expand_folder)
+                        : row.name + ' (' + row.id + ')'"
+                     @mousedown.prevent.stop="activateNotationMenuRow(row)"
+                     @keydown="handleNotationMenuKeydown($event, row, index)">
+                     <span v-if="row.kind === 'folder'" class="ns-tree-chevron" aria-hidden="true"></span>
+                     <span v-else class="ns-tree-spacer" aria-hidden="true"></span>
+                     <span class="ns-opt-name">{{ row.kind === 'folder' ? row.label : row.name }}</span>
+                     <span v-if="row.kind === 'folder'" class="ns-folder-count">{{ row.count }}</span>
+                     <span v-else class="ns-opt-id">{{ row.id }}</span>
+                  </button>
+                  <p v-if="notationMenuRows.length === 0" class="ns-empty" role="status">
+                     {{ L.notation_search_empty }}
+                  </p>
                </div>
             </div>
-            <div v-if="dropdownOpen" class="ns-backdrop" @mousedown="closeDropdown"></div>
+            <div v-if="dropdownOpen" class="ns-backdrop" @mousedown="closeDropdown(true)"></div>
          </div>
          <div v-if="showNParam" class="n-param" style="margin-bottom:8px">
             {{ L.n_param_label }} <input type="number" v-model.number="nParamInput" min="1" class="n-input" />
@@ -261,74 +287,9 @@
       </div>
       <fs-dialog v-model="show_fs_dialog" :init="current_analysis_notation.fs_default" @confirm="calc_analysis_fs" />
    </div>
-   <script src="js/notations/shared-seq.js"></script>
-   <script src="js/notations/shared-matrix.js"></script>
-   <script src="js/notations/omega-Y.js"></script>
-   <script src="js/notations/1-Y.js"></script>
-   <script src="js/notations/BM.js"></script>
-   <script src="js/notations/BSM.js"></script>
-   <script src="js/notations/PPS4.js"></script>
-   <script src="js/notations/wPPS4.js"></script>
-   <script src="js/notations/tPPS4.js"></script>
-   <script src="js/notations/ewPPS4.js"></script>
-   <script src="js/notations/HPRRS.js"></script>
-   <script src="js/notations/PBMSS.js"></script>
-   <script src="js/notations/CpS.js"></script>
-   <script src="js/notations/n-CpS.js"></script>
-   <script src="js/notations/WSS.js"></script>
-   <script src="js/notations/UPMS.js"></script>
-   <script src="js/notations/ssqLPrSS.js"></script>
-   <script src="js/notations/Fomega2MN.js"></script>
-   <script src="js/notations/WFomega2MN.js"></script>
-   <script src="js/notations/WFomega2DMN.js"></script>
-   <script src="js/notations/omegaMN.js"></script>
-   <script src="js/notations/non-triagular-cMN.js"></script>
-   <script src="js/notations/TBM.js"></script>
-   <script src="js/notations/WAomega2MN.js"></script>
-   <script src="js/notations/WAomega2DMN.js"></script>
-   <script src="js/notations/BHM.js"></script>
-   <script src="js/notations/omega-Y-magma.js"></script>
-   <script src="js/notations/BLM.js"></script>
-   <script src="js/notations/CM.js"></script>
-   <script src="js/notations/wMM.js"></script>
-   <script src="js/notations/TomegaMN.js"></script>
-   <script src="js/notations/TomegaDMN.js"></script>
-   <script src="js/notations/MomegaMN.js"></script>
-   <script src="js/notations/MTomegaMN.js"></script>
-   <script src="js/notations/Domega2MN.js"></script>
-   <script src="js/notations/Aomega2MN.js"></script>
-   <script src="js/notations/Tomega^omegaMN.js"></script>
-   <script src="js/notations/DEN.js"></script>
-   <script src="js/notations/DEN2.js"></script>
-   <script src="js/notations/DEN3.js"></script>
-   <script src="js/notations/TON-main.js"></script>
-   <script src="js/notations/TON-DoR.js"></script>
-   <script src="js/notations/TON-DRP.js"></script>
-   <script src="js/notations/TON-I.js"></script>
-   <script src="js/notations/TON-IBP.js"></script>
-   <script src="js/notations/TON-MC.js"></script>
-   <script src="js/notations/TON-MPC.js"></script>
-   <script src="js/notations/TON-DRC.js"></script>
-   <script src="js/notations/TON-DRPC.js"></script>
-   <script src="js/notations/aSAN-1.js"></script>
-   <script src="js/notations/aSAN-2.js"></script>
-   <script src="js/notations/aSAN-3.js"></script>
-   <script src="js/notations/aSAN~3+.js"></script>
-   <script src="js/notations/LMN.js"></script>
-   <script src="js/notations/LON.js"></script>
-   <script src="js/notations/HSPN.js"></script>
-   <script src="js/notations/cOCF.js"></script>
-   <script src="js/notations/DFSS.js"></script>
-   <script src="js/notations/PPS.js"></script>
-   <!--
-   <script src="js/notations/fPPS4.js"></script>
-    -->
-    <script src="js/notations/Diagram.js"></script>
-    <script src="js/prss-template.js"></script>
-    <script src="js/notation-editor.js"></script>
-    <script src="js/local-notation-runtime.js"></script>
-    <script src="js/local-notation-ui.js"></script>
-    <script src="js/framework.js"></script>
+   <script src="js/notation-file-index.js"></script>
+   <script src="js/notation-manifest.js"></script>
+   <script src="js/notation-loader.js"></script>
 </body>
 
 </html>

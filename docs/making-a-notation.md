@@ -91,7 +91,7 @@ able: function(seq) {
 比较两个表达式的大小。**必须正确处理 `Infinity`**。
 
 ```js
-compare: sequence_compare  // 序列型——使用 shared-seq.js 提供的函数
+compare: sequence_compare  // 序列型——使用 00-shared-seq.js 提供的函数
 ```
 
 对于序列型记号（`number[]`），直接用 `sequence_compare`。
@@ -161,13 +161,15 @@ init: function() {
 
 ## 两种安装方式
 
-### 作为内置记号（放入 index.html）
+### 作为内置记号（自动发现）
 
-在 `index.html` 的 `</div>` 之后、`<script src="js/framework.js">` 之前添加：
+将 `.js` 文件放入对应的谱系目录；没有对应谱系时使用 `Misc/`，然后运行：
 
-```html
-<script src="js/notations/MyNotation.js"></script>
+```bash
+node generate-notation-manifest.js
 ```
+
+无需修改 `index.html`。文件按最多四级分类目录、再按文件名的区分大小写字典序加载。要暂时排除内置文件，将 `MyNotation.js` 重命名为 `MyNotation.js.disable` 并重新生成清单；恢复 `.js` 即重新启用。
 
 这种方式随应用发布，不能在本地文件管理器中启用、禁用或编辑。
 
@@ -207,13 +209,14 @@ node -e "
 
 | 类型 | 表达式 | compare | display | 共享文件 |
 |------|--------|---------|---------|---------|
-| 序列型 | `number[]` 如 `[0,1,2,3]` | `sequence_compare` | `sequence_display` | `shared-seq.js` |
-| 矩阵型 | `number[][]` 如 `[[0],[1],[2]]` | `matrix_compare` | `matrix_display` | `shared-matrix.js` |
+| 序列型 | `number[]` 如 `[0,1,2,3]` | `sequence_compare` | `sequence_display` | `00-shared-seq.js` |
+| 矩阵型 | `number[][]` 如 `[[0],[1],[2]]` | `matrix_compare` | `matrix_display` | `01-shared-matrix.js` |
 
 ## 参考文件
 
 - **最小工作示例：** `docs/example-PrSS.js`（与 Settings 中的 PrSS 模板保持一致）
-- **完整参考：** `js/notations/omega-Y.js`（含 drawDiagram、FSalter、缓存）
-- **矩阵型参考：** `js/notations/BM.js`
-- **字符串型参考：** `js/notations/cOCF.js`
+- **完整参考：** `js/notations/Y/omega-Y.js`（含 drawDiagram、FSalter、缓存）
+- **矩阵型参考：** `js/notations/BM-like/BM.js`
+- **字符串型参考：** `js/notations/OCN/cOCF.js`
+- **PPS 变体参考：** `js/notations/PPS/sPPS4.js`
 - **开发指南：** `docs/notation-dev-guide.md`

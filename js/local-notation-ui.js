@@ -690,13 +690,16 @@
                   result = await this.performMutation(file, 'save', function() {
                      return component.runtime().saveFile(file.id, component.editorName, component.editorSource)
                   })
-               } else {
-                  result = await Promise.resolve(this.runtime().saveFile(
-                     file.id,
-                     this.editorName,
-                     this.editorSource
-                  ))
-               }
+                } else {
+                   result = await Promise.resolve(this.runtime().saveFile(
+                      file.id,
+                      this.editorName,
+                      this.editorSource
+                   ))
+                   if (this.$root && typeof this.$root.applyLocalFileChange === 'function') {
+                      await Promise.resolve(this.$root.applyLocalFileChange(result, 'save'))
+                   }
+                }
                this.refreshFiles(result.file.id, true)
                this.notice = this.copy.saved
                return true

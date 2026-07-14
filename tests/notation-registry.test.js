@@ -346,6 +346,10 @@ test('file store enforces case-insensitive names and reports quota failures clea
       () => store.createFile({ id: 'two', name: 'example.JS', source: '' }),
       (error) => error instanceof LocalNotationStorageError && error.code === 'DUPLICATE_FILE_NAME'
    )
+   assert.throws(
+      () => store.createFile({ id: 'disabled', name: 'Example.js.disable', source: '' }),
+      (error) => error instanceof LocalNotationStorageError && error.code === 'INVALID_FILE_NAME'
+   )
 
    const quota = new Error('full')
    quota.name = 'QuotaExceededError'

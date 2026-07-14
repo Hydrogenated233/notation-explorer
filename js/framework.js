@@ -81,6 +81,8 @@ const app = Vue.createApp({
       toolsExpandN: 0,
       notationSearch: '',
       dropdownOpen: false,
+      notationExpandedNodes: Object.create(null),
+      notationMenuFocusIndex: -1,
       autoSaveInterval: 60,
       autoSaveHidden: false,
       lastSaveTime: null,
@@ -161,8 +163,13 @@ const app = Vue.createApp({
                tools_pps_convert: 'Translate',
                n_param_label: 'n =',
                n_param_confirm: 'Apply',
-               notation_search_placeholder: 'Search notation...',
-               notation_search_empty: 'No matching notation',
+                notation_search_placeholder: 'Search notation...',
+                notation_search_empty: 'No matching notation',
+                notation_builtin_folder: 'Built-in',
+                notation_local_folder: 'Local files',
+                notation_expand_folder: 'Expand folder',
+                notation_collapse_folder: 'Collapse folder',
+                notation_select_label: 'Select notation',
                auto_save: 'Auto-save',
                auto_save_interval: 'Auto-save interval (s)',
                auto_save_hidden: 'Save hidden state',
@@ -218,8 +225,13 @@ const app = Vue.createApp({
                tools_pps_convert: '转换',
                n_param_label: 'n =',
                n_param_confirm: '确定',
-               notation_search_placeholder: '搜索记号...',
-               notation_search_empty: '无匹配记号',
+                notation_search_placeholder: '搜索记号...',
+                notation_search_empty: '无匹配记号',
+                notation_builtin_folder: '内置记号',
+                notation_local_folder: '本地文件',
+                notation_expand_folder: '展开文件夹',
+                notation_collapse_folder: '收起文件夹',
+                notation_select_label: '选择记号',
                auto_save: '自动保存',
                auto_save_interval: '自动保存间隔（秒）',
                auto_save_hidden: '保存隐藏状态',
@@ -229,15 +241,28 @@ const app = Vue.createApp({
       },
       tab_names() { void this.notationVersion; return register.map(n => n.name); },
       analysisNotations() { void this.notationVersion; return analysis_register.map(n => ({ id: n.id, name: n.name })); },
-      filteredNotations() {
-         var q = (this.notationSearch || '').toString().toLowerCase().trim();
+      notationMenuTree() {
          void this.notationVersion;
-         var items = register.map(function(n) { return { name: n.name, id: n.id }; });
-         if (!q) return items;
-         return items.filter(function(item) {
-            return item.name.toLowerCase().indexOf(q) !== -1
-                || item.id.toLowerCase().indexOf(q) !== -1;
+         if (!window.NotationMenu) return [];
+         var manager = window.localNotationManager;
+         return window.NotationMenu.buildTree({
+            catalog: window.BUILTIN_NOTATION_CATALOG || [],
+            notations: register.map(function(notation) { return notation; }),
+            getNotation: function(id) { return register.get(id); },
+            getOwner: function(id) { return register.ownerOf(id); },
+            localFiles: manager ? manager.listFiles() : [],
+            entriesForOwner: function(ownerId) { return register.entriesForOwner(ownerId); },
+            builtinLabel: this.L.notation_builtin_folder,
+            localLabel: this.L.notation_local_folder,
          });
+      },
+      notationMenuRows() {
+         if (!window.NotationMenu) return [];
+         return window.NotationMenu.flattenTree(
+            this.notationMenuTree,
+            this.notationExpandedNodes,
+            this.notationSearch
+         );
       },
       lastSaveLabel() {
          if (this.lastSaveTime === null) return '';
@@ -290,6 +315,7 @@ const app = Vue.createApp({
       },
       autoSaveInterval() { this.saveSettings(); this.startAutoSave(); },
       autoSaveHidden() { this.saveSettings(); },
+      notationSearch() { this.notationMenuFocusIndex = -1; },
    },
    methods: {
       show_hotkeys() {
@@ -319,17 +345,107 @@ Ctrl + E: expand analysis fundamental sequence
          `;
          alert(msg)
       },
+      openNotationDropdown() {
+         if (this.dropdownOpen) return;
+         this.openCurrentNotationFolders();
+         this.dropdownOpen = true;
+         this.notationMenuFocusIndex = -1;
+         this.$nextTick(() => {
+            if (this.$refs.notationSearchInput) this.$refs.notationSearchInput.focus();
+         });
+      },
       toggleDropdown() {
-         this.dropdownOpen = !this.dropdownOpen;
+         if (this.dropdownOpen) this.closeDropdown(false);
+         else this.openNotationDropdown();
+      },
+      openCurrentNotationFolders() {
+         if (!window.NotationMenu) return;
+         var keys = window.NotationMenu.ancestorKeysForNotation(
+            this.notationMenuTree,
+            this.currentNotationId
+         );
+         for (var index = 0; index < keys.length; index++) {
+            this.notationExpandedNodes[keys[index]] = true;
+         }
+      },
+      toggleNotationFolder(row) {
+         if (!row || row.kind !== 'folder') return;
+         this.notationExpandedNodes[row.key] = !this.notationExpandedNodes[row.key];
+      },
+      activateNotationMenuRow(row) {
+         if (!row) return;
+         if (row.kind === 'folder') this.toggleNotationFolder(row);
+         else this.selectNotation(row.id);
+      },
+      focusNotationMenuRow(index) {
+         var lastIndex = this.notationMenuRows.length - 1;
+         if (lastIndex < 0) return;
+         index = Math.max(0, Math.min(index, lastIndex));
+         this.notationMenuFocusIndex = index;
+         this.$nextTick(() => {
+            var refs = this.$refs.notationMenuRows;
+            var target = Array.isArray(refs) ? refs[index] : refs;
+            if (target && typeof target.focus === 'function') target.focus();
+         });
+      },
+      handleNotationSearchKeydown(event) {
+         if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            this.focusNotationMenuRow(0);
+         } else if (event.key === 'Escape') {
+            event.preventDefault();
+            this.closeDropdown(true);
+         }
+      },
+      handleNotationMenuKeydown(event, row, index) {
+         var rows = this.notationMenuRows;
+         if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            this.focusNotationMenuRow(index + 1);
+         } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            if (index === 0 && this.$refs.notationSearchInput) this.$refs.notationSearchInput.focus();
+            else this.focusNotationMenuRow(index - 1);
+         } else if (event.key === 'Home') {
+            event.preventDefault();
+            this.focusNotationMenuRow(0);
+         } else if (event.key === 'End') {
+            event.preventDefault();
+            this.focusNotationMenuRow(rows.length - 1);
+         } else if (event.key === 'ArrowRight' && row.kind === 'folder') {
+            event.preventDefault();
+            if (!row.expanded && !this.notationSearch) this.toggleNotationFolder(row);
+            else if (rows[index + 1] && rows[index + 1].depth > row.depth) this.focusNotationMenuRow(index + 1);
+         } else if (event.key === 'ArrowLeft') {
+            event.preventDefault();
+            if (row.kind === 'folder' && row.expanded && !this.notationSearch) {
+               this.toggleNotationFolder(row);
+            } else if (row.parentKey) {
+               var parentIndex = rows.findIndex(function(candidate) { return candidate.key === row.parentKey; });
+               if (parentIndex >= 0) this.focusNotationMenuRow(parentIndex);
+            }
+         } else if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            this.activateNotationMenuRow(row);
+         } else if (event.key === 'Escape') {
+            event.preventDefault();
+            this.closeDropdown(true);
+         }
       },
       selectNotation(id) {
          if (!register.get(id)) return;
          this.currentNotationId = id;
-         this.dropdownOpen = false;
          this.notationSearch = '';
+         this.closeDropdown(true);
       },
-      closeDropdown() {
+      closeDropdown(restoreFocus) {
          this.dropdownOpen = false;
+         this.notationMenuFocusIndex = -1;
+         if (restoreFocus) {
+            this.$nextTick(() => {
+               if (this.$refs.notationTrigger) this.$refs.notationTrigger.focus();
+            });
+         }
       },
       async navigateToPage(targetPage) {
          if (targetPage === this.page) return;
@@ -461,9 +577,9 @@ Ctrl + E: expand analysis fundamental sequence
          var ownerId = result.file.id;
          var change = result.change;
          if (!change) {
+            this.notationVersion++;
             if (action === 'delete') {
                this.purgeOwnerData(ownerId);
-               this.notationVersion++;
                this.reconcileNotationSelections(snapshot, result, action);
                this.saveAnalysis();
             }
@@ -1390,7 +1506,7 @@ function safeFromDisplay(notation, str) {
    return undefined;
 }
 
-const worker = new Worker("js/notations/Diagram.js")
+const worker = new Worker("js/diagram/Diagram.js")
 
 worker.onmessage = (e) => {
    let data = e.data

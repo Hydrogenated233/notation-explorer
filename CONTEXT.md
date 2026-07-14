@@ -7,6 +7,13 @@ Notation Explorer lets users explore built-in and user-supplied notation systems
 **Built-in notation**:
 A notation definition shipped with the application and unavailable to the local notation manager.
 
+**Built-in notation file**:
+A repository JavaScript source under `js/notations` that is discovered into the generated built-in manifest and executed during application startup.
+
+**Excluded built-in notation file**:
+A repository source whose name ends in `.js.disable`; it remains available to developers but is not discovered or executed.
+_Avoid_: Disabled local notation file, which is retained and managed in `localStorage`.
+
 **Local notation file**:
 A self-contained, user-managed JavaScript source record created through upload or a template and retained across sessions.
 _Avoid_: Registered notation, source entry.
@@ -63,6 +70,13 @@ User-authored free-form notes associated with a **Main notation** independently 
 
 ## Relationships
 
+- **Built-in notation files** are discovered recursively through at most four category-directory levels
+- Discovery includes only names ending exactly in `.js`; `.js.disable` and every other suffix are excluded
+- Built-in files are ordered by category level 1 through 4, then by filename, using deterministic case-sensitive dictionary order
+- Built-in files execute serially in discovery order before local files and the application framework start
+- The generated browser manifest and the CLI filesystem scanner use the same discovery and ordering contract
+- Changing an included or excluded built-in file requires regenerating the browser manifest; automated tests reject a stale manifest
+- The local notation manager does not list or modify **Built-in notation files** or **Excluded built-in notation files**
 - A **Local notation file** may contribute one or more **Registered notations**
 - A **Local notation file** may depend on built-in APIs and **Built-in notations**, but not on another **Local notation file**
 - A **Local notation file** must not create unmanaged side effects that survive its registered entries
@@ -124,7 +138,7 @@ User-authored free-form notes associated with a **Main notation** independently 
 - Unloading the selected **Analysis notation** clears the analysis selection
 - A tool whose selected notation is unloaded selects the first available **Main notation**
 - Replacing a file preserves a current selection whose notation ID still exists
-- **Built-in notations** keep their existing order ahead of enabled local entries
+- **Built-in notations** keep deterministic built-in file order ahead of enabled local entries; registrations from one file keep source order
 - **Local notation files** keep creation order, and their contributed entries keep registration order
 
 ## Example dialogue

@@ -21,7 +21,7 @@ node dfs-diff.js <notation-a> <notation-b> [options]
 
 ## How it works
 
-1. Loads shared-seq.js, then ALL notation files (same as index.html)
+1. Recursively discovers every categorized file ending in `.js`, excludes `.js.disable`, and loads the files in deterministic category/filename order
 2. Extracts the two specified notations by their `register` IDs
 3. DFS from the limit expression of each notation
 4. For each expression, calls both notations' FS at indices 0..max-n

@@ -18,15 +18,26 @@ notation-explorer/
 │   ├── local-notation-ui.js← 设置页文件管理器与编辑器
 │   ├── notation-editor.js  ← 行号、高亮与括号匹配
 │   ├── prss-template.js    ← PrSS 模板生成器
+│   ├── notation-file-index.js ← 内置文件路径排序契约
+│   ├── notation-manifest.js← 自动生成的内置文件清单
+│   ├── notation-loader.js  ← 按清单串行加载并启动应用
 │   ├── notations/
-│   │   ├── shared-seq.js   ← 序列型记号通用函数
-│   │   ├── shared-matrix.js← 矩阵型记号通用函数
-│   │   ├── omega-Y.js      ← 记号实现文件（39+ 个）
-│   │   ├── BM.js
-│   │   ├── ...
-│   │   ├── Diagram.js      ← 画布渲染（Worker + 主线程双重加载）
-│   │   └── PrSS-mod.js
-│   └── framework.js
+│   │   ├── 00-shared-seq.js   ← 跨谱系序列通用函数
+│   │   ├── 01-shared-matrix.js← 跨谱系矩阵通用函数
+│   │   ├── BM-like/        ← Bashicu Matrix-like 谱系
+│   │   ├── CpS/            ← CpS 谱系
+│   │   ├── DEN/            ← Defective Embedding Notation
+│   │   ├── MN/             ← Mountain Notation 与 HypCos 变体
+│   │   ├── Misc/           ← 尚无独立谱系的记号
+│   │   ├── OCN/            ← Ordinal Collapsing Notation
+│   │   ├── PPS/            ← PPS、PPS4 及 sPPS4 等变体
+│   │   ├── PrSS/           ← PrSS 衍生系统
+│   │   ├── SMN/            ← Smile/n-MN 谱系
+│   │   ├── TON/            ← Taranovsky Ordinal Notation
+│   │   ├── Y/              ← Y sequence 谱系
+│   │   └── aSAN/           ← aSAN 谱系
+│   └── diagram/
+│       └── Diagram.js      ← 画布渲染 Worker（不属于记号谱系）
 ├── docs/
 │   ├── notation-dev-guide.md ← 本文件
 │   ├── making-a-notation.md  ← 记号文件开发入门（精简版）
@@ -34,7 +45,8 @@ notation-explorer/
 │   ├── example-PrSS.js       ← 与内置模板保持一致的 PrSS 示例
 │   └── bfs-diff.md           ← （已弃用，重命名为 dfs-diff.md）
 ├── dfs-detect.js           ← CLI 无穷降链检测器
-└── dfs-diff.js             ← CLI DFS 差异对比工具
+├── dfs-diff.js             ← CLI DFS 差异对比工具
+└── generate-notation-manifest.js ← 扫描并生成内置文件清单
 ```
 
 ## 核心概念
@@ -54,7 +66,7 @@ Notation Explorer 是一个 Vue 3 应用，用于**展开**各种大数/序数�
 
 | 类型 | 方法 | 管理方式 |
 |------|------|----------|
-| **内置记号** | 在 `index.html` 中加入 `<script src="js/notations/YourName.js">` | 随应用加载，不出现在本地文件管理器中 |
+| **内置记号** | 放入对应谱系目录，由清单生成器递归发现 | 随应用加载，不出现在本地文件管理器中 |
 | **本地记号文件** | Settings → Local notation files → Upload `.js` | 保存在 `localStorage`，可编辑、启用、禁用、下载和删除 |
 
 两种方式使用相同的注册 API。本地管理以整个文件为单位，一个文件可以同时注册多个主记号和分析记号；启用、禁用或删除时会整体加载或卸载。启用文件的保存采用事务热替换，校验或 `init()` 失败时旧版本仍保持运行。
@@ -65,19 +77,13 @@ Notation Explorer 是一个 Vue 3 应用，用于**展开**各种大数/序数�
 
 | 文件 | 函数 | 用途 |
 |------|------|------|
-| `shared-seq.js` | `sequence_compare(seq1, seq2)` | 按字典序比较两个数字序列 |
-| `shared-seq.js` | `sequence_display(expr)` | 将序列转为字符串：`Infinity`→`'Limit'`，否则 `''+expr` |
-| `shared-matrix.js` | `matrix_compare(m1, m2)` | 比较两个矩阵 |
-| `shared-matrix.js` | `matrix_display(expr)` | 矩阵转字符串：列用 `()` 包裹，如 `(0)(1)(2)` |
-| `shared-matrix.js` | `matrix_limit(m)` | 判断矩阵是否有极限：`m.length>0 && m[m.length-1][0]>0` |
+| `00-shared-seq.js` | `sequence_compare(seq1, seq2)` | 按字典序比较两个数字序列 |
+| `00-shared-seq.js` | `sequence_display(expr)` | 将序列转为字符串：`Infinity`→`'Limit'`，否则 `''+expr` |
+| `01-shared-matrix.js` | `matrix_compare(m1, m2)` | 比较两个矩阵 |
+| `01-shared-matrix.js` | `matrix_display(expr)` | 矩阵转字符串：列用 `()` 包裹，如 `(0)(1)(2)` |
+| `01-shared-matrix.js` | `matrix_limit(m)` | 判断矩阵是否有极限：`m.length>0 && m[m.length-1][0]>0` |
 
-在 `index.html` 中，这些文件在**所有记号文件之前**加载：
-
-```html
-<script src="js/notations/shared-seq.js"></script>
-<script src="js/notations/shared-matrix.js"></script>
-<!-- 然后加载各个记号 .js 文件 -->
-```
+清单按分类目录后按文件名字典序加载。根目录文件先于分类目录，数字前缀保证序列 helper 先于矩阵 helper，并且两者都先于谱系文件。
 
 ## register 对象的完整 API
 
@@ -268,8 +274,10 @@ if (this.notation.drawDiagram != null) {
 ### Diagram.js 双重加载
 
 `Diagram.js` 在两个环境中运行：
-1. **作为 Worker** — `new Worker("js/notations/Diagram.js")`，接收 `render` 消息，绘制到 offscreen canvas
+1. **作为 Worker** — `new Worker("js/diagram/Diagram.js")`，接收 `render` 消息，绘制到 offscreen canvas
 2. **在主线程** — 同时也作为普通 `<script>` 加载，提供 `let canvas = null` 全局变量（`framework.js` 的 `mounted()` 通过 `document.getElementById('hoverCanvas').transferControlToOffscreen()` 获取）
+
+渲染器位于 `js/diagram/`，不应归入任一记号谱系。
 
 ## 编写一个完整的记号文件
 
@@ -284,21 +292,25 @@ if (this.notation.drawDiagram != null) {
 - `display`: 对 `Infinity` 返回 `'Limit'`，否则返回 `''+expr`
 - `fromDisplay`: 解析 `'Limit'` 或逗号分隔序列
 - `able`: 最后一项 > 1 时可展开
-- `compare`: 使用 `sequence_compare`（来自 `shared-seq.js`）
+- `compare`: 使用 `sequence_compare`（来自 `00-shared-seq.js`）
 - `FS`: 带缓存的闭包模式
 - `init`: 返回 `[Limit, 空序列]` 两个根节点
 
 完整文件内容仅 ~65 行，可作为新记号的模板。
 
-### 添加内置记号到 index.html
+### 添加、排除与恢复内置记号
 
-编辑 `index.html`，在 `</div>` 之后、`<script src="js/framework.js">` 之前添加一行：
+先把 `.js` 文件放入最接近的谱系目录；没有对应谱系时放入 `Misc/`。目录最多嵌套四级。无需编辑 `index.html`，运行清单生成器即可递归检测全部活动文件：
 
-```html
-<script src="js/notations/YourNotation.js"></script>
+```bash
+node generate-notation-manifest.js
 ```
 
-新记号会自动出现在下拉菜单中。内置记号按脚本加载顺序排列，并始终位于已启用的本地记号之前。
+加载顺序先逐级比较分类目录，再比较文件名，均采用固定、区分大小写的字典序。一个文件内的多次注册保持源码顺序。若存在文件间依赖，应通过文件名让依赖项排在使用者之前；TON 和 shared helper 使用数字前缀体现该规则。
+
+将 `Example.js` 重命名为 `Example.js.disable` 后重新生成清单，即可排除该内置文件；恢复 `.js` 后重新生成即可重新启用。`node generate-notation-manifest.js --check` 只校验清单是否最新，不写文件，完整测试也会执行同一校验。
+
+新记号会自动出现在下拉菜单中，并始终位于已启用的本地记号之前。
 
 > 注意：内置记号不受 Settings 中的本地文件管理器管理。需要让用户自行维护源码时，应改用下面的本地记号文件流程。
 
@@ -490,7 +502,7 @@ app.component('notation-list-item', { /* 递归节点 */ });
 - **`dfs-detect.js`** — DFS 无穷降链检测器，详见 `docs/dfs-diff.md`
 - **`dfs-diff.js`** — DFS 差异对比，详见 `docs/dfs-diff.md`
 
-CLI 脚本独立加载 `index.html` 中引用的所有记号文件（通过 `shared-seq.js` + 全部 notation 文件），继续使用 `register` 的数组兼容接口。
+CLI 脚本与浏览器清单共用递归发现和排序契约，直接扫描 `js/notations` 中以 `.js` 结尾的活动文件；`.js.disable` 不会执行。CLI 不再解析 `index.html`。
 
 ## 常见模式与最佳实践
 
@@ -547,8 +559,8 @@ node -e "
 
 - **记号开发入门**：`docs/making-a-notation.md`（精简版，逐字段说明 + 加载/测试方式）
 - **最小示例（带注释）**：`docs/example-PrSS.js`（~65 行，详注，适合作为新记号起点模板）
-- **序列型参考**：`js/notations/omega-Y.js`（最完整，含 drawDiagram、FSalter、缓存）
-- **矩阵型参考**：`js/notations/BM.js`（典型 Matrix 实现）
-- **字符串型参考**：`js/notations/cOCF.js`（完整自包含记号系统）
-- **简洁型参考**：`js/notations/PPS.js`（较短，容易理解）
+- **序列型参考**：`js/notations/Y/omega-Y.js`（含 drawDiagram、FSalter、缓存）
+- **矩阵型参考**：`js/notations/BM-like/BM.js`（典型 Matrix 实现）
+- **字符串型参考**：`js/notations/OCN/cOCF.js`（完整自包含记号系统）
+- **PPS 参考**：`js/notations/PPS/sPPS4.js`（含 FS、FSalter、FSShort）
 - **本地文件管理**：Settings → Local notation files，上传或创建 `docs/example-PrSS.js` 对应模板

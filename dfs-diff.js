@@ -17,6 +17,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { discoverNotationFiles } = require('./generate-notation-manifest.js');
 
 // ---- 解析参数 ----
 const args = process.argv.slice(2);
@@ -43,15 +44,14 @@ if (!idA || !idB) {
 // ---- 加载环境 ----
 const baseDir = __dirname;
 function loadAll() {
-  eval(fs.readFileSync(path.join(baseDir, 'js/notations/shared-seq.js'), 'utf8'));
-  eval(fs.readFileSync(path.join(baseDir, 'js/notations/shared-matrix.js'), 'utf8'));
-  const html = fs.readFileSync(path.join(baseDir, 'index.html'), 'utf8');
-  const notationRe = /<script src="js\/notations\/([^"]+)">/g;
-  let m;
-  while ((m = notationRe.exec(html)) !== null) {
-    const file = m[1];
-    if (file === 'Diagram.js') continue;
-    try { eval(fs.readFileSync(path.join(baseDir, 'js/notations', file), 'utf8')); } catch(e) {}
+  for (const file of discoverNotationFiles()) {
+    try {
+      eval(fs.readFileSync(path.join(baseDir, 'js/notations', file), 'utf8'));
+    } catch (error) {
+      const wrapped = new Error(`Failed to load built-in notation file "${file}": ${error.message}`);
+      wrapped.cause = error;
+      throw wrapped;
+    }
   }
 }
 
