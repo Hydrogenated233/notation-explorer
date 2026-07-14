@@ -2,11 +2,26 @@
 
 const node_map = new Map()
 
-const init_dataset = (notation) => {
+const first_main_id = () => register.length ? register[0].id : ''
+const second_main_id = () => register.length > 1 ? register[1].id : first_main_id()
+
+const init_datasets = () => {
+   var datasets = Object.create(null)
+   register.forEach(function (notation) {
+      var prepared = window.localNotationManager
+         ? window.localNotationManager.initialItemsFor(notation.id)
+         : undefined
+      datasets[notation.id] = init_dataset(notation, prepared)
+   })
+   return datasets
+}
+
+const init_dataset = (notation, preparedItems) => {
    let root_item = {
       is_root: true, mark: 0, path: undefined
    }
-   root_item.subitems = notation.init().map(
+   var initialItems = preparedItems === undefined ? notation.init() : preparedItems
+   root_item.subitems = initialItems.map(
       (item, index) => {
          return {
             expr: item.expr,
@@ -26,12 +41,12 @@ const init_dataset = (notation) => {
 
 const app = Vue.createApp({
    data: () => ({
-      current_tab: 0,
-      current_analysis_index: -1,
+      currentNotationId: first_main_id(),
+      currentAnalysisId: '',
       FS_shown: 3,
       tier: 0,
       length_limit: 20,
-      datasets: register.map(init_dataset),
+      datasets: init_datasets(),
       pCanvas: { x: 0, y: 0, w: 0, h: 0, s: 1 },
       pCanvasModifier: { x: 0, y: 0, hide: false },
       showCanvas: false,
@@ -55,13 +70,13 @@ const app = Vue.createApp({
       darkMode: false,
       nParamVal: 2,
       nParamInput: 2,
-      toolsNotation: 0,
+      toolsNotation: first_main_id(),
       toolsOpts: { limitTerm: 6, maxSteps: 50, maxN: 1, preview: 8, maxVisited: 2000 },
-      toolsDiffA: 0,
-      toolsDiffB: 1,
+      toolsDiffA: first_main_id(),
+      toolsDiffB: second_main_id(),
       toolsDiffOpts: { limitTerm: 6, maxSteps: 10, maxN: 3, maxVisited: 200 },
       toolsOutput: '',
-      toolsExpandNotation: 0,
+      toolsExpandNotation: first_main_id(),
       toolsExpandExpr: '',
       toolsExpandN: 0,
       notationSearch: '',
@@ -71,18 +86,28 @@ const app = Vue.createApp({
       lastSaveTime: null,
       saveLabelTick: 0,
       saveTimerId: null,
-      allNoteSheets: {},
+      allNoteSheets: Object.create(null),
       toolsExpandCount: 1,
       toolsPPSInput: '0, 1, 0, 2, 0, 3',
       notationVersion: 0,
-      loadedNotationFile: '',
+      notationRevisions: Object.create(null),
+      analysisArchive: Object.create(null),
+      isHydrating: true,
+      suppressSelectionWatch: false,
    }),
    computed: {
-      current_notation_name() { return register[this.current_tab].id },
-      currentNotation() { return register[this.current_tab] || { name: '', id: '' } },
-      current_analysis_notation() { return analysis_register[this.current_analysis_index] || {} },
-      showNParam() { return register[this.current_tab] && register[this.current_tab].nParam },
-      nHelp() { return register[this.current_tab] && register[this.current_tab].nHelp ? register[this.current_tab].nHelp : '' },
+      currentNotation() {
+         void this.notationVersion;
+         return register.get(this.currentNotationId) || { name: '', id: '' };
+      },
+      currentDataset() { return this.datasets[this.currentNotationId] || { is_root: true, mark: 0, subitems: [] } },
+      currentNotationKey() { return this.currentNotationId + ':' + (this.notationRevisions[this.currentNotationId] || 0) },
+      current_analysis_notation() {
+         void this.notationVersion;
+         return analysis_register.get(this.currentAnalysisId) || {};
+      },
+      showNParam() { return !!this.currentNotation.nParam },
+      nHelp() { return this.currentNotation.nHelp || '' },
       L() {
          const t = {
             en: {
@@ -141,9 +166,6 @@ const app = Vue.createApp({
                auto_save: 'Auto-save',
                auto_save_interval: 'Auto-save interval (s)',
                auto_save_hidden: 'Save hidden state',
-               load_notation: 'Load Notation',
-               load_notation_desc: 'Temporarily load a notation file (.js)',
-               load_notation_btn: 'Browse',
             },
             zh: {
                show_hotkeys: '快捷键',
@@ -201,18 +223,16 @@ const app = Vue.createApp({
                auto_save: '自动保存',
                auto_save_interval: '自动保存间隔（秒）',
                auto_save_hidden: '保存隐藏状态',
-               load_notation: '加载记号文件',
-               load_notation_desc: '临时加载记号文件 (.js)',
-               load_notation_btn: '浏览',
             },
          };
          return t[this.lang] || t.en;
       },
       tab_names() { void this.notationVersion; return register.map(n => n.name); },
-      analysis_names() { void this.notationVersion; return analysis_register.map(n => n.name); },
+      analysisNotations() { void this.notationVersion; return analysis_register.map(n => ({ id: n.id, name: n.name })); },
       filteredNotations() {
          var q = (this.notationSearch || '').toString().toLowerCase().trim();
-         var items = register.map(function(n, i) { return { name: n.name, id: n.id, idx: i }; });
+         void this.notationVersion;
+         var items = register.map(function(n) { return { name: n.name, id: n.id }; });
          if (!q) return items;
          return items.filter(function(item) {
             return item.name.toLowerCase().indexOf(q) !== -1
@@ -231,7 +251,7 @@ const app = Vue.createApp({
          var h = Math.floor(m / 60);
          return this.lang === 'zh' ? h + '小时前保存' : h + 'h ago';
       },
-      toolsNotations() { return register; },
+      toolsNotations() { void this.notationVersion; return register.map(n => ({ id: n.id, name: n.name })); },
       tiername() {
          var n = this.tier
          var tierEn = ['small', 'single', 'double', 'triple', 'quadruple', 'quintuple', 'sextuple', 'septuple', 'octuple'];
@@ -257,11 +277,12 @@ const app = Vue.createApp({
       tier() { this.saveSettings() },
       length_limit() { this.saveSettings() },
       FS_shown() { this.saveSettings() },
-      current_analysis_index() { this.saveSettings() },
-      current_tab(val, oldVal) {
-         var oldId = (register[oldVal] || {}).id;
-         if (oldId) this.allNoteSheets[oldId] = this.noteSheets;
+      currentAnalysisId() { this.saveSettings() },
+      currentNotationId(val, oldId) {
+         if (this.isHydrating || this.suppressSelectionWatch) return;
+         if (oldId) this.allNoteSheets[this.dataKeyForId(oldId)] = this.noteSheets;
          this.initSheets();
+         this.saveSettings();
       },
       nParamVal(val) {
          window.nCpSN = val;
@@ -301,47 +322,251 @@ Ctrl + E: expand analysis fundamental sequence
       toggleDropdown() {
          this.dropdownOpen = !this.dropdownOpen;
       },
-      selectNotation(idx) {
-         this.current_tab = idx;
+      selectNotation(id) {
+         if (!register.get(id)) return;
+         this.currentNotationId = id;
          this.dropdownOpen = false;
          this.notationSearch = '';
       },
       closeDropdown() {
          this.dropdownOpen = false;
       },
+      async navigateToPage(targetPage) {
+         if (targetPage === this.page) return;
+         if (this.page === 'settings') {
+            var manager = this.$refs.localNotationManagerComponent;
+            if (manager && typeof manager.guardPendingChanges === 'function') {
+               var canLeave = await manager.guardPendingChanges('page');
+               if (!canLeave) return;
+            }
+         }
+         this.page = targetPage;
+      },
+      captureLocalFileState(file, action) {
+         var mainEntries = register.entriesForOwner(file.id);
+         var analysisEntries = analysis_register.entriesForOwner(file.id);
+         for (var i = 0; i < mainEntries.length; i++) {
+            this.stashNotationData(mainEntries[i].id, file.id);
+         }
+         if (this.currentNotationId && register.ownerOf(this.currentNotationId) === file.id) {
+            this.allNoteSheets[this.dataKeyForId(this.currentNotationId, file.id)] = this.noteSheets;
+         }
+         this.saveAnalysis();
+         return {
+            action: action,
+            mainOrder: register.map(function (entry) { return entry.id }),
+            currentNotationId: this.currentNotationId,
+            currentAnalysisId: this.currentAnalysisId,
+            oldMainIds: mainEntries.map(function (entry) { return entry.id }),
+            oldAnalysisIds: analysisEntries.map(function (entry) { return entry.id }),
+         };
+      },
+      clearOwnerAnalysis(ownerId) {
+         var prefix = ownerId + '::';
+         var archive = this.analysisArchive;
+         Object.keys(archive).forEach(function (key) {
+            if (key.indexOf(prefix) === 0) delete archive[key];
+         });
+      },
+      purgeOwnerData(ownerId) {
+         var prefix = ownerId + '::';
+         var archive = this.analysisArchive;
+         var sheets = this.allNoteSheets;
+         Object.keys(archive).forEach(function (key) {
+            if (key.indexOf(prefix) === 0) delete archive[key];
+         });
+         Object.keys(sheets).forEach(function (key) {
+            if (key.indexOf(prefix) === 0) delete sheets[key];
+         });
+      },
+      restoreNotationAnalysis(notationId, ownerId) {
+         var notation = register.get(notationId);
+         var dataset = this.datasets[notationId];
+         if (!notation || !dataset) return;
+         var key = this.dataKeyForId(notationId, ownerId || register.ownerOf(notationId));
+         var archived = this.analysisArchive[key];
+         if (!archived || !archived.items || archived.items.length === 0) return;
+         var owner = ownerId || register.ownerOf(notationId);
+         if (owner !== '@notation-explorer/builtin') {
+            var localFile = window.localNotationManager && window.localNotationManager.getFile(owner);
+            if (!localFile || archived.sourceRevision !== localFile.loadedRevision) {
+               delete this.analysisArchive[key];
+               return;
+            }
+         }
+         var version = archived.legacyVersion || 3;
+         var analysisList;
+         if (version >= 2) {
+            analysisList = archived.items.map(function (item) {
+               if (!item || item.expr === undefined || item.expr === null) return null;
+               if (Array.isArray(item.expr)) {
+                  for (var i = 0; i < item.expr.length; i++) {
+                     if (item.expr[i] === null || (typeof item.expr[i] === 'number' && !isFinite(item.expr[i]))) return null;
+                  }
+               }
+               return [item.expr, item.analysis || '', item.hide ? true : undefined];
+            }).filter(function (item) { return item !== null; });
+         } else {
+            analysisList = archived.items.map(function (entry) {
+               var expr = safeFromDisplay(notation, entry[0]);
+               return expr === undefined ? null : [expr, entry[1], entry[2]];
+            }).filter(function (item) { return item !== null; });
+         }
+         if (analysisList.length) {
+            import_analysis(dataset, analysisList, notation, this.use_alternative, false, this.length_limit);
+         }
+      },
+      reconcileNotationSelections(snapshot, result, action) {
+         var available = register.map(function (entry) { return entry.id });
+         var selected = snapshot && snapshot.currentNotationId || this.currentNotationId;
+         if (action === 'upload' && result.change && result.change.main.added.length) {
+            selected = result.change.main.added[0].id;
+         } else if (!register.get(selected)) {
+            var oldOrder = snapshot && snapshot.mainOrder || [];
+            var oldIndex = oldOrder.indexOf(selected);
+            var replacement = '';
+            if (oldIndex >= 0) {
+               for (var nextIndex = oldIndex + 1; nextIndex < oldOrder.length; nextIndex++) {
+                  if (register.get(oldOrder[nextIndex])) {
+                     replacement = oldOrder[nextIndex];
+                     break;
+                  }
+               }
+               if (!replacement) {
+                  for (var previousIndex = oldIndex - 1; previousIndex >= 0; previousIndex--) {
+                     if (register.get(oldOrder[previousIndex])) {
+                        replacement = oldOrder[previousIndex];
+                        break;
+                     }
+                  }
+               }
+            }
+            selected = replacement || available[0] || '';
+         }
+
+         this.suppressSelectionWatch = true;
+         this.currentNotationId = selected;
+         if (!analysis_register.get(this.currentAnalysisId)) this.currentAnalysisId = '';
+         var first = available[0] || '';
+         if (!register.get(this.toolsNotation)) this.toolsNotation = first;
+         if (!register.get(this.toolsDiffA)) this.toolsDiffA = first;
+         if (!register.get(this.toolsDiffB)) this.toolsDiffB = available[1] || first;
+         if (!register.get(this.toolsExpandNotation)) this.toolsExpandNotation = first;
+         this.initSheets();
+         this.saveSettings();
+         this.$nextTick(() => { this.suppressSelectionWatch = false; });
+      },
+      applyLocalFileChange(result, action, snapshot) {
+         if (!result) return;
+         var ownerId = result.file.id;
+         var change = result.change;
+         if (!change) {
+            if (action === 'delete') {
+               this.purgeOwnerData(ownerId);
+               this.notationVersion++;
+               this.reconcileNotationSelections(snapshot, result, action);
+               this.saveAnalysis();
+            }
+            return;
+         }
+         var resetAnalysis = action === 'save' || action === 'replace-upload' ||
+            (action === 'enable' && result.sourceChanged);
+
+         for (var i = 0; i < change.main.removed.length; i++) {
+            delete this.datasets[change.main.removed[i].id];
+         }
+         if (action === 'delete') this.purgeOwnerData(ownerId);
+         else if (resetAnalysis) this.clearOwnerAnalysis(ownerId);
+
+         for (var j = 0; j < change.main.initialData.length; j++) {
+            var prepared = change.main.initialData[j];
+            this.datasets[prepared.id] = init_dataset(prepared.notation, prepared.items);
+            this.notationRevisions[prepared.id] = (this.notationRevisions[prepared.id] || 0) + 1;
+         }
+         if (action === 'enable' && !result.sourceChanged) {
+            for (var k = 0; k < change.main.added.length; k++) {
+               try {
+                  this.restoreNotationAnalysis(change.main.added[k].id, ownerId);
+               } catch (error) {
+                  console.warn('Restore analysis: notation "' + change.main.added[k].id + '" failed', error);
+               }
+            }
+         }
+         if (this.currentAnalysisId && change.analysis.removed.some(entry => entry.id === this.currentAnalysisId)) {
+            this.show_fs_dialog = false;
+            this.analysis_fs_target = undefined;
+         }
+         this.notationVersion++;
+         this.reconcileNotationSelections(snapshot, result, action);
+         this.saveAnalysis();
+      },
+      localFileRetainedCount(file) {
+         var active = new Set((file.manifest && file.manifest.main) || []);
+         var count = 0;
+         var self = this;
+         ;(file.knownMainIds || []).forEach(function (id) {
+            if (active.has(id)) return;
+            var key = self.dataKeyForId(id, file.id);
+            var archived = self.analysisArchive[key];
+            var sheets = self.allNoteSheets[key];
+            if ((archived && archived.items && archived.items.length) ||
+                (sheets && sheets.some(function (sheet) { return !!sheet.text; }))) count++;
+         });
+         return count;
+      },
       // ===== Auto-save analysis =====
+      dataKeyForId(id, ownerId) {
+         var owner = ownerId || register.ownerOf(id) || '__builtin__';
+         return owner + '::' + id;
+      },
+      serializeDataset(notationId) {
+         var dataset = this.datasets[notationId];
+         if (!dataset) return [];
+         var self = this;
+         var items = [];
+         var walk = function (node) {
+            for (var i = node.subitems.length - 1; i >= 0; i--) walk(node.subitems[i]);
+            if (node.analysis !== undefined) {
+               var item = { expr: node.expr, analysis: node.analysis };
+               if (self.autoSaveHidden && node.hide_child) item.hide = true;
+               items.push(item);
+            }
+         };
+         walk(dataset);
+         return items;
+      },
+      stashNotationData(notationId, ownerId) {
+         if (!notationId) return;
+         var owner = ownerId || register.ownerOf(notationId) || '__builtin__';
+         var key = this.dataKeyForId(notationId, owner);
+         if (this.datasets[notationId]) {
+            var localFile = owner !== '@notation-explorer/builtin' && window.localNotationManager
+               ? window.localNotationManager.getFile(owner)
+               : null;
+            this.analysisArchive[key] = {
+               ownerId: owner,
+               notationId: notationId,
+               items: this.serializeDataset(notationId),
+               sourceRevision: localFile ? localFile.loadedRevision : null,
+            };
+         }
+         if (notationId === this.currentNotationId) this.allNoteSheets[key] = this.noteSheets;
+      },
       serializeAnalysis() {
          var self = this;
-         var allSheets = {};
-         for (var tid = 0; tid < register.length; tid++) {
-            allSheets[register[tid].id] = register[tid].id === (register[self.current_tab] || {}).id
-               ? self.noteSheets : (self.allNoteSheets[register[tid].id] || [{ name: 'Sheet2', text: '' }]);
+         if (this.currentNotationId) {
+            var currentOwner = register.ownerOf(this.currentNotationId) || '__builtin__';
+            this.allNoteSheets[this.dataKeyForId(this.currentNotationId, currentOwner)] = this.noteSheets;
          }
-         var data = {
-            version: 2,
+         register.forEach(function (notation) {
+            self.stashNotationData(notation.id, register.ownerOf(notation.id));
+         });
+         return {
+            version: 3,
             savedAt: Date.now(),
-            notations: [],
-            noteSheets: allSheets,
+            notations: this.analysisArchive,
+            noteSheets: this.allNoteSheets,
          };
-         for (var t = 0; t < register.length; t++) {
-            var notation = register[t];
-            var items = [];
-            var walk = function (node) {
-               for (var i = node.subitems.length - 1; i >= 0; i--) {
-                  walk(node.subitems[i]);
-               }
-               if (node.analysis !== undefined) {
-                  var item = { expr: node.expr, analysis: node.analysis };
-                  if (self.autoSaveHidden && node.hide_child) {
-                     item.hide = true;
-                  }
-                  items.push(item);
-               }
-            };
-            walk(self.datasets[t]);
-            data.notations.push({ notationId: notation.id, items: items });
-         }
-         return data;
       },
       saveAnalysis() {
          try {
@@ -365,30 +590,57 @@ Ctrl + E: expand analysis fundamental sequence
          }
          if (!data || !data.notations) return;
          var version = data.version || 1;
-         // restore notes first (even if analysis import fails)
-         if (data.noteSheets) {
-            if (version >= 2) {
-               self.allNoteSheets = data.noteSheets || {};
-               var curId = (register[self.current_tab] || {}).id;
-               if (curId && self.allNoteSheets[curId]) {
-                  self.noteSheets = self.allNoteSheets[curId];
-               }
-            } else {
-               var curId2 = (register[self.current_tab] || {}).id;
-               self.allNoteSheets = {};
-               if (curId2) self.allNoteSheets[curId2] = data.noteSheets;
-               self.noteSheets = data.noteSheets;
+         self.analysisArchive = Object.create(null);
+         self.allNoteSheets = Object.create(null);
+
+         if (version >= 3) {
+            Object.keys(data.notations || {}).forEach(function (key) {
+               self.analysisArchive[key] = data.notations[key];
+            });
+            Object.keys(data.noteSheets || {}).forEach(function (key) {
+               self.allNoteSheets[key] = data.noteSheets[key];
+            });
+         } else {
+            var legacyNotations = Array.isArray(data.notations) ? data.notations : [];
+            for (var li = 0; li < legacyNotations.length; li++) {
+               var legacy = legacyNotations[li];
+               var active = register.get(legacy.notationId);
+               var legacyOwner = active ? register.ownerOf(active.id) : '__builtin__';
+               self.analysisArchive[self.dataKeyForId(legacy.notationId, legacyOwner)] = {
+                  ownerId: legacyOwner,
+                  notationId: legacy.notationId,
+                  items: legacy.items || [],
+                  legacyVersion: version,
+               };
+            }
+            if (version >= 2 && data.noteSheets) {
+               Object.keys(data.noteSheets).forEach(function (id) {
+                  var owner = register.ownerOf(id) || '__builtin__';
+                  self.allNoteSheets[self.dataKeyForId(id, owner)] = data.noteSheets[id];
+               });
+            } else if (data.noteSheets && self.currentNotationId) {
+               self.allNoteSheets[self.dataKeyForId(self.currentNotationId)] = data.noteSheets;
             }
          }
-         // per-notation try-catch so one failure doesn't block others
-         for (var t = 0; t < data.notations.length; t++) {
+
+         self.initSheets();
+         var activeEntries = Object.keys(self.analysisArchive);
+         for (var t = 0; t < activeEntries.length; t++) {
             try {
-               var nd = data.notations[t];
-               var notation = register.find(function (r) { return r.id === nd.notationId; });
+               var nd = self.analysisArchive[activeEntries[t]];
+               var notation = register.get(nd.notationId);
+               var notationOwner = notation && register.ownerOf(notation.id);
+               if (notation && self.dataKeyForId(notation.id, notationOwner) !== activeEntries[t]) continue;
                if (!notation || !nd.items || nd.items.length === 0) continue;
-               var tabIdx = register.indexOf(notation);
+               if (notationOwner !== '@notation-explorer/builtin') {
+                  var localFile = window.localNotationManager && window.localNotationManager.getFile(notationOwner);
+                  if (!localFile || nd.sourceRevision !== localFile.loadedRevision) {
+                     delete self.analysisArchive[activeEntries[t]];
+                     continue;
+                  }
+               }
                var analysisList;
-                if (version >= 2) {
+               if ((nd.legacyVersion || version) >= 2) {
                    analysisList = nd.items.map(function (item) {
                       if (!item || item.expr === undefined || item.expr === null) return null;
                       // skip items with null/NaN/Infinity in expression arrays (serialization artifacts)
@@ -409,7 +661,7 @@ Ctrl + E: expand analysis fundamental sequence
                   }).filter(function (x) { return x !== null; });
                }
                if (analysisList.length === 0) continue;
-               import_analysis(self.datasets[tabIdx], analysisList, notation,
+               import_analysis(self.datasets[notation.id], analysisList, notation,
                   self.use_alternative, false, self.length_limit);
             } catch (e) {
                console.warn('Load analysis: notation[' + t + '] failed', e);
@@ -437,13 +689,13 @@ Ctrl + E: expand analysis fundamental sequence
       confirmNParam() {
          this.nParamVal = this.nParamInput;
          window.nCpSN = this.nParamVal;
-         this.datasets.splice(this.current_tab, 1, init_dataset(register[this.current_tab]));
+         if (this.currentNotation.id) this.datasets[this.currentNotationId] = init_dataset(this.currentNotation);
       },
       alert(msg) {
          window.alert(msg);
       },
       reset_list() {
-         this.datasets.splice(this.current_tab, 1, init_dataset(register[this.current_tab]))
+         if (this.currentNotation.id) this.datasets[this.currentNotationId] = init_dataset(this.currentNotation)
       },
       export_xlsx() {
          let result = [];
@@ -457,14 +709,14 @@ Ctrl + E: expand analysis fundamental sequence
             let text = node.analysis
             if (text !== undefined) {
                if (root.export_hide && node.hide_child) {
-                  result.push([register[root.current_tab].display(node.expr), text, 'true'])
+                  result.push([root.currentNotation.display(node.expr), text, 'true'])
                } else {
-                  result.push([register[root.current_tab].display(node.expr), text])
+                  result.push([root.currentNotation.display(node.expr), text])
                }
             }
          }
 
-         find_result(root.datasets[root.current_tab])
+         find_result(root.currentDataset)
 
          // Sheet1: 分析树
          const ws1 = XLSX.utils.aoa_to_sheet(result);
@@ -521,7 +773,7 @@ Ctrl + E: expand analysis fundamental sequence
          file_input.click()
       },
       handle_import_file(event) {
-         const notation = register[this.current_tab]
+         const notation = this.currentNotation
 
          let file = event.target.files[0];
          if (!file) return;
@@ -552,7 +804,7 @@ Ctrl + E: expand analysis fundamental sequence
                }
             }
 
-            import_analysis(root.datasets[root.current_tab], objects, notation, root.use_alternative)
+            import_analysis(root.currentDataset, objects, notation, root.use_alternative)
 
             // 导入便利贴 Sheet（从 Sheet2 开始，跳过 sheet1）
             var names = workbook.SheetNames;
@@ -595,11 +847,11 @@ Ctrl + E: expand analysis fundamental sequence
          event.target.value = '';
       },
       find_notation() {
-         let notation = register[this.current_tab]
+         let notation = this.currentNotation
          let displayed_expr = this.$refs.navigate_input.value
          let expr = safeFromDisplay(notation, displayed_expr)
          if (expr === undefined) return;
-         import_analysis(this.datasets[this.current_tab], [[expr]], notation, this.use_alternative, true)
+         import_analysis(this.currentDataset, [[expr]], notation, this.use_alternative, true)
       },
       navigate_keydown(event) {
          if (event.key === 'Enter') {
@@ -611,7 +863,7 @@ Ctrl + E: expand analysis fundamental sequence
          let node = node_map.get(this.analysis_fs_target);
          let target = node?.$refs?.input
          if (!target) return;
-         let notation = analysis_register[this.current_analysis_index];
+         let notation = analysis_register.get(this.currentAnalysisId);
          if (!notation) return;
          let result = notation.display(notation.FS(notation.fromDisplay(target.value), fsIndex))
          node.item.analysis = target.value = result
@@ -625,21 +877,26 @@ Ctrl + E: expand analysis fundamental sequence
       decrFS() { this.FS_shown = Math.max(this.FS_shown - 1, 0) },
 
       saveSettings() {
-         localStorage.setItem('ne-config', JSON.stringify({
-            darkMode: this.darkMode,
-            lang: this.lang,
-            diagramFollow: this.diagram_follow,
-            autoScroll: this.auto_scroll,
-            exportHide: this.export_hide,
-            useAlt: this.use_alternative,
-            diagramScale: this.diagram_scale,
-            tier: this.tier,
-            lengthLimit: this.length_limit,
-            fsShown: this.FS_shown,
-            analysisIdx: this.current_analysis_index,
-            autoSaveInterval: this.autoSaveInterval,
-            autoSaveHidden: this.autoSaveHidden,
-         }))
+         try {
+            localStorage.setItem('ne-config', JSON.stringify({
+               darkMode: this.darkMode,
+               lang: this.lang,
+               diagramFollow: this.diagram_follow,
+               autoScroll: this.auto_scroll,
+               exportHide: this.export_hide,
+               useAlt: this.use_alternative,
+               diagramScale: this.diagram_scale,
+               tier: this.tier,
+               lengthLimit: this.length_limit,
+               fsShown: this.FS_shown,
+               analysisId: this.currentAnalysisId,
+               mainId: this.currentNotationId,
+               autoSaveInterval: this.autoSaveInterval,
+               autoSaveHidden: this.autoSaveHidden,
+            }))
+         } catch (error) {
+            console.warn('Save settings failed:', error)
+         }
       },
       loadSettings() {
          try {
@@ -662,7 +919,13 @@ Ctrl + E: expand analysis fundamental sequence
                self.tier = getOr('tier', 0)
                self.length_limit = getOr('lengthLimit', 20)
                self.FS_shown = getOr('fsShown', 3)
-                self.current_analysis_index = getOr('analysisIdx', -1)
+                var analysisId = getOr('analysisId', '')
+                if (!analysisId && Number.isInteger(s.analysisIdx) && analysis_register[s.analysisIdx]) {
+                   analysisId = analysis_register[s.analysisIdx].id
+                }
+                self.currentAnalysisId = analysis_register.get(analysisId) ? analysisId : ''
+                var mainId = getOr('mainId', self.currentNotationId)
+                if (register.get(mainId)) self.currentNotationId = mainId
                 self.autoSaveInterval = getOr('autoSaveInterval', 60)
                 self.autoSaveHidden = getOr('autoSaveHidden', false)
              }
@@ -681,7 +944,7 @@ Ctrl + E: expand analysis fundamental sequence
          this.tier = 0
          this.length_limit = 20
          this.FS_shown = 3
-      this.current_analysis_index = -1
+      this.currentAnalysisId = ''
       this.autoSaveInterval = 60
       this.autoSaveHidden = false
       this.saveSettings()
@@ -689,12 +952,13 @@ Ctrl + E: expand analysis fundamental sequence
 
       // ===== 规律总结便利贴（每个记号独立） =====
       initSheets() {
-         var id = (register[this.current_tab] || {}).id;
-         if (id && this.allNoteSheets[id]) {
-            this.noteSheets = this.allNoteSheets[id];
+         var id = this.currentNotationId;
+         var key = id ? this.dataKeyForId(id) : '';
+         if (key && this.allNoteSheets[key]) {
+            this.noteSheets = this.allNoteSheets[key];
          } else {
             this.noteSheets = [{ name: 'Sheet2', text: '' }];
-            if (id) this.allNoteSheets[id] = this.noteSheets;
+            if (key) this.allNoteSheets[key] = this.noteSheets;
          }
          this.currentSheet = 0;
       },
@@ -778,7 +1042,7 @@ Ctrl + E: expand analysis fundamental sequence
       runInfChain() {
          var self = this;
          var id = self.toolsNotation;
-         var notation = register[id];
+         var notation = register.get(id);
          if (!notation) { self.toolsOutput = 'Notation not found'; return; }
          var display = notation.display || function (x) { return JSON.stringify(x); };
          var results = window.debugTools.detectInfChain(notation, self.toolsOpts);
@@ -839,7 +1103,7 @@ Ctrl + E: expand analysis fundamental sequence
       // ---- 直接展开 ----
       runExpand() {
          var self = this;
-         var notation = register[self.toolsExpandNotation];
+         var notation = register.get(self.toolsExpandNotation);
          if (!notation) { self.toolsOutput = 'Notation not found'; return; }
          var exprStr = self.toolsExpandExpr.trim();
          if (!exprStr) { self.toolsOutput = 'Please enter an expression'; return; }
@@ -887,8 +1151,8 @@ Ctrl + E: expand analysis fundamental sequence
 
       runDiff() {
          var self = this;
-         var nA = register[self.toolsDiffA];
-         var nB = register[self.toolsDiffB];
+         var nA = register.get(self.toolsDiffA);
+         var nB = register.get(self.toolsDiffB);
          if (!nA || !nB) { self.toolsOutput = 'Notation not found'; return; }
          function safeDisplay(fn, x) {
             if (x === null || x === undefined) return 'null';
@@ -1094,46 +1358,6 @@ Ctrl + E: expand analysis fundamental sequence
             console.error(err);
          }
       },
-      // ===== 临时加载记号文件 =====
-      handleNotationFile(event) {
-         var file = event.target.files[0];
-         if (!file) return;
-         var self = this;
-         var reader = new FileReader();
-         reader.onload = function (e) {
-            var beforeLen = register.length;
-            var beforeAnalysisLen = analysis_register.length;
-            try {
-               var script = document.createElement('script');
-               script.textContent = e.target.result;
-               document.body.appendChild(script);
-            } catch (err) {
-               console.error('Failed to load notation:', err);
-               alert('Error loading notation file: ' + err.message);
-               return;
-            }
-            var added = register.length - beforeLen;
-            var addedAnalysis = analysis_register.length - beforeAnalysisLen;
-             if (added > 0) {
-                while (self.datasets.length < register.length) {
-                   self.datasets.push(init_dataset(register[self.datasets.length]));
-                }
-                for (var i = beforeLen; i < register.length; i++) {
-                   registerNotationComponents(register[i]);
-                }
-                self.notationVersion++;
-                self.current_tab = beforeLen;
-             }
-            var msg = 'Loaded "' + file.name + '"';
-            var parts = [];
-            if (added > 0) parts.push(added + ' notation(s)');
-            if (addedAnalysis > 0) parts.push(addedAnalysis + ' analysis notation(s)');
-            if (parts.length) msg += ': ' + parts.join(', ');
-            self.loadedNotationFile = msg;
-            event.target.value = '';
-         };
-         reader.readAsText(file);
-      },
    },
    mounted() {
       var canvasEl = document.getElementById('hoverCanvas');
@@ -1148,6 +1372,7 @@ Ctrl + E: expand analysis fundamental sequence
       this.loadAnalysis()
       this.startAutoSave()
       window.nCpSN = this.nParamVal;
+      this.$nextTick(() => { this.isHydrating = false; });
    }
 })
 
@@ -1249,7 +1474,7 @@ function expand_item(item, notation, use_short, max_tier, auto_focus) {
          if (item.parent) {
             new_bound = item.parent.subitems[item.parent.mark + item.index + 1].expr
          } else {
-            new_bound = root.datasets[root.current_tab][item.index + 1].expr
+            new_bound = root.currentDataset.subitems[item.index + 1].expr
          }
       }
 
@@ -1381,20 +1606,21 @@ function getCaretPixelPosition(input, pos) {
    return left;
 }
 
-function registerNotationComponents(notation) {
-   app.component(notation.id + '-list', {
-      props: ['item'],
+app.component('notation-list-item', {
+      props: ['item', 'notationId'],
       data: () => ({
-         notation
-         , shownFS: []
+         shownFS: []
          , tooltip: false
          , tooltipX: {}
          , inputVisited: false
       }),
+      computed: {
+         notation() { return register.get(this.notationId) || {} },
+      },
       methods: {
          // 注意：this.FS 和 this.FSalter 已废弃（由 expand_item 内部接管），保留以兼容引用
          onmouseenter(event) {
-            if (this.notation.drawDiagram !== null && root.diagram_follow) {
+            if (typeof this.notation.drawDiagram === 'function' && root.diagram_follow) {
                let diagram = this.notation.drawDiagram(this.item.expr)
                if (diagram != null) {
                   worker.postMessage({
@@ -1421,7 +1647,7 @@ function registerNotationComponents(notation) {
                   if (it.subitems && it.subitems.length) scanItems(it.subitems)
                }
             }
-            scanItems(root.datasets[root.current_tab].subitems)
+            scanItems(root.currentDataset.subitems)
             var terms = []
             var maxWidth = 0
             for (let n = 0; n <= nmax; ++n) {
@@ -1567,7 +1793,7 @@ function registerNotationComponents(notation) {
             } else if (event.key.toLowerCase() === 'e' && event.ctrlKey) {
                event.preventDefault()
 
-               let notation = analysis_register[this.current_analysis_index];
+               let notation = analysis_register.get(root.currentAnalysisId);
                if (!notation) return;
 
                root.analysis_fs_target = this.item.path
@@ -1611,19 +1837,19 @@ function registerNotationComponents(notation) {
             </div>
          </div></div>
          <ul v-if="!item.hide_child">
-            <`+ notation.id + `-list v-for="subitem in item.subitems" :item="subitem" :key="subitem.index"></` + notation.id + `-list>
-         </ul>
-      </li>`
+             <notation-list-item v-for="subitem in item.subitems" :item="subitem" :notation-id="notationId"
+                :key="subitem.path"></notation-list-item>
+          </ul>
+       </li>`
    })
-   app.component(notation.id, {
-      props: ['subitems'],
-      template: `<ul class="nowrap"><` + notation.id + `-list v-for="subitem in subitems" :item="subitem" :key="subitem.index"></` + notation.id + `-list></ul>`,
-      mounted() {
-      }
-   })
-}
 
-register.forEach(notation => { registerNotationComponents(notation); });
+app.component('notation-tree', {
+   props: ['subitems', 'notationId'],
+   template: `<ul class="nowrap"><notation-list-item v-for="subitem in subitems" :item="subitem"
+      :notation-id="notationId" :key="subitem.path"></notation-list-item></ul>`,
+})
+
+app.component('local-notation-manager', window.LocalNotationManagerComponent)
 
 app.component('fs-dialog', {
    template: `

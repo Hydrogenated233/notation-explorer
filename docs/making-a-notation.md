@@ -11,7 +11,7 @@
    // 1. 展开逻辑（核心算法）
    function expand(seq, n) { /* ... */ }
 
-   // 2. 注册到全局 register 数组
+   // 2. 注册到主记号注册表
    register.push({
       id: 'my-notation',       // 唯一标识符
       name: 'My Notation',     // 下拉菜单显示名
@@ -31,7 +31,7 @@
 
 ### `id`（必填，string）
 
-唯一标识符。用于 Vue 组件名，因此必须符合 HTML 标签名规则（小写字母、数字、连字符）。
+当前注册表中的非空唯一标识符。应用选择、分析归档和热替换都通过这个稳定 ID 关联；建议使用小写字母、数字和连字符组成的可读 ID。
 
 ```js
 id: 'prss'
@@ -159,9 +159,9 @@ init: function() {
 | `semiable` | `(expr) => boolean` | 是否可语义化 |
 | `drawDiagram` | `(expr) => diagramObject` | 山图画图函数 |
 
-## 两种加载方式
+## 两种安装方式
 
-### 永久加载（放入 index.html）
+### 作为内置记号（放入 index.html）
 
 在 `index.html` 的 `</div>` 之后、`<script src="js/framework.js">` 之前添加：
 
@@ -169,18 +169,28 @@ init: function() {
 <script src="js/notations/MyNotation.js"></script>
 ```
 
-### 临时加载（通过设置页）
+这种方式随应用发布，不能在本地文件管理器中启用、禁用或编辑。
 
-打开 Settings → **Load Notation** → 选择 `.js` 文件即可，无需修改 `index.html`。
-仅当前会话有效，刷新后消失。
+### 作为持久化本地文件（通过设置页）
+
+打开 Settings → **Local notation files** → **Upload .js**。首次运行非模板源码需要确认信任；文件与未保存草稿都保存在浏览器 `localStorage`，刷新后仍会恢复。
+
+- 上传成功后文件立即启用；加载失败时保留为可编辑的禁用文件。
+- 保存已启用文件会事务热替换整个文件；失败时旧版本继续运行。
+- 保存禁用文件只更新源码，不执行它。
+- **New PrSS** 创建禁用模板并打开编辑器。
+- 文件级开关会整体加载或卸载该文件注册的所有主记号和分析记号。
+- 本地文件可以使用页面提供的 shared 函数和内置记号，但不能依赖其他本地文件。
+
+一个文件可以调用多次 `register.push(...)` 和 `analysis_register.push(...)`。两者使用独立 ID 命名空间；同一命名空间内的 ID 必须唯一。
 
 ## 测试记号
 
 ### 浏览器快速测试
 
 1. 打开 DevTools Console（F12）
-2. 检查 `register` 数组：`console.table(register.map(n => ({ id: n.id, name: n.name })))`
-3. 直接调用 FS：`register[0].FS([0,1,2,3], 0)`
+2. 检查注册表：`console.table(register.map(n => ({ id: n.id, name: n.name })))`
+3. 按 ID 调用 FS：`register.get('my-notation').FS([0,1,2,3], 0)`
 
 ### Node.js 快速验证
 
@@ -202,7 +212,7 @@ node -e "
 
 ## 参考文件
 
-- **最小工作示例：** `docs/example-PrSS.js`（本项目中，可直接临时加载）
+- **最小工作示例：** `docs/example-PrSS.js`（与 Settings 中的 PrSS 模板保持一致）
 - **完整参考：** `js/notations/omega-Y.js`（含 drawDiagram、FSalter、缓存）
 - **矩阵型参考：** `js/notations/BM.js`
 - **字符串型参考：** `js/notations/cOCF.js`

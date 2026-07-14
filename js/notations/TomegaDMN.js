@@ -118,14 +118,14 @@
       init: () => wmn().init()
    })
    analysis_register.push({
-      id:'t-omega-mn',
+       id:'t-omega-dmn',
       name:'TωDMN',
       FS:core.FS,
       display:core.display,
       fromDisplay:core.fromDisplay,
       fs_default:1,
    }, {
-      id:'t-omega-mn-simple',
+       id:'t-omega-dmn-simple',
       name:'TωDMN (Simple)',
       FS:core.FS,
       display:core.display_alter,

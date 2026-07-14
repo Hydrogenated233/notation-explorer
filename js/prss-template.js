@@ -1,4 +1,18 @@
-// PrSS - Primitive Sequence System
+;(function(root, factory) {
+   var api = factory();
+
+   if (typeof module === 'object' && module.exports) {
+      module.exports = api;
+   }
+   if (root) {
+      root.PrSSTemplate = api;
+   }
+})(typeof globalThis !== 'undefined' ? globalThis : this, function() {
+   'use strict';
+
+   var DEFAULT_ID = 'prss';
+   var DEFAULT_NAME = 'PrSS';
+   var SOURCE_TEMPLATE = String.raw`// PrSS - Primitive Sequence System
 // A complete, self-contained notation file compatible with register.push(...).
 ;(function() {
    'use strict';
@@ -66,8 +80,8 @@
    }
 
    register.push({
-      id: 'prss',
-      name: 'PrSS',
+      id: __PRSS_ID_LITERAL__,
+      name: __PRSS_NAME_LITERAL__,
 
       display: function(expr) {
          return String(expr) === 'Infinity' ? 'Limit' : String(expr);
@@ -118,3 +132,44 @@
       },
    });
 })();
+`;
+
+   function validateId(id) {
+      if (typeof id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(id)) {
+         throw new TypeError('PrSS template id must use lowercase letters, digits, and hyphens');
+      }
+   }
+
+   function validateName(name) {
+      if (typeof name !== 'string' || name.trim() === '' || name.trim() !== name) {
+         throw new TypeError('PrSS template name must be a non-empty trimmed string');
+      }
+   }
+
+   function toJavaScriptString(value) {
+      var body = JSON.stringify(value).slice(1, -1)
+         .replace(/'/g, "\\'")
+         .replace(/\u2028/g, '\\u2028')
+         .replace(/\u2029/g, '\\u2029');
+      return "'" + body + "'";
+   }
+
+   function generateSource(options) {
+      options = options || {};
+      var id = options.id === undefined ? DEFAULT_ID : options.id;
+      var name = options.name === undefined ? DEFAULT_NAME : options.name;
+      validateId(id);
+      validateName(name);
+
+      return SOURCE_TEMPLATE
+         .replace('__PRSS_ID_LITERAL__', toJavaScriptString(id))
+         .replace('__PRSS_NAME_LITERAL__', toJavaScriptString(name));
+   }
+
+   return Object.freeze({
+      DEFAULT_ID: DEFAULT_ID,
+      DEFAULT_NAME: DEFAULT_NAME,
+      DEFAULT_SOURCE: generateSource(),
+      generateSource: generateSource,
+   });
+});

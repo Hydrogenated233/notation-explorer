@@ -11,12 +11,13 @@
 <body>
    <script src="lib/Vue.js"></script>
    <script src="lib/xlsx.full.min.js"></script>
-   <script>var register = []; var analysis_register = []; var nCpSN = 2;</script>
+   <script src="js/notation-registry.js"></script>
+   <script>var nCpSN = 2;</script>
    <div id="app">
       <div class="nav-bar">
-         <button :class="{active: page==='explore'}" @mousedown="page='explore'">{{ L.explore }}</button>
-         <button :class="{active: page==='tools'}" @mousedown="page='tools'">{{ L.tools }}</button>
-         <button :class="{active: page==='settings'}" @mousedown="page='settings'">{{ L.settings }}</button>
+         <button :class="{active: page==='explore'}" @mousedown.prevent="navigateToPage('explore')">{{ L.explore }}</button>
+         <button :class="{active: page==='tools'}" @mousedown.prevent="navigateToPage('tools')">{{ L.tools }}</button>
+         <button :class="{active: page==='settings'}" @mousedown.prevent="navigateToPage('settings')">{{ L.settings }}</button>
          <span class="lang-bar">
             <button :class="{active: lang==='en'}" @mousedown="lang='en'">EN</button>
             <button :class="{active: lang==='zh'}" @mousedown="lang='zh'">中文</button>
@@ -35,8 +36,8 @@
                      class="ns-search-input" ref="notationSearchInput" />
                </div>
                <div class="ns-options">
-                  <div v-for="item in filteredNotations" :key="item.idx" class="ns-option"
-                     :class="{ selected: item.idx === current_tab }" @mousedown="selectNotation(item.idx)">
+                   <div v-for="item in filteredNotations" :key="item.id" class="ns-option"
+                      :class="{ selected: item.id === currentNotationId }" @mousedown="selectNotation(item.id)">
                      <span class="ns-opt-name">{{ item.name }}</span>
                      <span class="ns-opt-id">{{ item.id }}</span>
                   </div>
@@ -65,7 +66,8 @@
             {{ L.navigate }}: <input type="text" ref="navigate_input" @keydown="navigate_keydown"> <button
                @mousedown="(e) => {e.preventDefault(); find_notation()}">{{ L.find }}</button>
          </div>
-         <component :is="current_notation_name" :subitems="datasets[current_tab].subitems" ref="list"></component>
+          <notation-tree v-if="currentNotation.id" :key="currentNotationKey" :notation-id="currentNotationId"
+             :subitems="currentDataset.subitems" ref="list"></notation-tree>
       </div>
       <!-- Tools Page -->
       <div v-if="page==='tools'" class="tools-page">
@@ -76,8 +78,8 @@
             <h4 class="tools-section-title">{{ L.tools_inf_chain }}</h4>
             <div class="tools-toolbar">
                <label class="tools-label">{{ L.tools_notation_select }}<br>
-                  <select v-model="toolsNotation">
-                     <option v-for="(name,idx) in tab_names" :value="idx">{{ name }}</option>
+                   <select v-model="toolsNotation">
+                      <option v-for="item in toolsNotations" :key="item.id" :value="item.id">{{ item.name }}</option>
                   </select>
                </label>
                <label class="tools-label">{{ L.tools_limit }}<br>
@@ -106,13 +108,13 @@
             <h4 class="tools-section-title">{{ L.tools_bfs_diff }}</h4>
             <div class="tools-toolbar">
                <label class="tools-label">{{ L.tools_notation_a }}<br>
-                  <select v-model="toolsDiffA">
-                     <option v-for="(name,idx) in tab_names" :value="idx">{{ name }}</option>
+                   <select v-model="toolsDiffA">
+                      <option v-for="item in toolsNotations" :key="item.id" :value="item.id">{{ item.name }}</option>
                   </select>
                </label>
                <label class="tools-label">{{ L.tools_notation_b }}<br>
-                  <select v-model="toolsDiffB">
-                     <option v-for="(name,idx) in tab_names" :value="idx">{{ name }}</option>
+                   <select v-model="toolsDiffB">
+                      <option v-for="item in toolsNotations" :key="item.id" :value="item.id">{{ item.name }}</option>
                   </select>
                </label>
                <label class="tools-label">{{ L.tools_limit }}<br>
@@ -139,8 +141,8 @@
             <h4 class="tools-section-title">{{ L.tools_direct_expand }}</h4>
             <div class="tools-toolbar">
                <label class="tools-label">{{ L.tools_notation_select }}<br>
-                  <select v-model="toolsExpandNotation">
-                     <option v-for="(name,idx) in tab_names" :value="idx">{{ name }}</option>
+                   <select v-model="toolsExpandNotation">
+                      <option v-for="item in toolsNotations" :key="item.id" :value="item.id">{{ item.name }}</option>
                   </select>
                </label>
                <label class="tools-label">{{ L.tools_expand_expr }}<br>
@@ -174,6 +176,7 @@
          <pre class="tools-output">{{ toolsOutput }}</pre>
       </div>
       <div v-if="page==='settings'" class="settings-page">
+         <div class="settings-general">
          <h3>{{ L.settings_title }}</h3>
          <label class="setting-row">
             <span>{{ L.dark_mode }}</span>
@@ -212,12 +215,12 @@
          </label>
          <label class="setting-row">
             <span>{{ L.analysis_notation }}</span>
-            <select v-model="current_analysis_index">
-               <option disabled :value="-1" />
-               <option v-for="(name, idx) in analysis_names" :value="idx">{{ name }}</option>
+            <select v-model="currentAnalysisId">
+               <option value=""></option>
+               <option v-for="item in analysisNotations" :key="item.id" :value="item.id">{{ item.name }}</option>
             </select>
          </label>
-         <h4 style="margin:12px 0 4px;font-size:13px;color:#667085;">{{ L.auto_save }}</h4>
+         <h4 class="settings-section-title">{{ L.auto_save }}</h4>
          <label class="setting-row">
             <span>{{ L.auto_save_interval }}</span>
             <input type="number" v-model.number="autoSaveInterval" min="10" class="n-input" style="width:70px" />
@@ -226,16 +229,9 @@
             <span>{{ L.auto_save_hidden }}</span>
             <input type="checkbox" v-model="autoSaveHidden" />
          </label>
-          <h4 style="margin:12px 0 4px;font-size:13px;color:#667085;">{{ L.load_notation }}</h4>
-          <label class="setting-row">
-             <span>{{ L.load_notation_desc }}</span>
-             <input type="file" ref="notationFileInput" accept=".js" @change="handleNotationFile" style="display:none" />
-             <button @mousedown="$refs.notationFileInput.click()" class="small-btn">{{ L.load_notation_btn }}</button>
-          </label>
-          <label class="setting-row" v-if="loadedNotationFile">
-             <span style="color:#22c55e;">{{ loadedNotationFile }}</span>
-          </label>
-          <button @mousedown="resetSettings()" class="reset-btn">{{ L.reset_settings }}</button>
+         <button @mousedown="resetSettings()" class="reset-btn">{{ L.reset_settings }}</button>
+         </div>
+         <local-notation-manager ref="localNotationManagerComponent"></local-notation-manager>
       </div>
       <div class="floating-canvas" id="floatingCanvas" :style="{ left: pCanvas.x + 'px', top: pCanvas.y + 'px' }"
          v-show="showCanvas && !pCanvasModifier.hide">
@@ -326,9 +322,13 @@
    <script src="js/notations/PPS.js"></script>
    <!--
    <script src="js/notations/fPPS4.js"></script>
-   -->
-   <script src="js/notations/Diagram.js"></script>
-   <script src="js/framework.js"></script>
+    -->
+    <script src="js/notations/Diagram.js"></script>
+    <script src="js/prss-template.js"></script>
+    <script src="js/notation-editor.js"></script>
+    <script src="js/local-notation-runtime.js"></script>
+    <script src="js/local-notation-ui.js"></script>
+    <script src="js/framework.js"></script>
 </body>
 
 </html>
