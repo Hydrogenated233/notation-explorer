@@ -16,6 +16,8 @@ const {
 const manifest = require('../js/notation-manifest.js')
 const Loader = require('../js/notation-loader.js')
 const { NotationRegistryHub } = require('../js/notation-registry.js')
+const NotationLatex = require('../js/latex-renderer.js')
+const katex = require('../lib/katex/katex.min.js')
 
 const projectRoot = path.join(__dirname, '..')
 
@@ -81,6 +83,27 @@ test('index delegates notation and application startup to the generated loader',
    assert.match(html, /<script src="js\/notation-file-index\.js"><\/script>/)
    assert.match(html, /<script src="js\/notation-manifest\.js"><\/script>/)
    assert.match(html, /<script src="js\/notation-loader\.js"><\/script>/)
+   assert.match(html, /<link rel="stylesheet" type="text\/css" href="lib\/katex\/katex\.min\.css">/)
+   assert.match(html, /<script src="lib\/katex\/katex\.min\.js"><\/script>/)
+   assert.match(html, /<script src="js\/latex-renderer\.js"><\/script>/)
+   assert.ok(html.indexOf('lib/katex/katex.min.js') < html.indexOf('js/latex-renderer.js'))
+   assert.ok(html.indexOf('js/latex-renderer.js') < html.indexOf('js/notation-loader.js'))
+})
+
+test('fundamental-sequence tooltip shares one grid across every rendered row', () => {
+   const framework = fs.readFileSync(path.join(projectRoot, 'js', 'framework.js'), 'utf8')
+   const css = fs.readFileSync(path.join(projectRoot, 'css', 'index.css'), 'utf8')
+
+   assert.match(framework, /class="tooltip-fs"/)
+   assert.doesNotMatch(framework, /exprWidth/)
+   assert.match(css, /\.tooltip-fs\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:/s)
+   assert.match(css, /grid-template-columns:\s*max-content\s+max-content\s+max-content;/)
+   assert.match(css, /\.tooltip-row\s*\{[^}]*display:\s*contents;/s)
+   assert.match(css, /\.tooltip-index\s*\{[^}]*text-align:\s*left;/s)
+   assert.match(css, /\.tooltip-expr\s*\{[^}]*justify-self:\s*start;[^}]*text-align:\s*left;/s)
+   assert.match(css, /\.tooltip-cmnt\s*\{[^}]*justify-self:\s*start;[^}]*text-align:\s*left;/s)
+   assert.doesNotMatch(framework, /class="tooltip-cmnt"\s+v-if=/)
+   assert.match(framework, /class="tooltip-cmnt"\s+v-html="term\.comment \? '; ' \+ term\.comment : ''"/)
 })
 
 test('every discovered built-in loads and initializes in manifest order', () => {
@@ -111,7 +134,21 @@ test('every discovered built-in loads and initializes in manifest order', () => 
          Loader.appendedEntries(hub.analysis, analysisBefore, file, 'analysis')
       ))
    }
-   hub.main.forEach((notation) => notation.init())
+   hub.main.forEach((notation) => {
+      notation.init().forEach((item) => {
+         const source = NotationLatex.notationToLatex(notation, item.expr)
+         assert.doesNotThrow(
+            () => katex.renderToString(source, {
+               throwOnError: true,
+               displayMode: false,
+               strict: 'ignore',
+               trust: false,
+               maxExpand: 1000,
+            }),
+            notation.id + ' failed to render initial expression as LaTeX: ' + source
+         )
+      })
+   })
 
    assert.equal(hub.main.length, 62)
    assert.equal(hub.analysis.length, 6)

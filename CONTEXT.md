@@ -65,6 +65,27 @@ The case-insensitively unique name that identifies a **Local notation file** in 
 **Analysis text**:
 User-authored text attached to a node in a notation's expansion tree.
 
+**Analysis input**:
+The per-node control that edits **Analysis text**; hiding the control does not remove the text.
+
+**Display string**:
+The output of `display(expr)`, used as the stable text contract for HTML display, parsing, import/export, tools, and task identities.
+
+**Expression rendering mode**:
+The global HTML-or-LaTeX choice for presenting notation expressions in the expansion tree and fundamental-sequence tooltip.
+
+**LaTeX display**:
+The presentation-only KaTeX source supplied by optional `latex(expr)` or derived from the supported subset of a **Display string**.
+
+**LaTeX command source**:
+User-authored KaTeX macro declarations retained in Settings, with no application-provided `\newcommand` or `\renewcommand` defaults.
+
+**Analysis LaTeX preview**:
+An optional floating rendering of the focused **Analysis input** that does not rewrite its **Analysis text**.
+
+**Fundamental-sequence tooltip**:
+The hover panel that shows a node, indexed fundamental-sequence expressions, and their associated **Analysis text**.
+
 **Note sheet**:
 User-authored free-form notes associated with a **Main notation** independently of its expansion tree.
 
@@ -140,11 +161,23 @@ User-authored free-form notes associated with a **Main notation** independently 
 - Replacing a file preserves a current selection whose notation ID still exists
 - **Built-in notations** keep deterministic built-in file order ahead of enabled local entries; registrations from one file keep source order
 - **Local notation files** keep creation order, and their contributed entries keep registration order
+- A **Display string** remains the data and tool contract in every **Expression rendering mode**
+- A **LaTeX display** affects only expansion-tree and **Fundamental-sequence tooltip** expressions; it does not replace `display(expr)` in navigation, import/export, tools, diagrams, **Analysis text**, or **Note sheets**
+- A notation may provide `latex(expr)`; otherwise only the documented legacy HTML subset of its **Display string** is converted to KaTeX source
+- The default **LaTeX command source** is empty, and each expression render receives an isolated copy of the compiled user macros
+- An invalid **LaTeX command source** reports an error while the last valid macro set remains available for rendering
+- **Analysis LaTeX preview** is independent of **Expression rendering mode**, renders the saved **Analysis text** directly, and reuses the user macro set
+- Hiding **Analysis inputs** or the preview never deletes **Analysis text**
+- **Analysis input** visibility and width are global presentation settings; resizing one input updates the shared width
+- A **Fundamental-sequence tooltip** uses shared index, expression, and analysis columns so every expression is left-aligned and every visible semicolon begins after the widest expression
 
 ## Example dialogue
 
 > **Dev:** "If a **Local notation file** registers three entries, can I disable only one?"
 > **Domain expert:** "No. The manager enables or disables the whole **Local notation file**."
+
+> **Dev:** "Should LaTeX mode change the expression text written to an analysis export?"
+> **Domain expert:** "No. Export keeps the **Display string**; **LaTeX display** is presentation only."
 
 ## Flagged ambiguities
 
@@ -154,3 +187,5 @@ User-authored free-form notes associated with a **Main notation** independently 
 - An ID-based registry was initially assumed to require a new file API; resolved: existing files using `register.push(...)` or `analysis_register.push(...)` remain valid.
 - Cross-file dependencies were considered for local files; resolved: every **Local notation file** is self-contained and independently unloadable.
 - "Text" during file replacement was ambiguous; resolved: it means **Analysis text**, not **Note sheets** or editor source.
+- "LaTeX display" and **Analysis LaTeX preview** were initially conflated; resolved: the former renders notation expressions and the latter renders user-authored **Analysis text**.
+- "No built-in newcommand" means the application supplies no default macro declarations; it does not remove KaTeX's native commands.

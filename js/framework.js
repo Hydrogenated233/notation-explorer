@@ -68,6 +68,12 @@ const app = Vue.createApp({
       export_hide: true,
       page: 'explore',
       darkMode: false,
+      displayMode: 'html',
+      latexCommands: '',
+      analysisLatexPreview: false,
+      analysisInputVisible: true,
+      analysisInputWidth: 180,
+      analysisLatexState: { visible: false, source: '', x: 0, y: 0 },
       nParamVal: 2,
       nParamInput: 2,
       toolsNotation: first_main_id(),
@@ -133,9 +139,18 @@ const app = Vue.createApp({
                reset_settings: 'Reset to defaults',
                note: 'Note',
                note_placeholder: 'Enter notes here...',
-               settings_title: 'Settings',
-               dark_mode: 'Dark Mode',
-               tools: 'Tools',
+                settings_title: 'Settings',
+                dark_mode: 'Dark Mode',
+                display_mode: 'Expression rendering',
+                display_html: 'HTML',
+                display_latex: 'LaTeX',
+                latex_commands: 'LaTeX commands',
+                latex_commands_placeholder: '\\newcommand{\\foo}[1]{#1^2}',
+                latex_commands_error: 'Invalid LaTeX commands',
+                analysis_latex_preview: 'Show analysis LaTeX',
+                analysis_input_visible: 'Show analysis input',
+                analysis_input_width: 'Analysis input width',
+                tools: 'Tools',
                tools_title: 'Tools',
                tools_notation_select: 'Notation',
                tools_limit: 'Limit',
@@ -195,9 +210,18 @@ const app = Vue.createApp({
                reset_settings: '重置到默认',
                note: '笔记',
                note_placeholder: '在此输入笔记...',
-               settings_title: '设置',
-               dark_mode: '黑夜模式',
-               tools: '工具',
+                settings_title: '设置',
+                dark_mode: '黑夜模式',
+                display_mode: '表达式渲染',
+                display_html: 'HTML',
+                display_latex: 'LaTeX',
+                latex_commands: 'LaTeX 命令',
+                latex_commands_placeholder: '\\newcommand{\\foo}[1]{#1^2}',
+                latex_commands_error: 'LaTeX 命令无效',
+                analysis_latex_preview: '显示分析 LaTeX',
+                analysis_input_visible: '显示分析输入框',
+                analysis_input_width: '分析输入框宽度',
+                tools: '工具',
                tools_title: '工具',
                tools_notation_select: '记号',
                tools_limit: '基本列数',
@@ -289,11 +313,33 @@ const app = Vue.createApp({
       pCanvasScaled() {
          let scale = 0.1 / this.pCanvas.s * Math.pow(1.25, this.diagram_scale)
          return { w: this.pCanvas.w * scale, h: this.pCanvas.h * scale }
+      },
+      latexCommandsError() {
+         if (!window.NotationLatex) return 'KaTeX is unavailable.'
+         return window.NotationLatex.validateCommands(this.latexCommands)
       }
    },
    watch: {
       darkMode(val) { document.documentElement.classList.toggle('dark', val); this.saveSettings() },
       lang() { this.saveSettings() },
+      displayMode() { this.saveSettings() },
+      latexCommands() { this.saveSettings() },
+      analysisLatexPreview(val) {
+         if (!val) this.hideAnalysisLatexPreview()
+         this.saveSettings()
+      },
+      analysisInputVisible(val) {
+         if (!val) this.hideAnalysisLatexPreview()
+         this.saveSettings()
+      },
+      analysisInputWidth(val) {
+         var width = Math.max(60, Math.min(600, Math.round(Number(val) || 180)))
+         if (width !== val) {
+            this.analysisInputWidth = width
+            return
+         }
+         this.saveSettings()
+      },
       diagram_follow() { this.saveSettings() },
       auto_scroll() { this.saveSettings() },
       export_hide() { this.saveSettings() },
@@ -318,6 +364,30 @@ const app = Vue.createApp({
       notationSearch() { this.notationMenuFocusIndex = -1; },
    },
    methods: {
+      setDisplayMode(mode) {
+         if (mode === 'html' || mode === 'latex') this.displayMode = mode
+      },
+      setAnalysisInputWidth(width) {
+         var next = Math.max(60, Math.min(600, Math.round(Number(width) || 180)))
+         if (next !== this.analysisInputWidth) this.analysisInputWidth = next
+      },
+      renderAnalysisLatex(source) {
+         if (!window.NotationLatex) return ''
+         return window.NotationLatex.renderLatex(source, this.latexCommands)
+      },
+      showAnalysisLatexPreview(source, x, y) {
+         if (!this.analysisLatexPreview || !this.analysisInputVisible || !source) {
+            this.hideAnalysisLatexPreview()
+            return
+         }
+         this.analysisLatexState.source = String(source)
+         this.analysisLatexState.x = Math.max(8, Math.min(Number(x) || 8, Math.max(8, window.innerWidth - 440)))
+         this.analysisLatexState.y = Math.max(8, Math.min(Number(y) || 8, Math.max(8, window.innerHeight - 120)))
+         this.analysisLatexState.visible = true
+      },
+      hideAnalysisLatexPreview() {
+         this.analysisLatexState.visible = false
+      },
       show_hotkeys() {
          var msg = this.lang === 'zh' ? `
 当焦点在输入框时：
@@ -997,6 +1067,11 @@ Ctrl + E: expand analysis fundamental sequence
             localStorage.setItem('ne-config', JSON.stringify({
                darkMode: this.darkMode,
                lang: this.lang,
+               displayMode: this.displayMode,
+               latexCommands: this.latexCommands,
+               analysisLatexPreview: this.analysisLatexPreview,
+               analysisInputVisible: this.analysisInputVisible,
+               analysisInputWidth: this.analysisInputWidth,
                diagramFollow: this.diagram_follow,
                autoScroll: this.auto_scroll,
                exportHide: this.export_hide,
@@ -1027,6 +1102,13 @@ Ctrl + E: expand analysis fundamental sequence
                }
                self.darkMode = getOr('darkMode', false)
                self.lang = getOr('lang', 'en')
+               var displayMode = getOr('displayMode', 'html')
+               self.displayMode = displayMode === 'latex' ? 'latex' : 'html'
+               self.latexCommands = typeof s.latexCommands === 'string' ? s.latexCommands : ''
+               self.analysisLatexPreview = !!getOr('analysisLatexPreview', false)
+               self.analysisInputVisible = !!getOr('analysisInputVisible', true)
+               var inputWidth = Number(getOr('analysisInputWidth', 180))
+               self.analysisInputWidth = Math.max(60, Math.min(600, Math.round(inputWidth || 180)))
                self.diagram_follow = getOr('diagramFollow', false)
                self.auto_scroll = getOr('autoScroll', true)
                self.export_hide = getOr('exportHide', true)
@@ -1052,6 +1134,11 @@ Ctrl + E: expand analysis fundamental sequence
       resetSettings() {
          this.darkMode = false
          this.lang = 'en'
+         this.displayMode = 'html'
+         this.latexCommands = ''
+         this.analysisLatexPreview = false
+         this.analysisInputVisible = true
+         this.analysisInputWidth = 180
          this.diagram_follow = false
          this.auto_scroll = true
          this.export_hide = true
@@ -1722,6 +1809,38 @@ function getCaretPixelPosition(input, pos) {
    return left;
 }
 
+app.component('notation-expression', {
+   props: ['notation', 'expression'],
+   computed: {
+      isLatex() {
+         return this.$root.displayMode === 'latex'
+      },
+      renderedExpression() {
+         if (!this.notation || typeof this.notation.display !== 'function') return ''
+         try {
+            if (this.isLatex && window.NotationLatex) {
+               return window.NotationLatex.renderNotation(
+                  this.notation,
+                  this.expression,
+                  this.$root.latexCommands
+               )
+            }
+            return this.notation.display(this.expression)
+         } catch (error) {
+            if (this.isLatex) {
+               try { return this.notation.display(this.expression) } catch (ignored) { }
+            }
+            var message = error && error.message ? error.message : String(error)
+            return window.NotationLatex
+               ? '<span class="latex-render-error">' + window.NotationLatex.escapeHtml(message) + '</span>'
+               : ''
+         }
+      }
+   },
+   template: `<span class="notation-expression" :class="{ 'is-latex': isLatex }"
+      v-html="renderedExpression"></span>`
+})
+
 app.component('notation-list-item', {
       props: ['item', 'notationId'],
       data: () => ({
@@ -1729,6 +1848,7 @@ app.component('notation-list-item', {
          , tooltip: false
          , tooltipX: {}
          , inputVisited: false
+         , inputResizeObserver: null
       }),
       computed: {
          notation() { return register.get(this.notationId) || {} },
@@ -1753,7 +1873,7 @@ app.component('notation-list-item', {
 
             if (!this.notation.able(this.item.expr)) return;
             var FS = get_FS(this.notation, root.use_alternative)
-            var res = [], nmax = root.FS_shown
+            var nmax = root.FS_shown
             // Build a lookup map: all analysis items by their expr
             var commentMap = {}
             var scanItems = function (items) {
@@ -1765,25 +1885,12 @@ app.component('notation-list-item', {
             }
             scanItems(root.currentDataset.subitems)
             var terms = []
-            var maxWidth = 0
             for (let n = 0; n <= nmax; ++n) {
                var fsExpr = FS(this.item.expr, n)
-               var seqStr = n + ': ' + this.notation.display(fsExpr)
                var childComment = commentMap['' + fsExpr] || ''
-               terms.push({ exprStr: seqStr, comment: childComment })
+               terms.push({ index: n, expr: fsExpr, comment: childComment })
             }
-            // Use CSS to align — set fixed width for expression part
-            // measured by the longest expression string
-            var maxLen = 0
-            for (var ti = 0; ti < terms.length; ti++) {
-               var l = terms[ti].exprStr.length
-               if (l > maxLen) maxLen = l
-            }
-            for (var ti = 0; ti < terms.length; ti++) {
-               terms[ti].exprWidth = (maxLen * 0.6) + 1 + 'em'
-            }
-            res = terms
-            this.shownFS = res
+            this.shownFS = terms
             this.tooltipX = { left: (event.offsetX + 15) + 'px' }
             this.tooltip = true
          },
@@ -1826,7 +1933,7 @@ app.component('notation-list-item', {
             let pixelPosition = getCaretPixelPosition(target, target.selectionStart)
             target.scrollLeft = (pixelPosition - target.clientWidth / 2)
 
-            if (this.notation.drawDiagram != null) {
+            if (this.notation.drawDiagram != null && !root.analysisLatexPreview) {
                let diagram = this.notation.drawDiagram(this.item.expr)
 
                if (diagram != null) {
@@ -1844,10 +1951,25 @@ app.component('notation-list-item', {
                } else {
                   root.showCanvas = false
                }
+            } else if (root.analysisLatexPreview) {
+               root.showCanvas = false
             }
+            this.updateAnalysisLatexPreview(target.value, target)
          },
-         onblur(event) {
+         onblur() {
             root.showCanvas = false
+            root.hideAnalysisLatexPreview()
+         },
+         onAnalysisInput(event) {
+            this.updateAnalysisLatexPreview(event.target.value, event.target)
+         },
+         updateAnalysisLatexPreview(value, input) {
+            if (!root.analysisLatexPreview || !root.analysisInputVisible || !value || !input) {
+               root.hideAnalysisLatexPreview()
+               return
+            }
+            var rect = input.getBoundingClientRect()
+            root.showAnalysisLatexPreview(value, rect.left, rect.bottom + 8)
          },
          onkeydown(event) {
             if (event.key === 'ArrowUp') {
@@ -1898,6 +2020,7 @@ app.component('notation-list-item', {
             } else if (event.key === 'Delete') {
                event.preventDefault()
                delete this.item.analysis
+               root.hideAnalysisLatexPreview()
             } else if (event.key.toLowerCase() === 's' && event.ctrlKey) {
                event.preventDefault()
 
@@ -1933,23 +2056,46 @@ app.component('notation-list-item', {
       mounted() {
          node_map.set(this.item.path, this)
 
+         var inputWrap = this.$refs.analysisInputWrap
+         if (inputWrap && typeof ResizeObserver === 'function') {
+            this.inputResizeObserver = new ResizeObserver(function () {
+               if (!root.analysisInputVisible || !document.body.contains(inputWrap)) return
+               var width = Math.round(inputWrap.getBoundingClientRect().width)
+               var inlineWidth = Math.round(parseFloat(inputWrap.style.width) || 0)
+               if (inlineWidth !== width) return
+               if (width >= 60) root.setAnalysisInputWidth(width)
+            })
+            this.inputResizeObserver.observe(inputWrap)
+         }
+
          if (this.item.auto_focus) {
             this.$refs.input.focus({ preventScroll: true })
             this.item.auto_focus = false
          }
       },
       unmounted() {
+         if (this.inputResizeObserver) this.inputResizeObserver.disconnect()
          node_map.delete(this.item.path)
       },
       template: `<li><div class="shown-item" :class="{analyzed: item.analysis !== undefined}" @mouseenter="onmouseenter" @mousemove="onmousemove" @mouseleave="onmouseleave" @mousedown="onmousedown">
             <input type="checkbox" v-model="item.hide_child" @mousedown.stop>
-            <input type="text" @mousedown.stop @keydown.stop="onkeydown" ref="input" @focus="onfocus" @blur="onblur" v-model="item.analysis"/>
-            <span v-html="notation.display(item.expr)"></span>
+            <span ref="analysisInputWrap" class="analysis-input-resize"
+               :class="{ 'is-hidden': !$root.analysisInputVisible }"
+               :style="{ width: $root.analysisInputWidth + 'px' }" @mousedown.stop>
+               <input type="text" @mousedown.stop @keydown.stop="onkeydown" @input="onAnalysisInput"
+                  ref="input" @focus="onfocus" @blur="onblur" v-model="item.analysis"/>
+            </span>
+            <notation-expression :notation="notation" :expression="item.expr"></notation-expression>
             <div class="tooltip" v-if="tooltip" :style="tooltipX" @mousedown.stop>
-            <span v-html="notation.display(item.expr)"></span> fundamental sequence:
-            <div v-for="term in shownFS" class="tooltip-row">
-               <span class="tooltip-expr" :style="{ width: term.exprWidth }" v-html="term.exprStr"></span>
-               <span class="tooltip-cmnt" v-if="term.comment" v-html="'; ' + term.comment"></span>
+            <notation-expression :notation="notation" :expression="item.expr"></notation-expression> fundamental sequence:
+            <div class="tooltip-fs">
+               <div v-for="term in shownFS" :key="term.index" class="tooltip-row">
+                  <span class="tooltip-index">{{ term.index }}:</span>
+                  <notation-expression class="tooltip-expr" :notation="notation"
+                     :expression="term.expr"></notation-expression>
+                  <span class="tooltip-cmnt"
+                     v-html="term.comment ? '; ' + term.comment : ''"></span>
+               </div>
             </div>
          </div></div>
          <ul v-if="!item.hide_child">

@@ -9,10 +9,12 @@ notation-explorer/
 │   └── index.css           ← 全局样式
 ├── lib/
 │   ├── Vue.js              ← 第三方 Vue 库
-│   └── xlsx.full.min.js    ← Excel 导出/导入（本地加载）
+│   ├── xlsx.full.min.js    ← Excel 导出/导入（本地加载）
+│   └── katex/              ← KaTeX 运行库、样式、字体与许可证
 ├── js/
 │   ├── framework.js        ← Vue 应用框架（UI、展开逻辑、分析）
 │   ├── debug-tools.js      ← 调试工具（无穷降链检测等）
+│   ├── latex-renderer.js   ← HTML/记号表达式到 KaTeX 的展示适配层
 │   ├── notation-registry.js← 按 ID/文件 owner 管理主记号与分析记号
 │   ├── local-notation-runtime.js ← 本地文件持久化与热加载事务
 │   ├── local-notation-ui.js← 设置页文件管理器与编辑器
@@ -105,6 +107,7 @@ Notation Explorer 是一个 Vue 3 应用，用于**展开**各种大数/序数�
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
+| `latex` | `(expr) => string` | 返回不含 `$...$` 或 `\(...\)` 定界符的 KaTeX 数学源，仅用于表达式展示 |
 | `fromDisplay` | `(str) => expr` | 将字符串解析为内部表达式（"From Display" 的反向）。用于「Navigate to notation」和导入分析 |
 | `fromDisplay_alter` | `(str) => expr` | 备选解析方式（兜底，`fromDisplay` 抛异常时尝试） |
 | `FSalter` | `(expr, n) => expr` | 备选基本列函数（勾选 "Use alternative (short) fundamental sequence" 时使用） |
@@ -143,6 +146,25 @@ Notation Explorer 是一个 Vue 3 应用，用于**展开**各种大数/序数�
 | TON, DEN | 混合（数组/对象） | 见各实现 |
 
 > `Infinity` 是 JS 原生 `Infinity`，作为特判值处理极限。
+
+## 表达式渲染与 LaTeX
+
+Settings 中的 **Expression rendering** 在 HTML 与 LaTeX 之间全局切换，默认使用 HTML。统一的 `notation-expression` 组件只负责主展开树和基本列提示框里的记号表达式；分析文本、笔记、工具输出和 xlsx 不随此模式转换。
+
+LaTeX 模式优先调用可选的 `notation.latex(expr)`。未提供该函数时，框架调用 `notation.display(expr)`，再由 `htmlToLatex()` 转换项目历史显示格式中明确支持的子集：
+
+- 可嵌套的 `<sub>` 与 `<sup>`
+- `ω`、`Ω`、`ψ`
+- `&sdot;`、`&middot;`、`&times;`、`&nbsp;`、`&amp;`、`&lt;`、`&gt;`
+- KaTeX 中需要转义的 `\ { } ^ _ # $ % & ~`
+
+其他 HTML 标签和实体不保证可转换。需要特殊排版的记号应实现 `latex(expr)`，且它必须与 `display(expr)` 表示同一个内部表达式。
+
+`display(expr)` / `fromDisplay(str)` 仍是稳定的数据契约：导航、分析导入导出、工具输出、图表任务标识和缓存语义继续使用显示字符串，不写入 KaTeX HTML 或 `latex(expr)` 的源文本。切换渲染模式不会重建展开树或清空分析文本。
+
+KaTeX 从仓库的 `lib/katex` 本地加载，以行内模式、`trust: false` 和 `maxExpand: 1000` 渲染。单个表达式失败时显示可诊断的回退内容，不中断其余展开树。
+
+设置页可保存用户自己的 `\newcommand` / `\renewcommand` 声明，应用默认声明为空。有效声明会编译为宏表；无效编辑显示错误并沿用当前会话中最后一次有效的宏表。每次渲染使用宏表副本，避免表达式内的全局定义泄漏到后续表达式。
 
 ## FS 函数的实现细节
 
@@ -336,6 +358,12 @@ Settings 中的 **Local notation files** 工作区将文件和草稿保存在 `l
 
 本地文件可以使用页面已经提供的 shared 函数和内置记号，但不能依赖另一个本地文件。用户首次执行非模板源码时必须确认信任；这是函数作用域隔离，不是安全沙箱。未保存草稿单独持久化，刷新后可恢复且绝不会执行。
 
+## 分析输入与 LaTeX 预览
+
+分析输入框逐节点编辑 `Analysis text`，但可见性和宽度是全局设置。输入框默认显示、默认宽度为 180px，可在 Settings 用滑杆调整，也可横向拖动任一输入框同步更新全部输入框；共享设置限制在 60..600px。窄屏可以视觉压缩输入框，但不会把该临时压缩写回共享宽度。隐藏输入框只隐藏编辑控件，不删除已保存文本。
+
+**Show analysis LaTeX** 默认关闭，并独立于表达式的 HTML/LaTeX 模式。开启后，非空分析输入框在获得焦点或编辑时显示浮动 KaTeX 预览；失焦、删除文本、关闭预览或隐藏输入框时收起。预览直接把分析文本作为 KaTeX 源处理，不经过 `htmlToLatex()`，并复用用户的 LaTeX 命令。分析预览开启时，它优先于同一输入焦点触发的图表浮窗。
+
 ## 设置信息持久化
 
 所有用户设置压缩为单个 `localStorage` 键 `ne-config`（JSON 格式），不再分多个键。
@@ -346,6 +374,11 @@ Settings 中的 **Local notation files** 工作区将文件和草稿保存在 `l
 |------|------|------|
 | `darkMode` | boolean | 暗黑模式 |
 | `lang` | string | 语言 (`'en'` / `'zh'`) |
+| `displayMode` | string | 表达式渲染模式 (`'html'` / `'latex'`) |
+| `latexCommands` | string | 用户自定义的 KaTeX 宏声明，默认空字符串 |
+| `analysisLatexPreview` | boolean | 是否显示聚焦分析输入的 LaTeX 预览 |
+| `analysisInputVisible` | boolean | 是否显示全部分析输入框 |
+| `analysisInputWidth` | number | 全局分析输入框宽度（60..600px） |
 | `diagramFollow` | boolean | 画布跟随鼠标 |
 | `autoScroll` | boolean | 焦点自动滚动/居中 |
 | `exportHide` | boolean | 导出包含隐藏状态 |
@@ -353,9 +386,11 @@ Settings 中的 **Local notation files** 工作区将文件和草稿保存在 `l
 | `diagramScale` | number | 画布缩放 |
 | `tier` | number | 全局展开层级（不再按记号分别保存） |
 | `lengthLimit` | number | 自动展开项数限制 |
-| `fsShown` | number | 提示框 FS 项数（全局统一） |
+| `fsShown` | number | 提示框 FS 最大下标（显示 `0..fsShown`，全局统一） |
 | `analysisId` | string | 当前分析记号 ID |
 | `mainId` | string | 当前主记号 ID |
+| `autoSaveInterval` | number | 自动保存分析的间隔秒数 |
+| `autoSaveHidden` | boolean | 自动保存时是否包含隐藏状态 |
 
 所有设置仅在框架 (`framework.js`) 中管理，记号文件无需关心。
 
@@ -429,18 +464,21 @@ Notation Explorer 会自动保存和恢复用户的分析数据，包括展开�
 - 用 `safeFromDisplay(notation, str)` 还原为内部表达式
 - 执行展开直到匹配，填入分析文本
 
-> 导出/导入使用字符串作为表达式标识，因此要求记号必须实现 `display` 和 `fromDisplay`。
+> 导出/导入始终使用 `notation.display` / `fromDisplay` 的字符串标识，不受当前 HTML/LaTeX 模式影响，也不会写入 KaTeX HTML 或 `latex(expr)` 源文本。
 
 ## Vue 组件与热替换
 
-框架使用两个通用递归组件，不再根据记号 ID 动态注册组件：
+框架使用三个通用组件，不再根据记号 ID 动态注册组件：
 
 ```js
+app.component('notation-expression', { /* HTML/LaTeX 展示边界 */ });
 app.component('notation-tree', { /* 根列表 */ });
 app.component('notation-list-item', { /* 递归节点 */ });
 ```
 
-组件通过 `notationId` 从注册表读取当前定义。根树的 key 包含该 ID 的运行时版本，因此同 ID 的本地源码替换会卸载旧组件实例并挂载新定义，而无关记号的树不受影响。
+递归组件通过 `notationId` 从注册表读取当前定义，并把原始表达式对象交给 `notation-expression`。基本列提示框保留 `{ index, expr, comment }`，所有条目共享 index / expression / analysis 三列；即使某项没有分析文本也保留空的第三格，因此每项表达式左对齐，所有可见分号从最长表达式之后的同一位置开始。
+
+根树的 key 包含记号 ID 的运行时版本，因此同 ID 的本地源码替换会卸载旧组件实例并挂载新定义，而无关记号的树不受影响。渲染模式不属于这个 key，切换 HTML/LaTeX 不会重新挂载树。
 
 ## 工具页面
 
@@ -563,4 +601,5 @@ node -e "
 - **矩阵型参考**：`js/notations/BM-like/BM.js`（典型 Matrix 实现）
 - **字符串型参考**：`js/notations/OCN/cOCF.js`（完整自包含记号系统）
 - **PPS 参考**：`js/notations/PPS/sPPS4.js`（含 FS、FSalter、FSShort）
+- **LaTeX 展示适配**：`js/latex-renderer.js` 与 `tests/latex-renderer.test.js`
 - **本地文件管理**：Settings → Local notation files，上传或创建 `docs/example-PrSS.js` 对应模板

@@ -56,6 +56,19 @@ display: function(expr) {
 }
 ```
 
+### `latex`（可选，expr → KaTeX source）
+
+当 `display` 的历史 HTML 不能表达所需排版时，可返回不含 `$...$` 或 `\(...\)` 定界符的 KaTeX 数学源。该函数只影响主树和基本列提示框的展示，不参与导航、导入导出或工具输出。
+
+```js
+latex: function(expr) {
+   if ('' + expr === 'Infinity') return '\\mathrm{Limit}';
+   return String(expr).replace(/,/g, ',\\,');
+}
+```
+
+不实现 `latex` 时，框架会转换 `display(expr)` 中受支持的 `<sub>` / `<sup>`、希腊字母和少量 HTML 实体。应用不提供默认 `\newcommand` 或 `\renewcommand`；用户可在 Settings 中自行定义。
+
 ### `fromDisplay`（推荐，str → expr）
 
 将用户输入的字符串解析为内部表达式。这是 `display` 的逆操作。

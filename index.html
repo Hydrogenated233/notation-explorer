@@ -5,12 +5,15 @@
    <meta charset="UTF-8">
    <meta name="author" content="hyp_cos">
    <title>Notation Explorer</title>
-   <link rel="stylesheet" type="text/css" href="css/index.css?v=folder-tree-5">
+   <link rel="stylesheet" type="text/css" href="lib/katex/katex.min.css">
+   <link rel="stylesheet" type="text/css" href="css/index.css?v=latex-rendering-2">
 </head>
 
 <body>
    <script src="lib/Vue.js"></script>
    <script src="lib/xlsx.full.min.js"></script>
+   <script src="lib/katex/katex.min.js"></script>
+   <script src="js/latex-renderer.js"></script>
    <script src="js/notation-registry.js"></script>
    <script>var nCpSN = 2;</script>
    <div id="app">
@@ -204,12 +207,46 @@
       <div v-if="page==='settings'" class="settings-page">
          <div class="settings-general">
          <h3>{{ L.settings_title }}</h3>
-         <label class="setting-row">
-            <span>{{ L.dark_mode }}</span>
-            <input type="checkbox" v-model="darkMode" />
-         </label>
-         <label class="setting-row">
-            <span>{{ L.diagram_follow }}</span>
+          <label class="setting-row">
+             <span>{{ L.dark_mode }}</span>
+             <input type="checkbox" v-model="darkMode" />
+          </label>
+          <div class="setting-row">
+             <span>{{ L.display_mode }}</span>
+             <span class="setting-segment" role="group" :aria-label="L.display_mode">
+                <button type="button" :class="{ active: displayMode === 'html' }"
+                   :aria-pressed="String(displayMode === 'html')" @click="setDisplayMode('html')">
+                   {{ L.display_html }}
+                </button>
+                <button type="button" :class="{ active: displayMode === 'latex' }"
+                   :aria-pressed="String(displayMode === 'latex')" @click="setDisplayMode('latex')">
+                   {{ L.display_latex }}
+                </button>
+             </span>
+          </div>
+          <label class="setting-block" for="latex-commands">
+             <span class="setting-block__label">{{ L.latex_commands }}</span>
+             <textarea id="latex-commands" class="latex-command-input" v-model="latexCommands"
+                :placeholder="L.latex_commands_placeholder" maxlength="20000" rows="5"
+                spellcheck="false"></textarea>
+             <span v-if="latexCommandsError" class="setting-block__error" role="alert">
+                {{ L.latex_commands_error }}: {{ latexCommandsError }}
+             </span>
+          </label>
+          <label class="setting-row">
+             <span>{{ L.analysis_latex_preview }}</span>
+             <input type="checkbox" v-model="analysisLatexPreview" />
+          </label>
+          <label class="setting-row">
+             <span>{{ L.analysis_input_visible }}</span>
+             <input type="checkbox" v-model="analysisInputVisible" />
+          </label>
+          <label v-if="analysisInputVisible" class="setting-row">
+             <span>{{ L.analysis_input_width }}: {{ analysisInputWidth }}px</span>
+             <input type="range" min="60" max="600" step="10" v-model.number="analysisInputWidth" />
+          </label>
+          <label class="setting-row">
+             <span>{{ L.diagram_follow }}</span>
             <input type="checkbox" v-model="diagram_follow" />
          </label>
          <label class="setting-row">
@@ -262,7 +299,16 @@
       <div class="floating-canvas" id="floatingCanvas" :style="{ left: pCanvas.x + 'px', top: pCanvas.y + 'px' }"
          v-show="showCanvas && !pCanvasModifier.hide">
          <canvas id="hoverCanvas" width="10" height="10"
-            :style="{ width: pCanvasScaled.w + 'px', height: pCanvasScaled.h + 'px' }" />
+               :style="{ width: pCanvasScaled.w + 'px', height: pCanvasScaled.h + 'px' }" />
+      </div>
+      <div v-if="analysisLatexState.visible && analysisLatexState.source" class="analysis-latex-preview"
+         role="status" aria-live="polite"
+         :style="{ left: analysisLatexState.x + 'px', top: analysisLatexState.y + 'px' }"
+         @mousedown.stop>
+         <button type="button" class="analysis-latex-preview__close" title="Close LaTeX preview"
+            aria-label="Close LaTeX preview" @mousedown.stop.prevent="hideAnalysisLatexPreview">&times;</button>
+         <div class="analysis-latex-preview__content"
+            v-html="renderAnalysisLatex(analysisLatexState.source)"></div>
       </div>
       <div class="summary-window" v-show="showSummary"
          :style="{ left: summaryX + 'px', top: summaryY + 'px', width: summaryW + 'px', height: summaryH + 'px' }">
