@@ -13,6 +13,7 @@
    "BM-like/BSM.js",
    "BM-like/CM.js",
    "BM-like/PBMSS.js",
+   "BM-like/PrMS.js",
    "BM-like/TBM.js",
    "BM-like/UPMS.js",
    "BM-like/wMM.js",

@@ -1681,6 +1681,9 @@ function expand_item(item, notation, use_short, max_tier, auto_focus) {
          }
       }
 
+      // Children and generated siblings must stay strictly above their insertion bound.
+      if (notation.compare(result_expr, new_bound) <= 0) return
+
       let new_index
       if (to_parent) {
          new_index = item.index + 1
