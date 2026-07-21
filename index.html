@@ -237,6 +237,10 @@
              <span>{{ L.analysis_latex_preview }}</span>
              <input type="checkbox" v-model="analysisLatexPreview" />
           </label>
+          <label class="setting-row" :class="{ 'is-disabled': !analysisLatexPreview }">
+             <span>{{ L.analysis_latex_inline }}</span>
+             <input type="checkbox" v-model="analysisLatexInline" :disabled="!analysisLatexPreview" />
+          </label>
           <label class="setting-row">
              <span>{{ L.analysis_input_visible }}</span>
              <input type="checkbox" v-model="analysisInputVisible" />

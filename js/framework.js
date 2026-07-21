@@ -71,6 +71,7 @@ const app = Vue.createApp({
       displayMode: 'html',
       latexCommands: '',
       analysisLatexPreview: false,
+      analysisLatexInline: false,
       analysisInputVisible: true,
       analysisInputWidth: 180,
       analysisLatexState: { visible: false, source: '', x: 0, y: 0 },
@@ -148,6 +149,7 @@ const app = Vue.createApp({
                 latex_commands_placeholder: '\\newcommand{\\foo}[1]{#1^2}',
                 latex_commands_error: 'Invalid LaTeX commands',
                 analysis_latex_preview: 'Render analysis as LaTeX',
+                analysis_latex_inline: 'Show LaTeX in analysis fields when not editing',
                 analysis_input_visible: 'Show analysis input',
                 analysis_input_width: 'Analysis input width',
                 tools: 'Tools',
@@ -219,6 +221,7 @@ const app = Vue.createApp({
                 latex_commands_placeholder: '\\newcommand{\\foo}[1]{#1^2}',
                 latex_commands_error: 'LaTeX 命令无效',
                 analysis_latex_preview: '分析文本 LaTeX 渲染',
+                analysis_latex_inline: '非编辑时在分析框中显示 LaTeX',
                 analysis_input_visible: '显示分析输入框',
                 analysis_input_width: '分析输入框宽度',
                 tools: '工具',
@@ -328,6 +331,7 @@ const app = Vue.createApp({
          if (!val) this.hideAnalysisLatexPreview()
          this.saveSettings()
       },
+      analysisLatexInline() { this.saveSettings() },
       analysisInputVisible(val) {
          if (!val) this.hideAnalysisLatexPreview()
          this.saveSettings()
@@ -1070,6 +1074,7 @@ Ctrl + E: expand analysis fundamental sequence
                displayMode: this.displayMode,
                latexCommands: this.latexCommands,
                analysisLatexPreview: this.analysisLatexPreview,
+               analysisLatexInline: this.analysisLatexInline,
                analysisInputVisible: this.analysisInputVisible,
                analysisInputWidth: this.analysisInputWidth,
                diagramFollow: this.diagram_follow,
@@ -1106,6 +1111,7 @@ Ctrl + E: expand analysis fundamental sequence
                self.displayMode = displayMode === 'latex' ? 'latex' : 'html'
                self.latexCommands = typeof s.latexCommands === 'string' ? s.latexCommands : ''
                self.analysisLatexPreview = !!getOr('analysisLatexPreview', false)
+               self.analysisLatexInline = !!getOr('analysisLatexInline', false)
                self.analysisInputVisible = !!getOr('analysisInputVisible', true)
                var inputWidth = Number(getOr('analysisInputWidth', 180))
                self.analysisInputWidth = Math.max(60, Math.min(600, Math.round(inputWidth || 180)))
@@ -1137,6 +1143,7 @@ Ctrl + E: expand analysis fundamental sequence
          this.displayMode = 'html'
          this.latexCommands = ''
          this.analysisLatexPreview = false
+         this.analysisLatexInline = false
          this.analysisInputVisible = true
          this.analysisInputWidth = 180
          this.diagram_follow = false
@@ -1855,6 +1862,21 @@ app.component('notation-list-item', {
       }),
       computed: {
          notation() { return register.get(this.notationId) || {} },
+         analysisSource() {
+            var value = this.item.analysis
+            return String(value === undefined || value === null ? '' : value)
+         },
+         showInlineAnalysisLatex() {
+            return this.$root.analysisLatexPreview &&
+               this.$root.analysisLatexInline &&
+               this.$root.analysisInputVisible &&
+               this.analysisSource.trim().length > 0
+         },
+         renderedInlineAnalysis() {
+            return this.showInlineAnalysisLatex
+               ? this.$root.renderAnalysisLatex(this.analysisSource)
+               : ''
+         },
       },
       methods: {
          renderTooltipAnalysis(comment) {
@@ -2092,10 +2114,15 @@ app.component('notation-list-item', {
       template: `<li><div class="shown-item" :class="{analyzed: item.analysis !== undefined}" @mouseenter="onmouseenter" @mousemove="onmousemove" @mouseleave="onmouseleave" @mousedown="onmousedown">
             <input type="checkbox" v-model="item.hide_child" @mousedown.stop>
             <span ref="analysisInputWrap" class="analysis-input-resize"
-               :class="{ 'is-hidden': !$root.analysisInputVisible }"
+               :class="{
+                  'is-hidden': !$root.analysisInputVisible,
+                  'has-inline-latex': showInlineAnalysisLatex
+               }"
                :style="{ width: $root.analysisInputWidth + 'px' }" @mousedown.stop>
                <input type="text" @mousedown.stop @keydown.stop="onkeydown" @input="onAnalysisInput"
                   ref="input" @focus="onfocus" @blur="onblur" v-model="item.analysis"/>
+               <span v-if="showInlineAnalysisLatex" class="analysis-inline-latex" aria-hidden="true"
+                  v-html="renderedInlineAnalysis"></span>
             </span>
             <notation-expression :notation="notation" :expression="item.expr"></notation-expression>
             <div class="tooltip" v-if="tooltip" :style="tooltipX" @mousedown.stop>

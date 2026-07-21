@@ -375,6 +375,7 @@ ul {
 
 .analysis-input-resize {
   display: inline-block;
+  position: relative;
   min-width: 60px;
   max-width: min(600px, calc(100vw - 80px));
   overflow: hidden;
@@ -395,7 +396,37 @@ ul {
   border: 1px solid transparent;
   border-radius: 3px;
   background: transparent;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s, background 0.15s, opacity 0.1s;
+}
+.analysis-input-resize.has-inline-latex {
+  display: inline-grid;
+  align-items: center;
+}
+.analysis-input-resize.has-inline-latex > input[type="text"],
+.analysis-input-resize.has-inline-latex > .analysis-inline-latex {
+  grid-area: 1 / 1;
+}
+.analysis-input-resize.has-inline-latex:not(:focus-within) > input[type="text"] {
+  opacity: 0;
+}
+.analysis-inline-latex {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  padding: 1px 4px;
+  overflow: hidden;
+  color: #333;
+  cursor: text;
+  pointer-events: none;
+  text-align: left;
+  white-space: nowrap;
+  transition: opacity 0.1s;
+}
+.analysis-inline-latex .katex {
+  font-size: 1em;
+}
+.analysis-input-resize.has-inline-latex:focus-within > .analysis-inline-latex {
+  opacity: 0;
 }
 .analysis-input-resize > input[type="text"]:focus {
   background: #fff;
@@ -494,6 +525,10 @@ ul {
   padding: 10px 0;
   border-bottom: 1px solid #e5e7eb;
   cursor: pointer;
+}
+.setting-row.is-disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 .setting-row span {
   font-size: 14px;
@@ -839,6 +874,9 @@ html.dark .analysis-input-resize > input[type="text"] {
 html.dark .analysis-input-resize > input[type="text"]:focus {
   background: #2d2d2d;
   border-color: #5b7fcf;
+}
+html.dark .analysis-inline-latex {
+  color: #e0e0e0;
 }
 html.dark .shown-item > .notation-expression {
   color: #c0c0c0;

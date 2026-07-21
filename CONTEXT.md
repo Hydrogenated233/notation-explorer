@@ -81,7 +81,7 @@ The presentation-only KaTeX source supplied by optional `latex(expr)` or derived
 User-authored KaTeX macro declarations retained in Settings, with no application-provided `\newcommand` or `\renewcommand` defaults.
 
 **Analysis LaTeX rendering**:
-An optional KaTeX presentation of **Analysis text** in both the focused-input preview and the **Fundamental-sequence tooltip** that does not rewrite the text.
+An optional KaTeX presentation of **Analysis text** in the focused-input preview, the **Fundamental-sequence tooltip**, and optionally the idle analysis field that does not rewrite the text.
 
 **Fundamental-sequence tooltip**:
 The hover panel that shows a node, indexed fundamental-sequence expressions, and their associated **Analysis text**.
@@ -167,6 +167,7 @@ User-authored free-form notes associated with a **Main notation** independently 
 - The default **LaTeX command source** is empty, and each expression render receives an isolated copy of the compiled user macros
 - An invalid **LaTeX command source** reports an error while the last valid macro set remains available for rendering
 - **Analysis LaTeX rendering** is independent of **Expression rendering mode**, renders saved **Analysis text** directly in the focused-input preview and **Fundamental-sequence tooltip**, and reuses the user macro set
+- Idle **Analysis LaTeX rendering** is an optional child setting: a non-empty, unfocused analysis field shows KaTeX, while focusing it restores the raw LaTeX input and focused preview
 - Hiding **Analysis inputs** or the preview never deletes **Analysis text**
 - **Analysis input** visibility and width are global presentation settings; resizing one input updates the shared width
 - A **Fundamental-sequence tooltip** uses shared index, expression, and analysis columns so every expression is left-aligned and every visible semicolon begins after the widest expression

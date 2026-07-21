@@ -364,6 +364,8 @@ Settings 中的 **Local notation files** 工作区将文件和草稿保存在 `l
 
 **Render analysis as LaTeX** 默认关闭，并独立于表达式的 HTML/LaTeX 模式。开启后，非空分析输入框在获得焦点或编辑时显示浮动 KaTeX 预览，基本列提示框也把分号后的分析文本渲染为 KaTeX；关闭时两处继续显示原文本。分析文本直接作为 KaTeX 源处理，不经过 `htmlToLatex()`，并复用用户的 LaTeX 命令。失焦、删除文本、关闭预览或隐藏输入框时只收起浮动预览；分析预览开启时，它优先于同一输入焦点触发的图表浮窗。
 
+**Show LaTeX in analysis fields when not editing** 是上述设置的子开关，默认关闭。两个开关同时开启时，非空分析输入框在失焦状态用同宽的 KaTeX 层显示；点击或用键盘聚焦后立即恢复 raw LaTeX 输入，并继续显示原有浮动预览。空字符串和纯空白始终保留输入框，隐藏分析输入框会同时隐藏 raw 输入和行内 KaTeX。该显示层不改变保存、导入、导出或分析基本列所使用的原始文本。
+
 ## 设置信息持久化
 
 所有用户设置压缩为单个 `localStorage` 键 `ne-config`（JSON 格式），不再分多个键。
@@ -377,6 +379,7 @@ Settings 中的 **Local notation files** 工作区将文件和草稿保存在 `l
 | `displayMode` | string | 表达式渲染模式 (`'html'` / `'latex'`) |
 | `latexCommands` | string | 用户自定义的 KaTeX 宏声明，默认空字符串 |
 | `analysisLatexPreview` | boolean | 是否在聚焦预览和基本列提示框中将分析文本渲染为 LaTeX |
+| `analysisLatexInline` | boolean | 是否在分析文本非编辑状态显示行内 LaTeX；依赖 `analysisLatexPreview` |
 | `analysisInputVisible` | boolean | 是否显示全部分析输入框 |
 | `analysisInputWidth` | number | 全局分析输入框宽度（60..600px） |
 | `diagramFollow` | boolean | 画布跟随鼠标 |
@@ -476,7 +479,7 @@ app.component('notation-tree', { /* 根列表 */ });
 app.component('notation-list-item', { /* 递归节点 */ });
 ```
 
-递归组件通过 `notationId` 从注册表读取当前定义，并把原始表达式对象交给 `notation-expression`。基本列提示框保留 `{ index, expr, comment }`，所有条目共享 index / expression / analysis 三列；即使某项没有分析文本也保留空的第三格，因此每项表达式左对齐，所有可见分号从最长表达式之后的同一位置开始。分析列的正文随 `analysisLatexPreview` 在原文本与 KaTeX 之间切换，分号始终保留在数学公式之外。
+递归组件通过 `notationId` 从注册表读取当前定义，并把原始表达式对象交给 `notation-expression`。基本列提示框保留 `{ index, expr, comment }`，所有条目共享 index / expression / analysis 三列；即使某项没有分析文本也保留空的第三格，因此每项表达式左对齐，所有可见分号从最长表达式之后的同一位置开始。分析列的正文随 `analysisLatexPreview` 在原文本与 KaTeX 之间切换，分号始终保留在数学公式之外。主树中的分析输入始终挂载；启用 `analysisLatexInline` 后只用 `:focus-within` 在 raw 输入与同尺寸 KaTeX 层之间切换，因此方向键导航、自动聚焦和宽度调整仍使用原输入元素。
 
 根树的 key 包含记号 ID 的运行时版本，因此同 ID 的本地源码替换会卸载旧组件实例并挂载新定义，而无关记号的树不受影响。渲染模式不属于这个 key，切换 HTML/LaTeX 不会重新挂载树。
 
