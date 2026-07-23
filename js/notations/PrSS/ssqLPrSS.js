@@ -79,6 +79,19 @@
     return r;
   }
 
+  function isLimitExpr(expr) {
+    return expr === Infinity || (
+      Array.isArray(expr) && expr.length === 1 && expr[0] === Infinity
+    );
+  }
+
+  function compareNotationExpr(a, b) {
+    var aLimit = isLimitExpr(a), bLimit = isLimitExpr(b);
+    if (aLimit || bLimit) return aLimit === bLimit ? 0 : aLimit ? 1 : -1;
+    if (!a.length || !b.length) return a.length === b.length ? 0 : a.length ? 1 : -1;
+    return compareExpr(a, b);
+  }
+
   function exprEq(a, b) { return a.length === b.length && compareExpr(a, b) === 0; }
   function leExpr(a, b)  { return compareExpr(a, b) <= 0; }
 
@@ -643,7 +656,7 @@
     display: displayFunc,
     fromDisplay: fromDisplay,
     able: able,
-    compare: sequence_compare,
+    compare: compareNotationExpr,
     FS: (function(){
       var cache = {};
       return function(seq, n) {

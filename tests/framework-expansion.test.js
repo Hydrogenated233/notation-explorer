@@ -9,7 +9,10 @@ const { NotationRegistryHub } = require('../js/notation-registry.js')
 
 const projectRoot = path.join(__dirname, '..')
 
-function loadFramework() {
+function loadFramework(
+   notationFile = path.join('js', 'notations', 'BM-like', 'PrMS.js'),
+   notationId = 'prms'
+) {
    const hub = new NotationRegistryHub()
    const dataset = { is_root: true, mark: 0, path: '', subitems: [] }
    const root = { currentDataset: dataset }
@@ -43,7 +46,7 @@ function loadFramework() {
    for (const file of [
       path.join('js', 'notations', '00-shared-seq.js'),
       path.join('js', 'notations', '01-shared-matrix.js'),
-      path.join('js', 'notations', 'BM-like', 'PrMS.js'),
+      notationFile,
       path.join('js', 'framework.js'),
    ]) {
       vm.runInContext(
@@ -53,7 +56,7 @@ function loadFramework() {
       )
    }
 
-   return { context, root, notation: hub.main.get('prms') }
+   return { context, root, notation: hub.main.get(notationId) }
 }
 
 function expand(context, item, notation) {
@@ -104,4 +107,23 @@ test('a PrMS fixed successor does not duplicate a generated sibling', () => {
    assert.equal(parent.subitems.length, 2)
    assert.equal(notation.display(parent.subitems[1].expr), '(1)(2,1)(1)(2)')
    assert.equal(successor.subitems.length, 0)
+})
+
+test('Subsequential LPrSS inserts the nested third Limit term', () => {
+   const { context, root, notation } = loadFramework(
+      path.join('js', 'notations', 'PrSS', 'ssqLPrSS.js'),
+      'ssqprss'
+   )
+   const limit = treeItem([Infinity], [], 0, root.currentDataset, '0')
+   const zero = treeItem([], [], 1, root.currentDataset, '1')
+   root.currentDataset.subitems.push(limit, zero)
+
+   expand(context, limit, notation)
+   expand(context, limit, notation)
+   expand(context, limit, notation)
+
+   assert.deepEqual(
+      limit.subitems.map((item) => notation.display(item.expr)),
+      ['1,(1,2)', '1,2', '1']
+   )
 })
