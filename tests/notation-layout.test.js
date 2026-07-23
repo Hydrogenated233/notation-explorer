@@ -65,7 +65,7 @@ test('generated manifest exactly matches repository discovery and deterministic 
    const discovered = discoverNotationFiles()
    const generatedSource = fs.readFileSync(path.join(projectRoot, 'js', 'notation-manifest.js'), 'utf8')
 
-   assert.equal(discovered.length, 61)
+   assert.equal(discovered.length, 72)
    assert.deepEqual(manifest, discovered)
    assert.deepEqual(discovered, NotationFileIndex.sortPaths(discovered))
    assert.equal(normalizeLineEndings(generatedSource), normalizeLineEndings(currentManifestSource()))
@@ -75,20 +75,33 @@ test('generated manifest exactly matches repository discovery and deterministic 
    assert.equal(discovered.some((file) => file.includes('fPPS4')), false)
    assert.equal(discovered.includes('MN/Tomega^omegaMN.js'), true)
    assert.equal(discovered.includes('aSAN/aSAN~3+.js'), true)
+   assert.equal(discovered.includes('BM-like/GMS/zz-smilelee-remote.js'), true)
+   assert.equal(discovered.includes('BM-like/nSS/zz-smilelee-remote.js'), true)
 })
 
 test('index delegates notation and application startup to the generated loader', () => {
    const html = fs.readFileSync(path.join(projectRoot, 'index.html'), 'utf8')
+   const assetVersion = Loader.ASSET_VERSION.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
    assert.doesNotMatch(html, /<script src="js\/notations\//)
-   assert.match(html, /<script src="js\/notation-file-index\.js"><\/script>/)
-   assert.match(html, /<script src="js\/notation-manifest\.js"><\/script>/)
-   assert.match(html, /<script src="js\/notation-loader\.js"><\/script>/)
+   assert.match(html, new RegExp('<script src="js/notation-file-index\\.js\\?v=' + assetVersion + '"><\\/script>'))
+   assert.match(html, /<script src="js\/notation-manifest\.js(?:\?[^"\s]*)?"><\/script>/)
+   assert.match(html, /<script src="js\/notation-loader\.js(?:\?[^"\s]*)?"><\/script>/)
    assert.match(html, /<link rel="stylesheet" type="text\/css" href="lib\/katex\/katex\.min\.css">/)
    assert.match(html, /<script src="lib\/katex\/katex\.min\.js"><\/script>/)
-   assert.match(html, /<script src="js\/latex-renderer\.js"><\/script>/)
+   assert.match(html, new RegExp('<script src="js/latex-renderer\\.js\\?v=' + assetVersion + '"><\\/script>'))
+   assert.match(html, new RegExp('<script src="js/notation-registry\\.js\\?v=' + assetVersion + '"><\\/script>'))
+   assert.match(html, /<script src="js\/smilelee-notation-bundle\.js(?:\?[^"\s]*)?"><\/script>/)
+   assert.match(html, /<script src="js\/smilelee-notation-adapter\.js(?:\?[^"\s]*)?"><\/script>/)
+   assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1">/)
+   assert.match(html, /class="ns-generator-controls"/)
+   assert.doesNotMatch(html, /class="notation-generator-bar"/)
    assert.ok(html.indexOf('lib/katex/katex.min.js') < html.indexOf('js/latex-renderer.js'))
    assert.ok(html.indexOf('js/latex-renderer.js') < html.indexOf('js/notation-loader.js'))
+   assert.ok(html.indexOf('js/smilelee-notation-bundle.js') < html.indexOf('js/smilelee-notation-adapter.js'))
+   assert.ok(html.indexOf('js/smilelee-notation-adapter.js') < html.indexOf('js/notation-loader.js'))
+   assert.equal(Loader.APP_SCRIPTS.includes('js/notation-display.js'), true)
+   assert.equal(Loader.APP_SCRIPTS.includes('js/notation-credits.js'), true)
 })
 
 test('fundamental-sequence tooltip shares one grid across every rendered row', () => {
@@ -113,7 +126,6 @@ test('every discovered built-in loads and initializes in manifest order', () => 
    const context = vm.createContext({
       register: hub.main,
       analysis_register: hub.analysis,
-      nCpSN: 2,
       console,
       setTimeout,
       clearTimeout,
@@ -121,6 +133,10 @@ test('every discovered built-in loads and initializes in manifest order', () => 
    context.window = context
    context.globalThis = context
    const catalog = []
+
+   for (const file of ['js/smilelee-notation-bundle.js', 'js/smilelee-notation-adapter.js']) {
+      vm.runInContext(fs.readFileSync(path.join(projectRoot, file), 'utf8'), context, { filename: file })
+   }
 
    for (const file of manifest) {
       const mainBefore = Loader.registrySnapshot(hub.main)
@@ -152,11 +168,15 @@ test('every discovered built-in loads and initializes in manifest order', () => 
       })
    })
 
-   assert.equal(hub.main.length, 63)
+   assert.equal(hub.main.length, 132)
    assert.equal(hub.analysis.length, 6)
    assert.equal(Boolean(hub.main.get('prms')), true)
    assert.equal(Boolean(hub.main.get('spps4')), true)
    assert.equal(Boolean(hub.main.get('fpps4')), false)
+   assert.equal(Boolean(hub.main.get('WSMv1.4.1')), true)
+   assert.equal(Boolean(hub.main.get('omega')), true)
+   assert.equal(Boolean(hub.main.get('cms')), false)
+   assert.equal(Boolean(hub.main.get('omega-y-actual')), false)
    assert.equal(catalog.length, manifest.length)
    assert.deepEqual(catalog.flatMap((record) => record.mainIds), hub.main.map((entry) => entry.id))
    assert.deepEqual(catalog.flatMap((record) => record.analysisIds), hub.analysis.map((entry) => entry.id))

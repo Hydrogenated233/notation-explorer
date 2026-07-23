@@ -83,6 +83,48 @@ body::after {
   position: relative;
   margin-bottom: 12px;
 }
+.equiv-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: -4px 0 12px;
+  color: #667085;
+  font-size: 12px;
+}
+.equiv-bar__label {
+  margin-right: 2px;
+  font-weight: 600;
+}
+.equiv-bar > button {
+  min-height: 28px;
+  padding: 3px 9px;
+  border: 1px solid #d0d5dd;
+  border-radius: 4px;
+  background: transparent;
+  color: #475467;
+  cursor: pointer;
+}
+.equiv-bar > button:hover {
+  border-color: #98a2b3;
+  background: #f0f1f3;
+}
+.equiv-bar > button.active,
+.equiv-bar > button.active:hover {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+.equiv-bar__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  cursor: pointer;
+}
+.equiv-bar__toggle input {
+  margin: 0;
+}
 .ns-trigger.ns-trigger {
   display: inline-flex;
   align-items: center;
@@ -162,12 +204,20 @@ body::after {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+.ns-tree-line {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+}
 .ns-tree-row.ns-tree-row {
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr) auto;
   align-items: center;
   gap: 7px;
-  width: 100%;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
   min-height: 34px;
   padding-top: 6px;
   padding-right: 12px;
@@ -237,6 +287,44 @@ body::after {
   font-size: 11px;
   font-weight: 400;
   text-align: right;
+}
+.ns-generator-controls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  min-width: 82px;
+  padding: 4px 8px 4px 2px;
+  background: #f8fafc;
+}
+.ns-generator-controls button {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #d0d5dd;
+  border-radius: 4px;
+  background: transparent;
+  color: #344054;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ns-generator-controls button:hover {
+  border-color: #98a2b3;
+  background: #eef2f6;
+}
+.ns-generator-controls button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.ns-generator-controls output {
+  min-width: 24px;
+  color: #667085;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 .ns-empty {
   margin: 0;
@@ -443,6 +531,13 @@ ul {
 .notation-expression.is-latex .katex {
   font-size: 1.08em;
 }
+.notation-expression__original {
+  color: #667085;
+}
+.notation-expression__separator {
+  color: #98a2b3;
+  user-select: none;
+}
 .latex-render-error {
   color: #b91c1c;
   font-family: "Consolas", "Courier New", monospace;
@@ -499,6 +594,14 @@ ul {
   white-space: nowrap;
   color: #666;
   flex-shrink: 0;
+}
+.notation-credit {
+  max-width: 760px;
+  margin: 14px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid #e4e7ec;
+  color: #667085;
+  font-size: 12px;
 }
 
 /* ---------- Floating Canvas ---------- */
@@ -841,6 +944,21 @@ html.dark .ns-tree-row.is-folder {
   background: #24262a;
   color: #d0d3d8;
 }
+html.dark .ns-generator-controls {
+  background: #24262a;
+}
+html.dark .ns-generator-controls button {
+  border-color: #4b5563;
+  background: transparent;
+  color: #d1d5db;
+}
+html.dark .ns-generator-controls button:hover {
+  border-color: #6b7280;
+  background: #30333a;
+}
+html.dark .ns-generator-controls output {
+  color: #a7b0bf;
+}
 html.dark .ns-tree-row.selected {
   background: #2d3748;
 }
@@ -856,6 +974,24 @@ html.dark .ns-tree-chevron {
 html.dark .ns-folder-count,
 html.dark .ns-empty {
   color: #777;
+}
+html.dark .equiv-bar {
+  color: #a7b0bf;
+}
+html.dark .equiv-bar > button {
+  border-color: #4b5563;
+  background: transparent;
+  color: #d1d5db;
+}
+html.dark .equiv-bar > button:hover {
+  border-color: #6b7280;
+  background: #30333a;
+}
+html.dark .equiv-bar > button.active,
+html.dark .equiv-bar > button.active:hover {
+  border-color: #4a6fb0;
+  background: #4a6fb0;
+  color: #fff;
 }
 html.dark .shown-item:hover {
   background: #2a2a2a;
@@ -880,6 +1016,14 @@ html.dark .analysis-inline-latex {
 }
 html.dark .shown-item > .notation-expression {
   color: #c0c0c0;
+}
+html.dark .notation-expression__original,
+html.dark .notation-expression__separator {
+  color: #8b909a;
+}
+html.dark .notation-credit {
+  border-top-color: #3f4650;
+  color: #9ca3af;
 }
 html.dark .tooltip {
   background: #2d2d2d;

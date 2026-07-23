@@ -4,6 +4,51 @@ const node_map = new Map()
 
 const first_main_id = () => register.length ? register[0].id : ''
 const second_main_id = () => register.length > 1 ? register[1].id : first_main_id()
+const N_CPS_GENERATOR_ID = 'n-cps'
+const BUILTIN_NOTATION_OWNER = '@notation-explorer/builtin'
+const MAX_GENERATOR_VALUE = 64
+
+const remote_generator_category = (categoryId) => {
+   var bundle = window.SmileLeeNotationBundle
+   if (!bundle || !bundle.categoriesById) return undefined
+   var category = bundle.categoriesById[categoryId]
+   return category && category.generator ? category : undefined
+}
+
+const generator_definition = (categoryId) => {
+   var local = window.NotationGenerators && window.NotationGenerators[categoryId]
+   if (local && typeof local.create === 'function') return local
+   var category = remote_generator_category(categoryId)
+   if (!category) return undefined
+   return {
+      id: categoryId,
+      start: category.generator.start,
+      initial: category.generator.initial,
+      maximum: Math.max(category.generator.initial, MAX_GENERATOR_VALUE),
+      create: function(index) {
+         var adapter = window.SmileLeeNotationAdapter
+         var bundle = window.SmileLeeNotationBundle
+         if (!adapter || typeof adapter.createGeneratedDefinition !== 'function' || !bundle) {
+            throw new Error('The notation generator runtime is unavailable.')
+         }
+         return adapter.createGeneratedDefinition(categoryId, index, bundle)
+      },
+   }
+}
+
+const generator_category_ids = () => {
+   var ids = []
+   var bundle = window.SmileLeeNotationBundle
+   if (bundle && Array.isArray(bundle.generatorCategoryIds)) ids = bundle.generatorCategoryIds.slice()
+   Object.keys(window.NotationGenerators || {}).forEach(function(id) {
+      if (ids.indexOf(id) === -1) ids.push(id)
+   })
+   return ids
+}
+
+const generated_notation_info = (notation) => {
+   return notation && (notation.generatedFamily || notation.upstreamGenerator)
+}
 
 const init_datasets = () => {
    var datasets = Object.create(null)
@@ -69,14 +114,15 @@ const app = Vue.createApp({
       page: 'explore',
       darkMode: false,
       displayMode: 'html',
+      equivActive: Object.create(null),
+      equivHideOriginal: Object.create(null),
       latexCommands: '',
       analysisLatexPreview: false,
       analysisLatexInline: false,
       analysisInputVisible: true,
       analysisInputWidth: 180,
       analysisLatexState: { visible: false, source: '', x: 0, y: 0 },
-      nParamVal: 2,
-      nParamInput: 2,
+      generatorState: Object.create(null),
       toolsNotation: first_main_id(),
       toolsOpts: { limitTerm: 6, maxSteps: 50, maxN: 1, preview: 8, maxVisited: 2000 },
       toolsDiffA: first_main_id(),
@@ -84,6 +130,7 @@ const app = Vue.createApp({
       toolsDiffOpts: { limitTerm: 6, maxSteps: 10, maxN: 3, maxVisited: 200 },
       toolsOutput: '',
       toolsExpandNotation: first_main_id(),
+      toolsExpandEquiv: '',
       toolsExpandExpr: '',
       toolsExpandN: 0,
       notationSearch: '',
@@ -115,8 +162,6 @@ const app = Vue.createApp({
          void this.notationVersion;
          return analysis_register.get(this.currentAnalysisId) || {};
       },
-      showNParam() { return !!this.currentNotation.nParam },
-      nHelp() { return this.currentNotation.nHelp || '' },
       L() {
          const t = {
             en: {
@@ -145,6 +190,22 @@ const app = Vue.createApp({
                 display_mode: 'Expression rendering',
                 display_html: 'HTML',
                 display_latex: 'LaTeX',
+                'equiv.label': 'Equivalent notation:',
+                'equiv.none': '(none)',
+                'equiv.default': 'Original',
+                'equiv.hide-original': 'Hide original',
+                'display.index': 'Index',
+                'display.layer': 'Layer',
+                'display.index-marked': 'Annotated',
+                'display.index-simple': 'Simple index',
+                'display.layer-simple': 'Simple layer',
+                'display.simple': 'Simple',
+                'display.pocn': 'Projection OCN',
+                'display.veblen-separate': 'Separate last term',
+                'display.btl-m1y-nss-combined': 'Combined',
+                'display.pocn-sup': 'Superscript',
+                'display.pocn-colored': 'Projection OCN (colored)',
+                'expand.equiv': 'Equiv',
                 latex_commands: 'LaTeX commands',
                 latex_commands_placeholder: '\\newcommand{\\foo}[1]{#1^2}',
                 latex_commands_error: 'Invalid LaTeX commands',
@@ -179,7 +240,8 @@ const app = Vue.createApp({
                tools_pps_input: 'PPS Sequence',
                tools_pps_convert: 'Translate',
                n_param_label: 'n =',
-               n_param_confirm: 'Apply',
+               generator_add: 'Add next variant',
+               generator_remove: 'Remove last added variant',
                 notation_search_placeholder: 'Search notation...',
                 notation_search_empty: 'No matching notation',
                 notation_builtin_folder: 'Built-in',
@@ -217,6 +279,22 @@ const app = Vue.createApp({
                 display_mode: '表达式渲染',
                 display_html: 'HTML',
                 display_latex: 'LaTeX',
+                'equiv.label': '等价表示:',
+                'equiv.none': '(无)',
+                'equiv.default': '原记号',
+                'equiv.hide-original': '隐藏原表达式',
+                'display.index': '标记列标',
+                'display.layer': '标记层级',
+                'display.index-marked': '显示列标',
+                'display.index-simple': '简化标记层级',
+                'display.layer-simple': '简化标记列标',
+                'display.simple': '简化形式',
+                'display.pocn': '投影 OCN',
+                'display.veblen-separate': '分离末项',
+                'display.btl-m1y-nss-combined': '合并形式',
+                'display.pocn-sup': '上标形式',
+                'display.pocn-colored': '投影 OCN (彩色)',
+                'expand.equiv': '等价表示',
                 latex_commands: 'LaTeX 命令',
                 latex_commands_placeholder: '\\newcommand{\\foo}[1]{#1^2}',
                 latex_commands_error: 'LaTeX 命令无效',
@@ -251,7 +329,8 @@ const app = Vue.createApp({
                tools_pps_input: 'PPS 序列',
                tools_pps_convert: '转换',
                n_param_label: 'n =',
-               n_param_confirm: '确定',
+               generator_add: '增加下一个变种',
+               generator_remove: '移除最后增加的变种',
                 notation_search_placeholder: '搜索记号...',
                 notation_search_empty: '无匹配记号',
                 notation_builtin_folder: '内置记号',
@@ -272,6 +351,7 @@ const app = Vue.createApp({
          void this.notationVersion;
          if (!window.NotationMenu) return [];
          var manager = window.localNotationManager;
+         var remoteBundle = window.SmileLeeNotationBundle;
          return window.NotationMenu.buildTree({
             catalog: window.BUILTIN_NOTATION_CATALOG || [],
             notations: register.map(function(notation) { return notation; }),
@@ -281,6 +361,11 @@ const app = Vue.createApp({
             entriesForOwner: function(ownerId) { return register.entriesForOwner(ownerId); },
             builtinLabel: this.L.notation_builtin_folder,
             localLabel: this.L.notation_local_folder,
+            remoteCategories: remoteBundle && remoteBundle.categories || [],
+            remoteNotationIds: remoteBundle && remoteBundle.notations
+               ? remoteBundle.notations.map(function(notation) { return notation.id; })
+               : [],
+            generatorState: this.generatorState,
          });
       },
       notationMenuRows() {
@@ -290,6 +375,25 @@ const app = Vue.createApp({
             this.notationExpandedNodes,
             this.notationSearch
          );
+      },
+      currentEquivalentOptions() {
+         void this.notationVersion
+         return this.equivalentOptionsFor(this.currentNotation)
+      },
+      currentEquivalentId() {
+         return this.effectiveEquivalentId(this.currentNotation)
+      },
+      currentEquivalentHideOriginal() {
+         return this.equivalentHideOriginalFor(this.currentNotationId)
+      },
+      currentNotationCredit() {
+         void this.notationVersion
+         if (!window.NotationCredits) return ''
+         return window.NotationCredits.resolveCredit(this.currentNotation, this.lang)
+      },
+      toolsExpandEquivalentOptions() {
+         void this.notationVersion
+         return this.equivalentOptionsFor(register.get(this.toolsExpandNotation))
       },
       lastSaveLabel() {
          if (this.lastSaveTime === null) return '';
@@ -359,15 +463,293 @@ const app = Vue.createApp({
          this.initSheets();
          this.saveSettings();
       },
-      nParamVal(val) {
-         window.nCpSN = val;
-         this.saveSettings();
-      },
       autoSaveInterval() { this.saveSettings(); this.startAutoSave(); },
       autoSaveHidden() { this.saveSettings(); },
       notationSearch() { this.notationMenuFocusIndex = -1; },
+      toolsExpandNotation() { this.ensureToolsExpandEquivalent() },
    },
    methods: {
+      generatorCurrent(categoryId) {
+         var value = this.generatorState && this.generatorState[categoryId]
+         var definition = generator_definition(categoryId)
+         if (!definition) return 0
+         return Number.isSafeInteger(value) && value >= definition.start &&
+            value <= this.generatorMaximum(categoryId)
+            ? value
+            : definition.initial
+      },
+      generatorMaximum(categoryId) {
+         var definition = generator_definition(categoryId)
+         if (!definition) return 0
+         return Number.isSafeInteger(definition.maximum)
+            ? definition.maximum : Math.max(definition.initial, MAX_GENERATOR_VALUE)
+      },
+      generatorCanIncrement(categoryId) {
+         return !!generator_definition(categoryId) &&
+            this.generatorCurrent(categoryId) < this.generatorMaximum(categoryId)
+      },
+      generatorCanDecrement(categoryId) {
+         var definition = generator_definition(categoryId)
+         return !!definition && this.generatorCurrent(categoryId) > definition.start
+      },
+      installGeneratedNotation(categoryId, index, restoreAnalysis) {
+         var definition = generator_definition(categoryId)
+         if (!definition) throw new Error('Unknown notation generator: ' + categoryId)
+         var notation = definition.create(index)
+         var generatedInfo = generated_notation_info(notation)
+         var existing = register.get(notation.id)
+         if (existing) {
+            var existingInfo = generated_notation_info(existing)
+            if (
+               register.ownerOf(existing.id) === BUILTIN_NOTATION_OWNER &&
+               existingInfo && existingInfo.categoryId === categoryId &&
+               existingInfo.index === index
+            ) return existing
+            throw new Error('Notation id is already registered: ' + notation.id)
+         }
+         if (!generatedInfo || generatedInfo.categoryId !== categoryId || generatedInfo.index !== index) {
+            throw new Error('Generated notation metadata mismatch: ' + notation.id)
+         }
+
+         var dataset = init_dataset(notation)
+         register.push(notation)
+         this.datasets[notation.id] = dataset
+         this.notationRevisions[notation.id] = (this.notationRevisions[notation.id] || 0) + 1
+         if (restoreAnalysis) {
+            try {
+               this.restoreNotationAnalysis(notation.id, BUILTIN_NOTATION_OWNER)
+            } catch (error) {
+               console.warn('Restore generated notation analysis failed for "' + notation.id + '"', error)
+            }
+         }
+         return notation
+      },
+      restoreGeneratedNotations() {
+         var changed = false
+         var self = this
+         generator_category_ids().forEach(function(categoryId) {
+            var definition = generator_definition(categoryId)
+            if (!definition) return
+            var target = self.generatorCurrent(categoryId)
+            for (var removeIndex = definition.initial; removeIndex > target; removeIndex--) {
+               try {
+                  var removeNotation = definition.create(removeIndex)
+                  register.unregister(removeNotation.id, BUILTIN_NOTATION_OWNER)
+                  delete self.datasets[removeNotation.id]
+                  changed = true
+               } catch (error) {
+                  self.generatorState[categoryId] = removeIndex
+                  console.warn(
+                     'Restore generated notation removal failed for ' + categoryId + '[' + removeIndex + ']',
+                     error
+                  )
+                  break
+               }
+            }
+            if (target < definition.initial) return
+            var restored = definition.initial
+            for (var index = definition.initial + 1; index <= target; index++) {
+               try {
+                  self.installGeneratedNotation(categoryId, index, false)
+                  restored = index
+                  changed = true
+               } catch (error) {
+                  self.generatorState[categoryId] = restored
+                  console.warn(
+                     'Restore generated notation failed for ' + categoryId + '[' + index + ']',
+                     error
+                  )
+                  break
+               }
+            }
+         })
+         if (changed) this.notationVersion++
+      },
+      incrementGenerator(categoryId) {
+         if (!this.generatorCanIncrement(categoryId)) return
+         try {
+            var current = this.generatorCurrent(categoryId)
+            var next = current + 1
+            this.installGeneratedNotation(categoryId, next, true)
+            this.generatorState[categoryId] = next
+            this.notationVersion++
+            this.saveSettings()
+            this.saveAnalysis()
+         } catch (error) {
+            console.error('Add generated notation failed.', error)
+            window.alert(error && error.message || String(error))
+         }
+      },
+      decrementGenerator(categoryId) {
+         if (!this.generatorCanDecrement(categoryId)) return
+         try {
+            var current = this.generatorCurrent(categoryId)
+            var next = current - 1
+            var definition = generator_definition(categoryId)
+            var generated = definition.create(current)
+            var notation = register.get(generated.id)
+            var generatedInfo = generated_notation_info(notation)
+            if (
+               !notation || !generatedInfo ||
+               register.ownerOf(notation.id) !== BUILTIN_NOTATION_OWNER ||
+               generatedInfo.categoryId !== categoryId ||
+               generatedInfo.index !== current
+            ) {
+               throw new Error('Generated notation is not registered: ' + generated.id)
+            }
+
+            var oldOrder = register.map(function(entry) { return entry.id })
+            var snapshot = {
+               mainOrder: oldOrder,
+               currentNotationId: this.currentNotationId,
+               currentAnalysisId: this.currentAnalysisId,
+            }
+            this.stashNotationData(notation.id, BUILTIN_NOTATION_OWNER)
+            if (this.currentNotationId === notation.id) {
+               this.allNoteSheets[this.dataKeyForId(notation.id, BUILTIN_NOTATION_OWNER)] = this.noteSheets
+            }
+            this.saveAnalysis()
+            register.unregister(notation.id, BUILTIN_NOTATION_OWNER)
+            delete this.datasets[notation.id]
+            this.generatorState[categoryId] = next
+            this.reconcileNotationSelections(
+               snapshot,
+               { change: { main: { added: [] } } },
+               'generator-decrement'
+            )
+            this.notationVersion++
+            this.saveSettings()
+            this.saveAnalysis()
+         } catch (error) {
+            console.error('Remove generated notation failed.', error)
+            window.alert(error && error.message || String(error))
+         }
+      },
+      resolveNotationDisplay(notation, requestedId) {
+         if (window.NotationDisplay) {
+            return window.NotationDisplay.resolveDisplay(notation, requestedId)
+         }
+         return {
+            plain: notation.display,
+            html: notation.display,
+            latex: notation.latex || notation.display,
+            fromDisplay: notation.fromDisplay,
+            fromDisplayAlter: notation.fromDisplay_alter,
+            requestedId: requestedId || undefined,
+            effectiveId: undefined,
+            isEquivalent: false,
+         }
+      },
+      equivalentOptionsFor(notation) {
+         if (!notation || !window.NotationDisplay) return []
+         var self = this
+         return window.NotationDisplay.listEquivalentDisplays(notation).map(function (option) {
+            return {
+               id: option.id,
+               label: window.NotationDisplay.formatDisplayName(
+                  option.id,
+                  option.spec,
+                  function (key) { return self.L[key] || key }
+               ),
+            }
+         })
+      },
+      equivalentStateKey(notationId, ownerId) {
+         return this.dataKeyForId(notationId, ownerId)
+      },
+      migrateEquivalentStateMap(values) {
+         var migrated = Object.create(null)
+         var self = this
+         var legacyNCpSKey = BUILTIN_NOTATION_OWNER + '::' + N_CPS_GENERATOR_ID
+         var currentNCpSKey = BUILTIN_NOTATION_OWNER + '::2-cps'
+         Object.keys(values || {}).forEach(function(key) {
+            if (key.indexOf('::') === -1) return
+            var targetKey = key === legacyNCpSKey ? currentNCpSKey : key
+            migrated[targetKey] = values[key]
+         })
+         Object.keys(values || {}).forEach(function(notationId) {
+            if (notationId.indexOf('::') !== -1) return
+            if (notationId === N_CPS_GENERATOR_ID) {
+               if (migrated[currentNCpSKey] === undefined) {
+                  migrated[currentNCpSKey] = values[notationId]
+               }
+               return
+            }
+            var owners = []
+            var activeOwner = register.ownerOf(notationId)
+            if (activeOwner) owners.push(activeOwner)
+            var manager = window.localNotationManager
+            if (manager && typeof manager.listFiles === 'function') {
+               manager.listFiles().forEach(function(file) {
+                  var knownIds = (file.knownMainIds || []).concat(
+                     file.manifest && Array.isArray(file.manifest.main) ? file.manifest.main : []
+                  )
+                  if (knownIds.indexOf(notationId) !== -1 && owners.indexOf(file.id) === -1) {
+                     owners.push(file.id)
+                  }
+               })
+            }
+            if (owners.length > 1) return
+            var owner = owners[0] || BUILTIN_NOTATION_OWNER
+            var targetKey = self.equivalentStateKey(notationId, owner)
+            if (migrated[targetKey] === undefined) migrated[targetKey] = values[notationId]
+         })
+         return migrated
+      },
+      requestedEquivalentId(notationId, ownerId) {
+         var key = this.equivalentStateKey(notationId, ownerId)
+         var value = this.equivActive && this.equivActive[key]
+         return typeof value === 'string' && value ? value : undefined
+      },
+      effectiveEquivalentId(notation) {
+         if (!notation || !notation.id) return ''
+         try {
+            return this.resolveNotationDisplay(
+               notation,
+               this.requestedEquivalentId(notation.id)
+            ).effectiveId || ''
+         } catch (error) {
+            return ''
+         }
+      },
+      equivalentHideOriginalFor(notationId, ownerId) {
+         if (!notationId || !this.equivHideOriginal) return true
+         var key = this.equivalentStateKey(notationId, ownerId)
+         return Object.prototype.hasOwnProperty.call(this.equivHideOriginal, key)
+            ? !!this.equivHideOriginal[key]
+            : true
+      },
+      setCurrentEquivalent(equivalentId) {
+         var notation = this.currentNotation
+         if (!notation || !notation.id) return
+         var requested = typeof equivalentId === 'string' && equivalentId ? equivalentId : undefined
+         var effective = requested
+            ? this.resolveNotationDisplay(notation, requested).effectiveId
+            : undefined
+         var key = this.equivalentStateKey(notation.id)
+         if (effective) this.equivActive[key] = effective
+         else delete this.equivActive[key]
+         this.saveSettings()
+      },
+      setCurrentEquivalentHideOriginal(value) {
+         if (!this.currentNotationId) return
+         this.equivHideOriginal[this.equivalentStateKey(this.currentNotationId)] = !!value
+         this.saveSettings()
+      },
+      ensureToolsExpandEquivalent() {
+         var notation = register.get(this.toolsExpandNotation)
+         if (!notation || !this.toolsExpandEquiv) {
+            this.toolsExpandEquiv = ''
+            return
+         }
+         try {
+            if (!this.resolveNotationDisplay(notation, this.toolsExpandEquiv).effectiveId) {
+               this.toolsExpandEquiv = ''
+            }
+         } catch (error) {
+            this.toolsExpandEquiv = ''
+         }
+      },
       setDisplayMode(mode) {
          if (mode === 'html' || mode === 'latex') this.displayMode = mode
       },
@@ -558,6 +940,16 @@ Ctrl + E: expand analysis fundamental sequence
             if (key.indexOf(prefix) === 0) delete archive[key];
          });
       },
+      clearEquivalentStateForIds(ids, ownerId) {
+         var active = this.equivActive
+         var hidden = this.equivHideOriginal
+         var self = this
+         ;(ids || []).forEach(function(id) {
+            var key = self.equivalentStateKey(id, ownerId)
+            delete active[key]
+            delete hidden[key]
+         })
+      },
       purgeOwnerData(ownerId) {
          var prefix = ownerId + '::';
          var archive = this.analysisArchive;
@@ -588,13 +980,11 @@ Ctrl + E: expand analysis fundamental sequence
          var analysisList;
          if (version >= 2) {
             analysisList = archived.items.map(function (item) {
-               if (!item || item.expr === undefined || item.expr === null) return null;
-               if (Array.isArray(item.expr)) {
-                  for (var i = 0; i < item.expr.length; i++) {
-                     if (item.expr[i] === null || (typeof item.expr[i] === 'number' && !isFinite(item.expr[i]))) return null;
-                  }
-               }
-               return [item.expr, item.analysis || '', item.hide ? true : undefined];
+               var expr = restoreArchivedExpression(notation, item);
+               if (expr === undefined) return null;
+               var analysis = Object.prototype.hasOwnProperty.call(item, 'analysis')
+                  ? item.analysis : undefined;
+               return [expr, analysis, item.hide ? true : undefined];
             }).filter(function (item) { return item !== null; });
          } else {
             analysisList = archived.items.map(function (entry) {
@@ -653,6 +1043,7 @@ Ctrl + E: expand analysis fundamental sequence
          if (!change) {
             this.notationVersion++;
             if (action === 'delete') {
+               this.clearEquivalentStateForIds(result.file.knownMainIds || [], ownerId);
                this.purgeOwnerData(ownerId);
                this.reconcileNotationSelections(snapshot, result, action);
                this.saveAnalysis();
@@ -661,6 +1052,21 @@ Ctrl + E: expand analysis fundamental sequence
          }
          var resetAnalysis = action === 'save' || action === 'replace-upload' ||
             (action === 'enable' && result.sourceChanged);
+
+         if (action === 'delete') {
+            this.clearEquivalentStateForIds(
+               (result.file.knownMainIds || []).concat(change.main.removed.map(function(entry) { return entry.id })),
+               ownerId
+            );
+         } else if (resetAnalysis) {
+            var addedIds = new Set(change.main.added.map(function(entry) { return entry.id }));
+            var previousMainIds = result.previous && result.previous.manifest &&
+               Array.isArray(result.previous.manifest.main)
+               ? result.previous.manifest.main
+               : change.main.removed.map(function(entry) { return entry.id });
+            this.clearEquivalentStateForIds(previousMainIds
+               .filter(function(id) { return !addedIds.has(id) }), ownerId);
+         }
 
          for (var i = 0; i < change.main.removed.length; i++) {
             delete this.datasets[change.main.removed[i].id];
@@ -712,13 +1118,18 @@ Ctrl + E: expand analysis fundamental sequence
       serializeDataset(notationId) {
          var dataset = this.datasets[notationId];
          if (!dataset) return [];
+         var notation = register.get(notationId);
          var self = this;
          var items = [];
          var walk = function (node) {
             for (var i = node.subitems.length - 1; i >= 0; i--) walk(node.subitems[i]);
-            if (node.analysis !== undefined) {
-               var item = { expr: node.expr, analysis: node.analysis };
-               if (self.autoSaveHidden && node.hide_child) item.hide = true;
+            var saveAnalysis = node.analysis !== undefined;
+            var saveHidden = self.autoSaveHidden && node.hide_child;
+            if (saveAnalysis || saveHidden) {
+               var item = serializeArchivedExpression(notation, node.expr);
+               if (item.expr === undefined && typeof item.display !== 'string') return;
+               if (saveAnalysis) item.analysis = node.analysis;
+               if (saveHidden) item.hide = true;
                items.push(item);
             }
          };
@@ -752,7 +1163,7 @@ Ctrl + E: expand analysis fundamental sequence
             self.stashNotationData(notation.id, register.ownerOf(notation.id));
          });
          return {
-            version: 3,
+            version: 4,
             savedAt: Date.now(),
             notations: this.analysisArchive,
             noteSheets: this.allNoteSheets,
@@ -784,29 +1195,48 @@ Ctrl + E: expand analysis fundamental sequence
          self.allNoteSheets = Object.create(null);
 
          if (version >= 3) {
+            var legacyNCpSKey = BUILTIN_NOTATION_OWNER + '::' + N_CPS_GENERATOR_ID;
+            var currentNCpSKey = BUILTIN_NOTATION_OWNER + '::2-cps';
             Object.keys(data.notations || {}).forEach(function (key) {
+               if (key === legacyNCpSKey) {
+                  if (!data.notations[currentNCpSKey]) {
+                     self.analysisArchive[currentNCpSKey] = Object.assign(
+                        {},
+                        data.notations[key],
+                        { notationId: '2-cps' }
+                     );
+                  }
+                  return;
+               }
                self.analysisArchive[key] = data.notations[key];
             });
             Object.keys(data.noteSheets || {}).forEach(function (key) {
-               self.allNoteSheets[key] = data.noteSheets[key];
+               if (key === legacyNCpSKey && data.noteSheets[currentNCpSKey] !== undefined) return;
+               var targetKey = key === legacyNCpSKey ? currentNCpSKey : key;
+               if (self.allNoteSheets[targetKey] === undefined) {
+                  self.allNoteSheets[targetKey] = data.noteSheets[key];
+               }
             });
          } else {
             var legacyNotations = Array.isArray(data.notations) ? data.notations : [];
             for (var li = 0; li < legacyNotations.length; li++) {
                var legacy = legacyNotations[li];
-               var active = register.get(legacy.notationId);
+               var legacyNotationId = legacy.notationId === N_CPS_GENERATOR_ID
+                  ? '2-cps' : legacy.notationId;
+               var active = register.get(legacyNotationId);
                var legacyOwner = active ? register.ownerOf(active.id) : '__builtin__';
-               self.analysisArchive[self.dataKeyForId(legacy.notationId, legacyOwner)] = {
+               self.analysisArchive[self.dataKeyForId(legacyNotationId, legacyOwner)] = {
                   ownerId: legacyOwner,
-                  notationId: legacy.notationId,
+                  notationId: legacyNotationId,
                   items: legacy.items || [],
                   legacyVersion: version,
                };
             }
             if (version >= 2 && data.noteSheets) {
                Object.keys(data.noteSheets).forEach(function (id) {
-                  var owner = register.ownerOf(id) || '__builtin__';
-                  self.allNoteSheets[self.dataKeyForId(id, owner)] = data.noteSheets[id];
+                  var noteId = id === N_CPS_GENERATOR_ID ? '2-cps' : id;
+                  var owner = register.ownerOf(noteId) || '__builtin__';
+                  self.allNoteSheets[self.dataKeyForId(noteId, owner)] = data.noteSheets[id];
                });
             } else if (data.noteSheets && self.currentNotationId) {
                self.allNoteSheets[self.dataKeyForId(self.currentNotationId)] = data.noteSheets;
@@ -832,16 +1262,11 @@ Ctrl + E: expand analysis fundamental sequence
                var analysisList;
                if ((nd.legacyVersion || version) >= 2) {
                    analysisList = nd.items.map(function (item) {
-                      if (!item || item.expr === undefined || item.expr === null) return null;
-                      // skip items with null/NaN/Infinity in expression arrays (serialization artifacts)
-                      if (Array.isArray(item.expr)) {
-                         for (var ei = 0; ei < item.expr.length; ei++) {
-                            if (item.expr[ei] === null || (typeof item.expr[ei] === 'number' && !isFinite(item.expr[ei]))) {
-                               return null;
-                            }
-                         }
-                      }
-                      return [item.expr, item.analysis || '', item.hide ? true : undefined];
+                      var expr = restoreArchivedExpression(notation, item);
+                      if (expr === undefined) return null;
+                      var analysis = Object.prototype.hasOwnProperty.call(item, 'analysis')
+                         ? item.analysis : undefined;
+                      return [expr, analysis, item.hide ? true : undefined];
                    }).filter(function (x) { return x !== null; });
                } else {
                   analysisList = nd.items.map(function (entry) {
@@ -876,11 +1301,6 @@ Ctrl + E: expand analysis fundamental sequence
             self.saveLabelTick++;
          }, 1000);
       },
-      confirmNParam() {
-         this.nParamVal = this.nParamInput;
-         window.nCpSN = this.nParamVal;
-         if (this.currentNotation.id) this.datasets[this.currentNotationId] = init_dataset(this.currentNotation);
-      },
       alert(msg) {
          window.alert(msg);
       },
@@ -889,6 +1309,10 @@ Ctrl + E: expand analysis fundamental sequence
       },
       export_xlsx() {
          let result = [];
+         var displaySpec = this.resolveNotationDisplay(
+            this.currentNotation,
+            this.requestedEquivalentId(this.currentNotationId)
+         )
 
          let find_result = (node) => {
             for (let i = node.subitems.length - 1; i >= 0; i--) {
@@ -899,9 +1323,9 @@ Ctrl + E: expand analysis fundamental sequence
             let text = node.analysis
             if (text !== undefined) {
                if (root.export_hide && node.hide_child) {
-                  result.push([root.currentNotation.display(node.expr), text, 'true'])
+                  result.push([displaySpec.plain(node.expr), text, 'true'])
                } else {
-                  result.push([root.currentNotation.display(node.expr), text])
+                  result.push([displaySpec.plain(node.expr), text])
                }
             }
          }
@@ -964,6 +1388,13 @@ Ctrl + E: expand analysis fundamental sequence
       },
       handle_import_file(event) {
          const notation = this.currentNotation
+         const displaySpec = this.resolveNotationDisplay(
+            notation,
+            this.requestedEquivalentId(notation.id)
+         )
+         const targetDataset = this.currentDataset
+         const targetDataKey = this.dataKeyForId(notation.id)
+         const useAlternative = this.use_alternative
 
          let file = event.target.files[0];
          if (!file) return;
@@ -971,6 +1402,10 @@ Ctrl + E: expand analysis fundamental sequence
          const reader = new FileReader();
 
          reader.onload = function (e) {
+            // FileReader completes asynchronously. Do not import through a stale
+            // notation object after its local file was replaced or unloaded.
+            if (register.get(notation.id) !== notation || root.datasets[notation.id] !== targetDataset) return
+
             const data = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, { type: 'array' });
             const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -987,14 +1422,14 @@ Ctrl + E: expand analysis fundamental sequence
                   let expr_str = row[0] || '';
                   let analysis = row[1] || '';
                   if (!analysis.length) continue
-                  let expr = safeFromDisplay(notation, expr_str)
+                  let expr = safeFromResolvedDisplay(displaySpec, expr_str)
                   if (expr === undefined) continue
                   let hidden = (row[2] || '').trim() === 'true'
                   objects.push([expr, analysis, hidden]);
                }
             }
 
-            import_analysis(root.currentDataset, objects, notation, root.use_alternative)
+            import_analysis(targetDataset, objects, notation, useAlternative)
 
             // 导入便利贴 Sheet（从 Sheet2 开始，跳过 sheet1）
             var names = workbook.SheetNames;
@@ -1024,8 +1459,11 @@ Ctrl + E: expand analysis fundamental sequence
                sheets.push({ name: names[si], text: text });
             }
             if (sheets.length > 0) {
-               root.noteSheets = sheets;
-               root.currentSheet = 0;
+               root.allNoteSheets[targetDataKey] = sheets;
+               if (root.currentNotationId === notation.id && root.currentDataset === targetDataset) {
+                  root.noteSheets = sheets;
+                  root.currentSheet = 0;
+               }
             }
          };
 
@@ -1039,7 +1477,11 @@ Ctrl + E: expand analysis fundamental sequence
       find_notation() {
          let notation = this.currentNotation
          let displayed_expr = this.$refs.navigate_input.value
-         let expr = safeFromDisplay(notation, displayed_expr)
+         let displaySpec = this.resolveNotationDisplay(
+            notation,
+            this.requestedEquivalentId(notation.id)
+         )
+         let expr = safeFromResolvedDisplay(displaySpec, displayed_expr)
          if (expr === undefined) return;
          import_analysis(this.currentDataset, [[expr]], notation, this.use_alternative, true)
       },
@@ -1072,11 +1514,14 @@ Ctrl + E: expand analysis fundamental sequence
                darkMode: this.darkMode,
                lang: this.lang,
                displayMode: this.displayMode,
+               equivActive: this.equivActive,
+               equivHideOriginal: this.equivHideOriginal,
                latexCommands: this.latexCommands,
                analysisLatexPreview: this.analysisLatexPreview,
                analysisLatexInline: this.analysisLatexInline,
                analysisInputVisible: this.analysisInputVisible,
                analysisInputWidth: this.analysisInputWidth,
+               generatorState: this.generatorState,
                diagramFollow: this.diagram_follow,
                autoScroll: this.auto_scroll,
                exportHide: this.export_hide,
@@ -1105,17 +1550,45 @@ Ctrl + E: expand analysis fundamental sequence
                   return (v === null || v === undefined || v === '' || (typeof v === 'number' && isNaN(v)))
                      ? fallback : v
                }
+               function loadMap(value, type) {
+                  var result = Object.create(null)
+                  if (!value || typeof value !== 'object' || Array.isArray(value)) return result
+                  Object.keys(value).forEach(function (key) {
+                     if (type === 'string' && typeof value[key] === 'string' && value[key]) {
+                        result[key] = value[key]
+                     } else if (type === 'boolean' && typeof value[key] === 'boolean') {
+                        result[key] = value[key]
+                     } else if (type === 'number' && Number.isSafeInteger(value[key])) {
+                        result[key] = value[key]
+                     }
+                  })
+                  return result
+               }
                self.darkMode = getOr('darkMode', false)
                self.lang = getOr('lang', 'en')
                var displayMode = getOr('displayMode', 'html')
                self.displayMode = displayMode === 'latex' ? 'latex' : 'html'
+               self.equivActive = loadMap(s.equivActive, 'string')
+               self.equivHideOriginal = loadMap(s.equivHideOriginal, 'boolean')
                self.latexCommands = typeof s.latexCommands === 'string' ? s.latexCommands : ''
                self.analysisLatexPreview = !!getOr('analysisLatexPreview', false)
                self.analysisLatexInline = !!getOr('analysisLatexInline', false)
-               self.analysisInputVisible = !!getOr('analysisInputVisible', true)
-               var inputWidth = Number(getOr('analysisInputWidth', 180))
-               self.analysisInputWidth = Math.max(60, Math.min(600, Math.round(inputWidth || 180)))
-               self.diagram_follow = getOr('diagramFollow', false)
+                self.analysisInputVisible = !!getOr('analysisInputVisible', true)
+                var inputWidth = Number(getOr('analysisInputWidth', 180))
+                self.analysisInputWidth = Math.max(60, Math.min(600, Math.round(inputWidth || 180)))
+                self.generatorState = loadMap(s.generatorState, 'number')
+                Object.keys(self.generatorState).forEach(function(categoryId) {
+                   var value = self.generatorState[categoryId]
+                   var definition = generator_definition(categoryId)
+                   if (!definition || value < definition.start ||
+                       value > self.generatorMaximum(categoryId)) {
+                      delete self.generatorState[categoryId]
+                   }
+                })
+                self.restoreGeneratedNotations()
+                self.equivActive = self.migrateEquivalentStateMap(self.equivActive)
+                self.equivHideOriginal = self.migrateEquivalentStateMap(self.equivHideOriginal)
+                self.diagram_follow = getOr('diagramFollow', false)
                self.auto_scroll = getOr('autoScroll', true)
                self.export_hide = getOr('exportHide', true)
                self.use_alternative = getOr('useAlt', true)
@@ -1123,24 +1596,45 @@ Ctrl + E: expand analysis fundamental sequence
                self.tier = getOr('tier', 0)
                self.length_limit = getOr('lengthLimit', 20)
                self.FS_shown = getOr('fsShown', 3)
-                var analysisId = getOr('analysisId', '')
-                if (!analysisId && Number.isInteger(s.analysisIdx) && analysis_register[s.analysisIdx]) {
-                   analysisId = analysis_register[s.analysisIdx].id
-                }
-                self.currentAnalysisId = analysis_register.get(analysisId) ? analysisId : ''
-                var mainId = getOr('mainId', self.currentNotationId)
-                if (register.get(mainId)) self.currentNotationId = mainId
-                self.autoSaveInterval = getOr('autoSaveInterval', 60)
-                self.autoSaveHidden = getOr('autoSaveHidden', false)
-             }
-         } catch (e) { }
+               var analysisId = getOr('analysisId', '')
+               if (!analysisId && Number.isInteger(s.analysisIdx) && analysis_register[s.analysisIdx]) {
+                  analysisId = analysis_register[s.analysisIdx].id
+               }
+               self.currentAnalysisId = analysis_register.get(analysisId) ? analysisId : ''
+               var mainId = getOr('mainId', self.currentNotationId)
+               if (mainId === N_CPS_GENERATOR_ID) mainId = '2-cps'
+               if (register.get(mainId)) self.currentNotationId = mainId
+               self.autoSaveInterval = getOr('autoSaveInterval', 60)
+               self.autoSaveHidden = getOr('autoSaveHidden', false)
+            }
+         } catch (e) {
+            console.warn('Load settings failed:', e)
+         }
          this.loadPos()
          document.documentElement.classList.toggle('dark', this.darkMode)
       },
       resetSettings() {
+         var self = this
+         generator_category_ids().forEach(function(categoryId) {
+               var definition = generator_definition(categoryId)
+               if (!definition) return
+               while (self.generatorCurrent(categoryId) > definition.initial) {
+                  var before = self.generatorCurrent(categoryId)
+                  self.decrementGenerator(categoryId)
+                  if (self.generatorCurrent(categoryId) >= before) break
+               }
+               while (self.generatorCurrent(categoryId) < definition.initial) {
+                  var previous = self.generatorCurrent(categoryId)
+                  self.incrementGenerator(categoryId)
+                  if (self.generatorCurrent(categoryId) <= previous) break
+               }
+         })
+         this.generatorState = Object.create(null)
          this.darkMode = false
          this.lang = 'en'
          this.displayMode = 'html'
+         this.equivActive = Object.create(null)
+         this.equivHideOriginal = Object.create(null)
          this.latexCommands = ''
          this.analysisLatexPreview = false
          this.analysisLatexInline = false
@@ -1154,10 +1648,10 @@ Ctrl + E: expand analysis fundamental sequence
          this.tier = 0
          this.length_limit = 20
          this.FS_shown = 3
-      this.currentAnalysisId = ''
-      this.autoSaveInterval = 60
-      this.autoSaveHidden = false
-      this.saveSettings()
+         this.currentAnalysisId = ''
+         this.autoSaveInterval = 60
+         this.autoSaveHidden = false
+         this.saveSettings()
       },
 
       // ===== 规律总结便利贴（每个记号独立） =====
@@ -1318,9 +1812,28 @@ Ctrl + E: expand analysis fundamental sequence
          var exprStr = self.toolsExpandExpr.trim();
          if (!exprStr) { self.toolsOutput = 'Please enter an expression'; return; }
 
+         var displaySpec
+         try {
+            displaySpec = self.resolveNotationDisplay(notation, self.toolsExpandEquiv || undefined)
+         } catch (error) {
+            self.toolsOutput = 'Display error: ' + error.message
+            return
+         }
+
          // 解析表达式
          var expr;
-         if (exprStr === 'Limit' || exprStr === 'Infinity' || exprStr === '\u221e') {
+         if (displaySpec.isEquivalent) {
+            if (typeof displaySpec.fromDisplay !== 'function' &&
+               typeof displaySpec.fromDisplayAlter !== 'function') {
+               self.toolsOutput = 'Parse error: selected representation cannot parse input'
+               return
+            }
+            expr = safeFromResolvedDisplay(displaySpec, exprStr)
+            if (expr === undefined) {
+               self.toolsOutput = 'Parse error: invalid expression'
+               return
+            }
+         } else if (exprStr === 'Limit' || exprStr === 'Infinity' || exprStr === '\u221e') {
             expr = Infinity;
          } else {
             try {
@@ -1335,10 +1848,10 @@ Ctrl + E: expand analysis fundamental sequence
             }
          }
 
-         var display = notation.display || function (x) { return JSON.stringify(x); };
+         var display = displaySpec.plain || function (x) { return JSON.stringify(x); };
          var lines = [];
          lines.push('Notation: ' + notation.name + ' (' + notation.id + ')');
-          lines.push('Expression: ' + exprStr);
+         lines.push('Expression: ' + display(expr));
          lines.push('');
 
          var nStart = self.toolsExpandN;
@@ -1581,7 +2094,6 @@ Ctrl + E: expand analysis fundamental sequence
       this.loadSettings()
       this.loadAnalysis()
       this.startAutoSave()
-      window.nCpSN = this.nParamVal;
       this.$nextTick(() => { this.isHydrating = false; });
    }
 })
@@ -1600,7 +2112,83 @@ function safeFromDisplay(notation, str) {
    return undefined;
 }
 
-const worker = new Worker("js/diagram/Diagram.js")
+function isJsonStableExpression(value, seen) {
+   if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+   if (typeof value === 'number') return isFinite(value) && !Object.is(value, -0);
+   if (typeof value !== 'object') return false;
+   var proto = Object.getPrototypeOf(value);
+   if (!Array.isArray(value) && proto !== Object.prototype && proto !== null) return false;
+   seen = seen || new WeakSet();
+   if (seen.has(value)) return false;
+   seen.add(value);
+   var keys = Object.keys(value);
+   for (var index = 0; index < keys.length; index++) {
+      if (!isJsonStableExpression(value[keys[index]], seen)) return false;
+   }
+   seen.delete(value);
+   return true;
+}
+
+function isLegacyArchivedExpression(value, seen) {
+   if (value === null) return false;
+   if (typeof value === 'string' || typeof value === 'boolean') return true;
+   if (typeof value === 'number') return isFinite(value);
+   if (typeof value !== 'object') return false;
+   seen = seen || new WeakSet();
+   if (seen.has(value)) return false;
+   seen.add(value);
+   var keys = Object.keys(value);
+   for (var index = 0; index < keys.length; index++) {
+      if (!isLegacyArchivedExpression(value[keys[index]], seen)) return false;
+   }
+   seen.delete(value);
+   return true;
+}
+
+function serializeArchivedExpression(notation, expr) {
+   var item = {};
+   if (isJsonStableExpression(expr)) {
+      item.expr = expr;
+      item.exprFormat = 'json';
+   }
+   if (notation && typeof notation.display === 'function') {
+      try {
+         var displayed = notation.display(expr);
+         if (displayed !== undefined && displayed !== null) item.display = String(displayed);
+      } catch (error) {
+         // A JSON-safe expression can still be retained without a display fallback.
+      }
+   }
+   return item;
+}
+
+function restoreArchivedExpression(notation, item) {
+   if (!item || typeof item !== 'object') return undefined;
+   var hasExpr = Object.prototype.hasOwnProperty.call(item, 'expr');
+   if (item.exprFormat === 'json' && hasExpr && isJsonStableExpression(item.expr)) return item.expr;
+   if (item.exprFormat === undefined && hasExpr && isLegacyArchivedExpression(item.expr)) return item.expr;
+   if (typeof item.display === 'string') return safeFromDisplay(notation, item.display);
+   return undefined;
+}
+
+function safeFromResolvedDisplay(displaySpec, str) {
+   if (displaySpec && typeof displaySpec.fromDisplay === 'function') try {
+      return displaySpec.fromDisplay(str)
+   } catch (error) {
+      // Try the display-specific alternate parser.
+   }
+   if (displaySpec && typeof displaySpec.fromDisplayAlter === 'function') try {
+      return displaySpec.fromDisplayAlter(str)
+   } catch (error) {
+      // Invalid input is reported by the caller.
+   }
+   return undefined
+}
+
+const workerAssetVersion = window.NotationLoader && window.NotationLoader.ASSET_VERSION
+const worker = new Worker(
+   "js/diagram/Diagram.js" + (workerAssetVersion ? "?v=" + encodeURIComponent(workerAssetVersion) : "")
+)
 
 worker.onmessage = (e) => {
    let data = e.data
@@ -1820,35 +2408,58 @@ function getCaretPixelPosition(input, pos) {
 }
 
 app.component('notation-expression', {
-   props: ['notation', 'expression'],
+   props: ['notation', 'expression', 'includeOriginal'],
    computed: {
       isLatex() {
          return this.$root.displayMode === 'latex'
       },
+      displaySpec() {
+         return this.$root.resolveNotationDisplay(
+            this.notation,
+            this.$root.requestedEquivalentId(this.notation && this.notation.id)
+         )
+      },
+      primaryDisplaySpec() {
+         return this.$root.resolveNotationDisplay(this.notation)
+      },
+      showOriginal() {
+         return !!this.includeOriginal && this.displaySpec.isEquivalent &&
+            !this.$root.equivalentHideOriginalFor(this.notation.id)
+      },
       renderedExpression() {
-         if (!this.notation || typeof this.notation.display !== 'function') return ''
+         return this.renderDisplay(this.displaySpec)
+      },
+      renderedOriginalExpression() {
+         return this.showOriginal ? this.renderDisplay(this.primaryDisplaySpec) : ''
+      },
+   },
+   methods: {
+      renderDisplay(displaySpec) {
+         if (!displaySpec) return ''
          try {
             if (this.isLatex && window.NotationLatex) {
-               return window.NotationLatex.renderNotation(
-                  this.notation,
-                  this.expression,
+               return window.NotationLatex.renderLatex(
+                  displaySpec.latex(this.expression),
                   this.$root.latexCommands
                )
             }
-            return this.notation.display(this.expression)
+            return displaySpec.html(this.expression)
          } catch (error) {
             if (this.isLatex) {
-               try { return this.notation.display(this.expression) } catch (ignored) { }
+               try { return displaySpec.html(this.expression) } catch (ignored) { }
             }
             var message = error && error.message ? error.message : String(error)
             return window.NotationLatex
                ? '<span class="latex-render-error">' + window.NotationLatex.escapeHtml(message) + '</span>'
                : ''
          }
-      }
+      },
    },
    template: `<span class="notation-expression" :class="{ 'is-latex': isLatex }"
-      v-html="renderedExpression"></span>`
+      ><span class="notation-expression__active" v-html="renderedExpression"></span><span
+      v-if="showOriginal" class="notation-expression__original"><span
+      class="notation-expression__separator" aria-hidden="true"> = </span><span
+      v-html="renderedOriginalExpression"></span></span></span>`
 })
 
 app.component('notation-list-item', {
@@ -1886,23 +2497,30 @@ app.component('notation-list-item', {
             var rendered = window.NotationLatex
                ? window.NotationLatex.renderAnalysisText(source, asLatex, this.$root.latexCommands)
                : source
+                  .replace(/&/g, '&amp;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;')
+                  .replace(/"/g, '&quot;')
+                  .replace(/'/g, '&#39;')
             return '; ' + rendered
          },
          // 注意：this.FS 和 this.FSalter 已废弃（由 expand_item 内部接管），保留以兼容引用
          onmouseenter(event) {
             if (typeof this.notation.drawDiagram === 'function' && root.diagram_follow) {
-               let diagram = this.notation.drawDiagram(this.item.expr)
+               var equivalentId = root.effectiveEquivalentId(this.notation)
+               let diagram = this.notation.drawDiagram(this.item.expr, equivalentId || undefined)
                if (diagram != null) {
                   worker.postMessage({
                      type: 'render',
                      diagram,
-                     taskId: this.notation.display(this.item.expr)
+                     taskId: this.notation.id + ':' + equivalentId + ':' + this.notation.display(this.item.expr)
                   })
+                  root.showCanvas = true
+                  root.pCanvas.x = event.clientX + 100
+                  root.pCanvas.y = event.clientY + 15
+               } else {
+                  root.showCanvas = false
                }
-
-               root.showCanvas = true
-               root.pCanvas.x = event.clientX + 100
-               root.pCanvas.y = event.clientY + 15
             }
 
             if (!this.notation.able(this.item.expr)) return;
@@ -1968,13 +2586,14 @@ app.component('notation-list-item', {
             target.scrollLeft = (pixelPosition - target.clientWidth / 2)
 
             if (this.notation.drawDiagram != null && !root.analysisLatexPreview) {
-               let diagram = this.notation.drawDiagram(this.item.expr)
+               var equivalentId = root.effectiveEquivalentId(this.notation)
+               let diagram = this.notation.drawDiagram(this.item.expr, equivalentId || undefined)
 
                if (diagram != null) {
                   worker.postMessage({
                      type: 'render',
                      diagram,
-                     taskId: this.notation.display(this.item.expr)
+                     taskId: this.notation.id + ':' + equivalentId + ':' + this.notation.display(this.item.expr)
                   })
 
                   root.showCanvas = true
@@ -2124,7 +2743,8 @@ app.component('notation-list-item', {
                <span v-if="showInlineAnalysisLatex" class="analysis-inline-latex" aria-hidden="true"
                   v-html="renderedInlineAnalysis"></span>
             </span>
-            <notation-expression :notation="notation" :expression="item.expr"></notation-expression>
+            <notation-expression :notation="notation" :expression="item.expr"
+               :include-original="true"></notation-expression>
             <div class="tooltip" v-if="tooltip" :style="tooltipX" @mousedown.stop>
             <notation-expression :notation="notation" :expression="item.expr"></notation-expression> fundamental sequence:
             <div class="tooltip-fs">
@@ -2214,7 +2834,6 @@ app.component('fs-dialog', {
    }
 })
 
-app.config.globalProperties.nCpSN = 2;
 const root = app.mount('#app')
 
 // ===== Debug Tools =====

@@ -185,7 +185,7 @@
 
    function renderAnalysisText(source, asLatex, commands, engine) {
       var text = String(source === null || source === undefined ? '' : source)
-      return asLatex ? renderLatex(text, commands, engine) : text
+      return asLatex ? renderLatex(text, commands, engine) : escapeHtml(text)
    }
 
    function renderNotation(notation, expression, commands, prefix) {

@@ -94,6 +94,8 @@ register.push({
          if(''+term==='Infinity'){
             term = [-1,0,-2]
          }
+         if(term===-1) return -1
+         if(typeof term!=='number'&&term[1]===-1) return term[0]
          var datakey=''+term
          ,dataterm = data[datakey]
          if(!dataterm){

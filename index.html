@@ -3,19 +3,21 @@
 
 <head>
    <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1">
    <meta name="author" content="hyp_cos">
    <title>Notation Explorer</title>
    <link rel="stylesheet" type="text/css" href="lib/katex/katex.min.css">
-   <link rel="stylesheet" type="text/css" href="css/index.css?v=latex-rendering-2">
+   <link rel="stylesheet" type="text/css" href="css/index.css?v=smilelee-merge-5">
 </head>
 
 <body>
    <script src="lib/Vue.js"></script>
    <script src="lib/xlsx.full.min.js"></script>
    <script src="lib/katex/katex.min.js"></script>
-   <script src="js/latex-renderer.js"></script>
-   <script src="js/notation-registry.js"></script>
-   <script>var nCpSN = 2;</script>
+   <script src="js/latex-renderer.js?v=smilelee-merge-5"></script>
+   <script src="js/notation-registry.js?v=smilelee-merge-5"></script>
+   <script src="js/smilelee-notation-bundle.js?v=smilelee-merge-5"></script>
+   <script src="js/smilelee-notation-adapter.js?v=smilelee-merge-5"></script>
    <div id="app">
       <div class="nav-bar">
          <button :class="{active: page==='explore'}" @mousedown.prevent="navigateToPage('explore')">{{ L.explore }}</button>
@@ -44,29 +46,40 @@
                      @keydown="handleNotationSearchKeydown" />
                </div>
                <div id="notation-tree" class="ns-options" role="tree" :aria-label="L.notation_select_label">
-                  <button v-for="(row, index) in notationMenuRows" :key="row.key" ref="notationMenuRows"
-                     type="button" role="treeitem" class="ns-tree-row"
-                     :class="{
-                        'is-folder': row.kind === 'folder',
-                        'is-notation': row.kind === 'notation',
-                        'is-expanded': row.kind === 'folder' && row.expanded,
-                        'selected': row.kind === 'notation' && row.id === currentNotationId
-                     }"
-                     :style="{ paddingLeft: (10 + row.depth * 16) + 'px' }" :aria-level="row.level"
-                     :aria-expanded="row.kind === 'folder' ? String(row.expanded) : null"
-                     :aria-selected="row.kind === 'notation' ? String(row.id === currentNotationId) : null"
-                     :tabindex="notationMenuFocusIndex === index ? 0 : -1"
-                     :title="row.kind === 'folder'
-                        ? (row.expanded ? L.notation_collapse_folder : L.notation_expand_folder)
-                        : row.name + ' (' + row.id + ')'"
-                     @mousedown.prevent.stop="activateNotationMenuRow(row)"
-                     @keydown="handleNotationMenuKeydown($event, row, index)">
-                     <span v-if="row.kind === 'folder'" class="ns-tree-chevron" aria-hidden="true"></span>
-                     <span v-else class="ns-tree-spacer" aria-hidden="true"></span>
-                     <span class="ns-opt-name">{{ row.kind === 'folder' ? row.label : row.name }}</span>
-                     <span v-if="row.kind === 'folder'" class="ns-folder-count">{{ row.count }}</span>
-                     <span v-else class="ns-opt-id">{{ row.id }}</span>
-                  </button>
+                  <div v-for="(row, index) in notationMenuRows" :key="row.key" class="ns-tree-line"
+                     :class="{ 'is-folder': row.kind === 'folder', 'has-generator': !!row.generator }">
+                     <button ref="notationMenuRows" type="button" role="treeitem" class="ns-tree-row"
+                        :class="{
+                           'is-folder': row.kind === 'folder',
+                           'is-notation': row.kind === 'notation',
+                           'is-expanded': row.kind === 'folder' && row.expanded,
+                           'selected': row.kind === 'notation' && row.id === currentNotationId
+                        }"
+                        :style="{ paddingLeft: (10 + row.depth * 16) + 'px' }" :aria-level="row.level"
+                        :aria-expanded="row.kind === 'folder' ? String(row.expanded) : null"
+                        :aria-selected="row.kind === 'notation' ? String(row.id === currentNotationId) : null"
+                        :tabindex="notationMenuFocusIndex === index ? 0 : -1"
+                        :title="row.kind === 'folder'
+                           ? (row.expanded ? L.notation_collapse_folder : L.notation_expand_folder)
+                           : row.name + ' (' + row.id + ')'"
+                        @mousedown.prevent.stop="activateNotationMenuRow(row)"
+                        @keydown="handleNotationMenuKeydown($event, row, index)">
+                        <span v-if="row.kind === 'folder'" class="ns-tree-chevron" aria-hidden="true"></span>
+                        <span v-else class="ns-tree-spacer" aria-hidden="true"></span>
+                        <span class="ns-opt-name">{{ row.kind === 'folder' ? row.label : row.name }}</span>
+                        <span v-if="row.kind === 'folder'" class="ns-folder-count">{{ row.count }}</span>
+                        <span v-else class="ns-opt-id">{{ row.id }}</span>
+                     </button>
+                     <span v-if="row.generator" class="ns-generator-controls">
+                        <button type="button" :disabled="!generatorCanDecrement(row.generator.categoryId)"
+                           :title="L.generator_remove" :aria-label="L.generator_remove"
+                           @click.stop="decrementGenerator(row.generator.categoryId)">-</button>
+                        <output :aria-label="L.n_param_label" :title="row.generator.help || null">{{ generatorCurrent(row.generator.categoryId) }}</output>
+                        <button type="button" :disabled="!generatorCanIncrement(row.generator.categoryId)"
+                           :title="L.generator_add" :aria-label="L.generator_add"
+                           @click.stop="incrementGenerator(row.generator.categoryId)">+</button>
+                     </span>
+                  </div>
                   <p v-if="notationMenuRows.length === 0" class="ns-empty" role="status">
                      {{ L.notation_search_empty }}
                   </p>
@@ -74,12 +87,25 @@
             </div>
             <div v-if="dropdownOpen" class="ns-backdrop" @mousedown="closeDropdown(true)"></div>
          </div>
-         <div v-if="showNParam" class="n-param" style="margin-bottom:8px">
-            {{ L.n_param_label }} <input type="number" v-model.number="nParamInput" min="1" class="n-input" />
-            <button @mousedown="confirmNParam()" class="n-help-btn">{{ L.n_param_confirm }}</button>
-            <button @mousedown="alert(nHelp)" class="n-help-btn">?</button>
+         <div v-if="currentEquivalentOptions.length" class="equiv-bar" role="group"
+            :aria-label="L['equiv.label']">
+            <span class="equiv-bar__label">{{ L['equiv.label'] }}</span>
+            <button type="button" :class="{ active: !currentEquivalentId }"
+               :aria-pressed="String(!currentEquivalentId)" @click="setCurrentEquivalent('')">
+               {{ L['equiv.default'] }}
+            </button>
+            <button v-for="option in currentEquivalentOptions" :key="option.id" type="button"
+               :class="{ active: currentEquivalentId === option.id }"
+               :aria-pressed="String(currentEquivalentId === option.id)"
+               @click="setCurrentEquivalent(option.id)">
+               {{ option.label }}
+            </button>
+            <label v-if="currentEquivalentId" class="equiv-bar__toggle">
+               <input type="checkbox" :checked="currentEquivalentHideOriginal"
+                  @change="setCurrentEquivalentHideOriginal($event.target.checked)" />
+               <span>{{ L['equiv.hide-original'] }}</span>
+            </label>
          </div>
-
          <div>
             <input type="checkbox" v-model="export_hide" /> {{ L.export_hide }}<br>
             <button @mousedown="show_hotkeys()">{{ L.show_hotkeys }}</button>
@@ -97,6 +123,7 @@
          </div>
           <notation-tree v-if="currentNotation.id" :key="currentNotationKey" :notation-id="currentNotationId"
              :subitems="currentDataset.subitems" ref="list"></notation-tree>
+         <p v-if="currentNotationCredit" class="notation-credit">{{ currentNotationCredit }}</p>
       </div>
       <!-- Tools Page -->
       <div v-if="page==='tools'" class="tools-page">
@@ -174,6 +201,15 @@
                       <option v-for="item in toolsNotations" :key="item.id" :value="item.id">{{ item.name }}</option>
                   </select>
                </label>
+               <label v-if="toolsExpandEquivalentOptions.length" class="tools-label">
+                  {{ L['expand.equiv'] }}<br>
+                  <select v-model="toolsExpandEquiv">
+                     <option value="">{{ L['equiv.default'] }}</option>
+                     <option v-for="option in toolsExpandEquivalentOptions" :key="option.id" :value="option.id">
+                        {{ option.label }}
+                     </option>
+                  </select>
+               </label>
                <label class="tools-label">{{ L.tools_expand_expr }}<br>
                   <input type="text" v-model="toolsExpandExpr" placeholder="e.g. 0,1,2,3" style="width:220px" />
                </label>
@@ -224,6 +260,21 @@
                 </button>
              </span>
           </div>
+          <div v-if="currentEquivalentOptions.length" class="setting-row">
+             <label for="settings-equivalent">{{ L['equiv.label'] }}</label>
+             <select id="settings-equivalent" :value="currentEquivalentId"
+                @change="setCurrentEquivalent($event.target.value)">
+                <option value="">{{ L['equiv.default'] }}</option>
+                <option v-for="option in currentEquivalentOptions" :key="option.id" :value="option.id">
+                   {{ option.label }}
+                </option>
+             </select>
+          </div>
+          <label v-if="currentEquivalentId" class="setting-row">
+             <span>{{ L['equiv.hide-original'] }}</span>
+             <input type="checkbox" :checked="currentEquivalentHideOriginal"
+                @change="setCurrentEquivalentHideOriginal($event.target.checked)" />
+          </label>
           <label class="setting-block" for="latex-commands">
              <span class="setting-block__label">{{ L.latex_commands }}</span>
              <textarea id="latex-commands" class="latex-command-input" v-model="latexCommands"
@@ -337,9 +388,9 @@
       </div>
       <fs-dialog v-model="show_fs_dialog" :init="current_analysis_notation.fs_default" @confirm="calc_analysis_fs" />
    </div>
-   <script src="js/notation-file-index.js"></script>
-   <script src="js/notation-manifest.js"></script>
-   <script src="js/notation-loader.js"></script>
+   <script src="js/notation-file-index.js?v=smilelee-merge-5"></script>
+   <script src="js/notation-manifest.js?v=smilelee-merge-5"></script>
+   <script src="js/notation-loader.js?v=smilelee-merge-5"></script>
 </body>
 
 </html>

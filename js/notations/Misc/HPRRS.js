@@ -170,7 +170,7 @@
     },
     init: function () {
       return [
-        { expr: [Infinity], low: [[]], subitems: [] },
+        { expr: [Infinity], low: [[0]], subitems: [] },
         { expr: [0],        low: [[]], subitems: [] },
       ];
     },

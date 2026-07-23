@@ -205,6 +205,31 @@
          return this.entriesForOwner(owner).map(function (entry) { return entry.id })
       }
 
+      unregister(id, expectedOwner) {
+         var index = this.findIndex(function (entry) { return entry.id === id })
+         if (index === -1) return undefined
+
+         var entry = this[index]
+         var actualOwner = this._ownerByEntry.get(entry)
+         if (expectedOwner !== undefined && actualOwner !== expectedOwner) {
+            throw new NotationRegistryError(
+               'OWNER_MISMATCH',
+               'Cannot unregister the ' + this._namespace + ' notation "' + id +
+                  '": expected owner "' + expectedOwner + '", but it is owned by "' + actualOwner + '".',
+               {
+                  namespace: this._namespace,
+                  id: id,
+                  expectedOwner: expectedOwner,
+                  actualOwner: actualOwner
+               }
+            )
+         }
+
+         Array.prototype.splice.call(this, index, 1)
+         this._ownerByEntry.delete(entry)
+         return entry
+      }
+
       removeOwner(owner) {
          var plan = this._planOwnerReplacement(owner, [])
          this._applyPlan(plan)
@@ -867,27 +892,16 @@
          var store = this
          patch = patch || {}
          return this._mutate(function (state) {
-            var index = state.files.findIndex(function (file) { return file.id === id })
-            if (index === -1) store._notFound(id)
-            var current = state.files[index]
-            var nextName = Object.prototype.hasOwnProperty.call(patch, 'name') ? patch.name : current.name
-            store._validateName(state, nextName, id)
-            if (Object.prototype.hasOwnProperty.call(patch, 'source') && typeof patch.source !== 'string') {
-               throw new LocalNotationStorageError('INVALID_FILE', 'Local notation source must be a string.')
-            }
+            return store._updateFileState(state, id, patch)
+         })
+      }
 
-            var next = Object.assign({}, current, cloneJSON(patch))
-            next.id = current.id
-            next.name = nextName.trim()
-            next.order = current.order
-            next.createdAt = current.createdAt
-            next.updatedAt = store.now()
-            if (Object.prototype.hasOwnProperty.call(patch, 'source') && patch.source !== current.source) {
-               next.sourceRevision = (Number(current.sourceRevision) || 0) + 1
-            } else {
-               next.sourceRevision = current.sourceRevision
-            }
-            state.files[index] = next
+      updateFileAndClearDraft(id, patch) {
+         var store = this
+         patch = patch || {}
+         return this._mutate(function (state) {
+            var next = store._updateFileState(state, id, patch)
+            delete state.drafts[id]
             return next
          })
       }
@@ -928,6 +942,31 @@
             delete state.drafts[id]
             return previous
          })
+      }
+
+      _updateFileState(state, id, patch) {
+         var index = state.files.findIndex(function (file) { return file.id === id })
+         if (index === -1) this._notFound(id)
+         var current = state.files[index]
+         var nextName = Object.prototype.hasOwnProperty.call(patch, 'name') ? patch.name : current.name
+         this._validateName(state, nextName, id)
+         if (Object.prototype.hasOwnProperty.call(patch, 'source') && typeof patch.source !== 'string') {
+            throw new LocalNotationStorageError('INVALID_FILE', 'Local notation source must be a string.')
+         }
+
+         var next = Object.assign({}, current, cloneJSON(patch))
+         next.id = current.id
+         next.name = nextName.trim()
+         next.order = current.order
+         next.createdAt = current.createdAt
+         next.updatedAt = this.now()
+         if (Object.prototype.hasOwnProperty.call(patch, 'source') && patch.source !== current.source) {
+            next.sourceRevision = (Number(current.sourceRevision) || 0) + 1
+         } else {
+            next.sourceRevision = current.sourceRevision
+         }
+         state.files[index] = next
+         return next
       }
 
       _findFile(state, id) {

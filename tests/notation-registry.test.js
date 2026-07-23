@@ -100,6 +100,41 @@ test('owner replacement allows the same IDs and preserves the owner slot', () =>
    assert.equal(result.added[0], replacement)
 })
 
+test('unregister removes one ID while preserving the remaining order and owners', () => {
+   const hub = new NotationRegistryHub()
+   hub.main.push(main('builtin-a'))
+   hub.executeSource('file-a', sourceFor('local-a', null))
+   hub.executeSource('file-b', sourceFor('local-b', null))
+
+   const removed = hub.main.unregister('local-a', 'file-a')
+
+   assert.equal(removed.id, 'local-a')
+   assert.deepEqual(hub.main.map((entry) => entry.id), ['builtin-a', 'local-b'])
+   assert.equal(hub.main.ownerOf('builtin-a'), BUILTIN_OWNER)
+   assert.equal(hub.main.ownerOf('local-b'), 'file-b')
+   assert.equal(hub.main.ownerOf('local-a'), undefined)
+   assert.equal(hub.main.ownerOf(removed), undefined)
+   assert.equal(hub.main.unregister('missing', 'any-owner'), undefined)
+})
+
+test('unregister rejects an owner mismatch without mutating the registry', () => {
+   const hub = new NotationRegistryHub()
+   hub.executeSource('file-a', sourceFor('local-a', null))
+   const original = hub.main.get('local-a')
+
+   assert.throws(
+      () => hub.main.unregister('local-a', 'file-b'),
+      (error) => error instanceof NotationRegistryError &&
+         error.code === 'OWNER_MISMATCH' &&
+         error.details.namespace === 'main' &&
+         error.details.id === 'local-a' &&
+         error.details.expectedOwner === 'file-b' &&
+         error.details.actualOwner === 'file-a'
+   )
+   assert.equal(hub.main.get('local-a'), original)
+   assert.equal(hub.main.ownerOf('local-a'), 'file-a')
+})
+
 test('hub restores a disabled owner according to file creation order', () => {
    const hub = new NotationRegistryHub()
    hub.main.push(main('builtin'))

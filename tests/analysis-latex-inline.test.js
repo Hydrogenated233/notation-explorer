@@ -131,6 +131,21 @@ test('analysis inline LaTeX requires both switches, visibility, and nonblank tex
    assert.equal(inlineView(component, undefined).showInlineAnalysisLatex, false)
 })
 
+test('plain tooltip analysis is escaped before reaching v-html', () => {
+   const { components } = loadFramework()
+   const component = components['notation-list-item']
+   const instance = {
+      $root: { analysisLatexPreview: false, latexCommands: '' },
+   }
+
+   const rendered = component.methods.renderTooltipAnalysis.call(
+      instance,
+      '<img src=x onerror="attack()">'
+   )
+
+   assert.equal(rendered, '; &lt;img src=x onerror=&quot;attack()&quot;&gt;')
+})
+
 test('analysis inline LaTeX overlays the mounted raw input only while unfocused', () => {
    const { components } = loadFramework()
    const template = components['notation-list-item'].template

@@ -13,8 +13,11 @@
    'use strict'
 
    var NOTATION_ROOT = 'js/notations/'
+   var ASSET_VERSION = 'smilelee-merge-5'
    var APP_SCRIPTS = [
       'js/diagram/Diagram.js',
+      'js/notation-display.js',
+      'js/notation-credits.js',
       'js/prss-template.js',
       'js/notation-editor.js',
       'js/local-notation-runtime.js',
@@ -23,6 +26,11 @@
       'js/framework.js',
    ]
    var started
+
+   function versioned(source) {
+      return source + (source.indexOf('?') === -1 ? '?' : '&') +
+         'v=' + encodeURIComponent(ASSET_VERSION)
+   }
 
    function validatedFiles() {
       if (!root.NotationFileIndex) throw new Error('NotationFileIndex is not loaded.')
@@ -121,7 +129,7 @@
          for (var index = 0; index < files.length; index++) {
             var mainBefore = registrySnapshot(root.register)
             var analysisBefore = registrySnapshot(root.analysis_register)
-            await loadScript(NOTATION_ROOT + files[index])
+            await loadScript(versioned(NOTATION_ROOT + files[index]))
             catalog.push(createCatalogEntry(
                files[index],
                appendedEntries(root.register, mainBefore, files[index], 'main'),
@@ -130,7 +138,7 @@
          }
          root.BUILTIN_NOTATION_CATALOG = Object.freeze(catalog)
          for (var appIndex = 0; appIndex < APP_SCRIPTS.length; appIndex++) {
-            await loadScript(APP_SCRIPTS[appIndex])
+            await loadScript(versioned(APP_SCRIPTS[appIndex]))
          }
          return files
       })
@@ -151,7 +159,9 @@
 
    return {
       NOTATION_ROOT: NOTATION_ROOT,
+      ASSET_VERSION: ASSET_VERSION,
       APP_SCRIPTS: APP_SCRIPTS.slice(),
+      versioned: versioned,
       validatedFiles: validatedFiles,
       loadScript: loadScript,
       registrySnapshot: registrySnapshot,

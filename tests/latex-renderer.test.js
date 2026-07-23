@@ -56,12 +56,16 @@ test('renderLatex passes bounded safe options and isolated macros to KaTeX', () 
    })
 })
 
-test('renderAnalysisText switches between legacy markup and LaTeX with user commands', () => {
+test('renderAnalysisText escapes plain analysis and switches to LaTeX with user commands', () => {
    latex.resetCommandCache()
    const legacy = 'x<sup>2</sup>'
    const commands = '\\newcommand{\\foo}[1]{\\Omega_{#1}}'
 
-   assert.equal(latex.renderAnalysisText(legacy, false, commands, katex), legacy)
+   assert.equal(latex.renderAnalysisText(legacy, false, commands, katex), 'x&lt;sup&gt;2&lt;/sup&gt;')
+   assert.equal(
+      latex.renderAnalysisText('<img src=x onerror="attack()">', false, commands, katex),
+      '&lt;img src=x onerror=&quot;attack()&quot;&gt;'
+   )
    assert.match(latex.renderAnalysisText('\\foo{3}', true, commands, katex), /class="katex"/)
 })
 

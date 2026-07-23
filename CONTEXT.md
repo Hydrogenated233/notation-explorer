@@ -69,7 +69,25 @@ User-authored text attached to a node in a notation's expansion tree.
 The per-node control that edits **Analysis text**; hiding the control does not remove the text.
 
 **Display string**:
-The output of `display(expr)`, used as the stable text contract for HTML display, parsing, import/export, tools, and task identities.
+The notation's primary, canonical plain-text representation. It remains the compatibility contract for retained data, debug identities, and code that has not selected an equivalent representation.
+
+**Equivalent representation**:
+An optional named display specification attached to a **Main notation**. It can provide plain text, HTML, LaTeX, and its own inverse parser without becoming a separate **Registered notation**.
+
+**Active display string**:
+The plain-text output of the selected **Equivalent representation**, or the **Display string** when no equivalent is selected. User-facing navigation, analysis import/export, and direct expansion use this representation.
+
+**Original representation**:
+The primary representation of a **Main notation**, shown alongside an active **Equivalent representation** only when the user elects not to hide it.
+
+**Notation attribution**:
+Localized credit text owned by one **Registered notation** and displayed below its expansion tree. Attribution is not inferred from its source file or category.
+
+**Generated notation family**:
+A built-in upstream category whose integer generator creates an ordered sequence of distinct **Main notations**. Its pinned default range is loaded initially; users may move the contiguous upper bound between `start` and the application safety limit.
+
+**Generator state**:
+The current upper integer for each **Generated notation family**, persisted in `ne-config`.
 
 **Expression rendering mode**:
 The global HTML-or-LaTeX choice for presenting notation expressions in the expansion tree and fundamental-sequence tooltip.
@@ -161,8 +179,25 @@ User-authored free-form notes associated with a **Main notation** independently 
 - Replacing a file preserves a current selection whose notation ID still exists
 - **Built-in notations** keep deterministic built-in file order ahead of enabled local entries; registrations from one file keep source order
 - **Local notation files** keep creation order, and their contributed entries keep registration order
-- A **Display string** remains the data and tool contract in every **Expression rendering mode**
-- A **LaTeX display** affects only expansion-tree and **Fundamental-sequence tooltip** expressions; it does not replace `display(expr)` in navigation, import/export, tools, diagrams, **Analysis text**, or **Note sheets**
+- A selected **Equivalent representation** is persisted independently for each **Main notation** and never creates another registry entry
+- Equivalent representation state is keyed by `ownerId::notationId`; local files that reuse an ID do not inherit or clear one another's selection, and legacy bare-ID state migrates to the active owner
+- Selecting, hiding, or showing an equivalent representation does not rebuild expansion trees or clear **Analysis text**
+- An unavailable persisted equivalent key falls back to the **Original representation** without mutating retained notation data
+- The expansion tree displays the active equivalent first and may display the **Original representation** beside it; the **Fundamental-sequence tooltip** displays only the active representation
+- An equivalent parser is strict: navigation, import, and direct expansion do not fall back to the original parser when the active equivalent provides no parser
+- User-facing navigation, xlsx import/export, and direct-expansion output use the **Active display string**
+- Canonical automatic analysis retention, debug traversal, FS cache identities, and legacy code continue to use the **Display string** or raw expression data
+- A **LaTeX display** affects expansion-tree and **Fundamental-sequence tooltip** presentation without changing either the **Display string** or **Active display string**
+- Equivalent representation state belongs only to **Main notations**; **Analysis notations** remain independent and unchanged
+- **Notation attribution** is notation-level metadata; two definitions from one built-in file may carry different credit text
+- Missing upstream attribution remains blank rather than being inferred
+- Algorithms imported from the external rewritten project are isolated in a pinned compatibility bundle; its Vue UI, registries, settings, and state model are not part of this application
+- Only genuinely missing external definitions are registered; semantic duplicates retain this application's existing IDs and algorithms while compatible display metadata may be attached
+- Remote-only definitions follow the upstream category and parent-category hierarchy rather than the compatibility bundle's physical JavaScript file layout
+- Every **Generated notation family** starts with the pinned upstream `start...initial` range; `+` registers exactly the next integer variant and `-` unregisters the current last variant down to, but never including, `start`
+- **Generator state** is restored before the saved current notation so an extra generated variant can remain selected across reloads
+- Unregistering an extra generated variant removes its live tree but retains its **Analysis text** and **Note sheets**; registering that same variant again restores them
+- `CpS / n-CpS` is a **Generated notation family** whose items are independent `1-CpS`, `2-CpS`, ... entries with separate trees and FS caches; legacy `n-cps` selection and saved analysis migrate to `2-CpS`
 - A notation may provide `latex(expr)`; otherwise only the documented legacy HTML subset of its **Display string** is converted to KaTeX source
 - The default **LaTeX command source** is empty, and each expression render receives an isolated copy of the compiled user macros
 - An invalid **LaTeX command source** reports an error while the last valid macro set remains available for rendering
@@ -178,7 +213,7 @@ User-authored free-form notes associated with a **Main notation** independently 
 > **Domain expert:** "No. The manager enables or disables the whole **Local notation file**."
 
 > **Dev:** "Should LaTeX mode change the expression text written to an analysis export?"
-> **Domain expert:** "No. Export keeps the **Display string**; **LaTeX display** is presentation only."
+> **Domain expert:** "No. Export keeps the **Active display string**; **LaTeX display** is presentation only."
 
 ## Flagged ambiguities
 

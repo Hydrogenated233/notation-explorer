@@ -215,11 +215,13 @@
       ,FS:(m,FSterm)=>{
          if(''+m==='Infinity') return Limit(FSterm)
          if(m.length===0) return []
+         if(m[m.length-1].length===0) return m.slice(0,-1)
          return expand(m,FSterm,true)
       }
       ,FSalter:(m,FSterm)=>{
          if(''+m==='Infinity') return Limit(FSterm)
          if(m.length===0) return []
+         if(m[m.length-1].length===0) return m.slice(0,-1)
          return expand(m,FSterm)
       }
       ,init:()=>([

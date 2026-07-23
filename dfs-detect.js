@@ -58,7 +58,6 @@ function loadAll() {
 
 var register = [];
 var analysis_register = [];
-var nCpSN = 2;
 loadAll();
 
 const notation = register.find(r => r.id === notationId);

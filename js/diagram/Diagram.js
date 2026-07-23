@@ -128,6 +128,13 @@ function drawLine(a, scale) {
 }
 
 function drawText(action, scale) {
+   if (action.align) {
+      const previousAlign = ctx.textAlign
+      ctx.textAlign = action.align
+      ctx.fillText(action.value, action.pos.x * scale, action.pos.y * scale)
+      ctx.textAlign = previousAlign
+      return
+   }
    let offset = 0
    if (action.h_center) {
       offset = -ctx.measureText(action.value).width / 2

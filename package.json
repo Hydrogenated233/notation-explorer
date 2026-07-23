@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "scripts": {
+    "build:smilelee-notations": "node scripts/build-smilelee-notation-bundle.js"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.5"
+  }
+}

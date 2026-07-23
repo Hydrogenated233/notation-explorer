@@ -15,7 +15,11 @@ notation-explorer/
 │   ├── framework.js        ← Vue 应用框架（UI、展开逻辑、分析）
 │   ├── debug-tools.js      ← 调试工具（无穷降链检测等）
 │   ├── latex-renderer.js   ← HTML/记号表达式到 KaTeX 的展示适配层
+│   ├── notation-display.js ← 主表示/等价表示统一解析层
+│   ├── notation-credits.js ← 记号归属的中英文文本与解析
 │   ├── notation-registry.js← 按 ID/文件 owner 管理主记号与分析记号
+│   ├── smilelee-notation-bundle.js ← 固定上游版本的纯算法 bundle（生成文件）
+│   ├── smilelee-notation-adapter.js← 上游定义到当前 register API 的兼容层
 │   ├── local-notation-runtime.js ← 本地文件持久化与热加载事务
 │   ├── local-notation-ui.js← 设置页文件管理器与编辑器
 │   ├── notation-editor.js  ← 行号、高亮与括号匹配
@@ -31,7 +35,7 @@ notation-explorer/
 │   │   ├── DEN/            ← Defective Embedding Notation
 │   │   ├── MN/             ← Mountain Notation 与 HypCos 变体
 │   │   ├── Misc/           ← 尚无独立谱系的记号
-│   │   ├── OCN/            ← Ordinal Collapsing Notation
+│   │   ├── OCN/            ← OCF-like notation（上游分类简称 OCN）
 │   │   ├── PPS/            ← PPS、PPS4 及 sPPS4 等变体
 │   │   ├── PrSS/           ← PrSS 衍生系统
 │   │   ├── SMN/            ← Smile/n-MN 谱系
@@ -48,7 +52,8 @@ notation-explorer/
 │   └── bfs-diff.md           ← （已弃用，重命名为 dfs-diff.md）
 ├── dfs-detect.js           ← CLI 无穷降链检测器
 ├── dfs-diff.js             ← CLI DFS 差异对比工具
-└── generate-notation-manifest.js ← 扫描并生成内置文件清单
+├── generate-notation-manifest.js ← 扫描并生成内置文件清单
+└── scripts/build-smilelee-notation-bundle.js ← 重建固定上游算法 bundle
 ```
 
 ## 核心概念
@@ -108,12 +113,15 @@ Notation Explorer 是一个 Vue 3 应用，用于**展开**各种大数/序数�
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `latex` | `(expr) => string` | 返回不含 `$...$` 或 `\(...\)` 定界符的 KaTeX 数学源，仅用于表达式展示 |
+| `displayPlain` | `(expr) => string` | 主表示的纯文本形式；缺省时使用 `display` |
+| `display_equiv` | `Record<string, displaySpec>` | 同一记号的命名等价表示，详见下节 |
 | `fromDisplay` | `(str) => expr` | 将字符串解析为内部表达式（"From Display" 的反向）。用于「Navigate to notation」和导入分析 |
 | `fromDisplay_alter` | `(str) => expr` | 备选解析方式（兜底，`fromDisplay` 抛异常时尝试） |
 | `FSalter` | `(expr, n) => expr` | 备选基本列函数（勾选 "Use alternative (short) fundamental sequence" 时使用） |
 | `FSShort` | `(expr, n) => expr` | 短基本列（也是备选，与 `FSalter` 二选一，通过 `get_FS()` 确定优先级：`FSShort` → `FSalter` → `FS`） |
 | `semiable` | `(expr) => boolean` | 判断表达式"可语义化"（影响 UI 中某些处理） |
 | `drawDiagram` | `(expr) => diagramObject` | 返回画图对象（见「画图」部分）。在输入框获得焦点时调用，浮窗显示山图 |
+| `credit_text_id` | string | 记号级归属文本键；未知键不显示，不从文件或分类推断 |
 
 ### init 的输入格式
 
@@ -160,11 +168,31 @@ LaTeX 模式优先调用可选的 `notation.latex(expr)`。未提供该函数时
 
 其他 HTML 标签和实体不保证可转换。需要特殊排版的记号应实现 `latex(expr)`，且它必须与 `display(expr)` 表示同一个内部表达式。
 
-`display(expr)` / `fromDisplay(str)` 仍是稳定的数据契约：导航、分析导入导出、工具输出、图表任务标识和缓存语义继续使用显示字符串，不写入 KaTeX HTML 或 `latex(expr)` 的源文本。切换渲染模式不会重建展开树或清空分析文本。
+主 `display(expr)` / `fromDisplay(str)` 仍是兼容性数据契约。若选择了等价表示，导航、分析导入导出和直接展开改用该表示的 `plain` / `from_display`；图表任务标识、自动分析存档、缓存和旧代码仍使用主显示字符串或原始表达式。两种路径都不会写入 KaTeX HTML 或 `latex(expr)` 源文本，切换渲染模式也不会重建展开树或清空分析文本。
 
 KaTeX 从仓库的 `lib/katex` 本地加载，以行内模式、`trust: false` 和 `maxExpand: 1000` 渲染。单个表达式失败时显示可诊断的回退内容，不中断其余展开树。
 
 设置页可保存用户自己的 `\newcommand` / `\renewcommand` 声明，应用默认声明为空。有效声明会编译为宏表；无效编辑显示错误并沿用当前会话中最后一次有效的宏表。每次渲染使用宏表副本，避免表达式内的全局定义泄漏到后续表达式。
+
+## 等价表示与归属
+
+`display_equiv` 为同一个主记号提供一个或多个命名显示协议。它不是新记号，也不会获得独立的树或 ID。值可以是一个显示函数，也可以是：
+
+```js
+display_equiv: {
+  layer: {
+    plain: expr => layerPlain(expr),
+    html: expr => layerHtml(expr),       // 可省略，回退 plain
+    latex: expr => layerLatex(expr),     // 可省略，从 html 转换
+    from_display: text => parseLayer(text),
+    name_id: 'display.layer',
+  },
+}
+```
+
+选择按 `ownerId::notationId` 保存在 `ne-config`；内置记号和两个先后复用同一 ID 的本地文件互不污染。旧版裸 ID 配置会迁移到当前活动 owner。树使用当前等价表示，并可按用户设置在其后同时显示原表示；基本列提示框只显示当前表示。导航、xlsx 导入导出和直接展开使用当前表示的 `plain` / `from_display`。若某个等价表示没有解析器，输入功能会拒绝该表示，而不会退回 `fromDisplay`。自动分析存档、调试工具、缓存和旧代码仍使用原始表达式或主 `display`，因此切换表示不会重建树或清空分析。
+
+`credit_text_id` 通过 `notation-credits.js` 解析，在当前树下显示中英文归属。归属属于单个注册记号；即使多个记号来自同一文件，也必须逐项声明。上游没有提供归属时保持空白。
 
 ## FS 函数的实现细节
 
@@ -336,6 +364,21 @@ node generate-notation-manifest.js
 
 > 注意：内置记号不受 Settings 中的本地文件管理器管理。需要让用户自行维护源码时，应改用下面的本地记号文件流程。
 
+### 固定上游算法 bundle
+
+从 `SmileLee-lyx/ne-rewritten` 合并的定义通过纯算法兼容 bundle 接入，不复制其 Vue、registry、settings 或状态架构。生成文件固定到源码中记录的 commit，运行时只暴露 `SmileLeeNotationBundle`；分类目录中的小型注册文件决定哪些缺失记号进入当前 `register`，并把兼容的等价表示和归属附加到现有同源 ID。
+
+在依赖安装后，可用指定 commit 的干净上游 checkout 重建或校验：
+
+```bash
+npm run build:smilelee-notations -- --source ../ne-rewritten-source
+npm run build:smilelee-notations -- --source ../ne-rewritten-source --check
+```
+
+构建脚本拒绝非固定 commit、带 tracked 修改的上游 checkout，以及进入 Vue/UI/registry/settings 等非算法模块的依赖。Bundle schema v2 保留纯算法 generator 的 `start`、`initial` 和 `create(index)`，但实际注册、注销、树初始化和持久化仍由本项目现有 registry 与 `ne-config` 管理。
+
+下拉菜单按上游 `category_id` / `parent_id` 显示远端新增定义。带 generator 的文件夹显示 `- / 当前上限 / +`：初次加载 `start...initial`，`+` 只注册下一个整数变种，`-` 从当前上限开始注销且最低保留 `start`。当前上限保存在 `ne-config.generatorState`，并限制在 64 以内以防损坏的持久化数据在启动时批量创建无界记号。注销会卸载该记号的实时树但保留分析文本、折叠状态和便利贴；无法直接 JSON 表示的极限哨兵通过规范显示字符串恢复。再次增加同一变种时自动恢复。`CpS / n-CpS` 同样是生成文件夹，其中 `1-CpS`、`2-CpS`、... 是拥有独立展开树与 FS 缓存的不同主记号；旧版 `n-cps` 选择、分析文字和便利贴迁移到 `2-CpS`。
+
 ### 管理本地记号文件（无需修改 index.html）
 
 Settings 中的 **Local notation files** 工作区将文件和草稿保存在 `localStorage`：
@@ -352,7 +395,7 @@ Settings 中的 **Local notation files** 工作区将文件和草稿保存在 `l
 ```
 文件源码 → 隔离函数作用域中执行 register.push()/analysis_register.push()
   → 暂存并验证两个注册表、每个主记号的 init()
-  → 先持久化文件元数据，再原子提交 owner 的全部注册
+  → 在一次 localStorage 写入中更新源码并清除草稿，再原子提交 owner 的全部注册
   → 按 ID 更新选择和受影响的数据树
 ```
 
@@ -377,6 +420,8 @@ Settings 中的 **Local notation files** 工作区将文件和草稿保存在 `l
 | `darkMode` | boolean | 暗黑模式 |
 | `lang` | string | 语言 (`'en'` / `'zh'`) |
 | `displayMode` | string | 表达式渲染模式 (`'html'` / `'latex'`) |
+| `equivActive` | object | 以 `ownerId::notationId` 为键的活动等价表示 ID |
+| `equivHideOriginal` | object | 以 `ownerId::notationId` 为键的原表示隐藏状态；未记录时默认为隐藏 |
 | `latexCommands` | string | 用户自定义的 KaTeX 宏声明，默认空字符串 |
 | `analysisLatexPreview` | boolean | 是否在聚焦预览和基本列提示框中将分析文本渲染为 LaTeX |
 | `analysisLatexInline` | boolean | 是否在分析文本非编辑状态显示行内 LaTeX；依赖 `analysisLatexPreview` |
@@ -459,15 +504,15 @@ Notation Explorer 会自动保存和恢复用户的分析数据，包括展开�
 
 **导出（Export analysis）：**
 - 遍历当前记号的整个展开树
-- 用 `notation.display(expr)` 生成表达式标识，与用户输入的 `analysis` 文本一起写入 xlsx
+- 用当前等价表示的 `plain(expr)` 生成表达式标识；未选择等价表示时使用主 `notation.display(expr)`，再与用户输入的 `analysis` 文本一起写入 xlsx
 - 便利贴内容以 Sheet2+ 形式导出
 
 **导入（Import analysis）：**
 - 读取 xlsx 的 Sheet1，每行 `[表达式字符串, 分析文本, 可选隐藏状态]`
-- 用 `safeFromDisplay(notation, str)` 还原为内部表达式
+- 用当前等价表示的解析器还原为内部表达式；未选择等价表示时使用 `safeFromDisplay(notation, str)`
 - 执行展开直到匹配，填入分析文本
 
-> 导出/导入始终使用 `notation.display` / `fromDisplay` 的字符串标识，不受当前 HTML/LaTeX 模式影响，也不会写入 KaTeX HTML 或 `latex(expr)` 源文本。
+> 导出/导入使用当前活动表示的纯文本协议，不受 HTML/LaTeX 渲染模式影响，也不会写入 KaTeX HTML 或 `latex(expr)` 源文本。活动等价表示没有解析器时，导入会拒绝该表示，不会回退主解析器。
 
 ## Vue 组件与热替换
 
@@ -568,8 +613,8 @@ FS 计算通常较慢，统一使用闭包缓存模式。注意对 `Infinity` �
 
 ### 5. 导出/导入分析
 
-- 导出：调用 `display(expr)` 获取字符串标识，与用户输入的分析文本一起写入 xlsx
-- 导入：调用 `fromDisplay(str)` 将行首字符串还原为内部表达式，然后执行展开直到匹配
+- 导出：调用活动表示的 `plain(expr)` 获取字符串标识，与用户输入的分析文本一起写入 xlsx；未选择等价表示时回退主 `display(expr)`
+- 导入：调用活动表示的解析器将行首字符串还原为内部表达式，然后执行展开直到匹配；活动等价表示没有解析器时拒绝导入
 
 ### 6. 下拉菜单 + 中英文
 

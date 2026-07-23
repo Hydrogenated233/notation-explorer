@@ -191,8 +191,10 @@
       var file = this.store.getFile(id)
       if (!file) throw new Error('Local notation file not found.')
       if (file.enabled) return this.saveFile(id, name, source)
-      var updated = this.store.updateFile(id, { name: name, source: source, lastError: null })
-      this.store.clearDraft(id)
+      var updated = this.store.updateFileAndClearDraft(
+         id,
+         { name: name, source: source, lastError: null }
+      )
       return { file: updated, change: null, enabled: false, sourceChanged: source !== file.source }
    }
 
@@ -202,13 +204,14 @@
       var sourceChanged = source !== file.source
       var nameChanged = name !== file.name
       if (!sourceChanged) {
-         var renamed = nameChanged ? this.store.updateFile(id, { name: name }) : file
-         this.store.clearDraft(id)
+         var renamed = this.store.updateFileAndClearDraft(id, nameChanged ? { name: name } : {})
          return { file: renamed, change: null, enabled: !!renamed.enabled, sourceChanged: false }
       }
       if (!file.enabled) {
-         var saved = this.store.updateFile(id, { name: name, source: source, lastError: null })
-         this.store.clearDraft(id)
+         var saved = this.store.updateFileAndClearDraft(
+            id,
+            { name: name, source: source, lastError: null }
+         )
          return { file: saved, change: null, enabled: false, sourceChanged: true }
       }
 
@@ -227,12 +230,15 @@
       var preview = transaction.preview()
       var persisted
       try {
-         persisted = this.store.updateFile(id, filePatchFromChange(file, preview, {
-            name: name,
-            source: source,
-            enabled: true,
-            loadedRevision: file.sourceRevision + 1,
-         }))
+         persisted = this.store.updateFileAndClearDraft(
+            id,
+            filePatchFromChange(file, preview, {
+               name: name,
+               source: source,
+               enabled: true,
+               loadedRevision: file.sourceRevision + 1,
+            })
+         )
       } catch (error) {
          transaction.rollback()
          throw error
@@ -240,7 +246,6 @@
       var change = transaction.commit()
       this._forgetInitialData(change.main.removed)
       this._rememberInitialData(change)
-      this.store.clearDraft(id)
       return { file: persisted, previous: file, change: change, enabled: true, sourceChanged: true }
    }
 

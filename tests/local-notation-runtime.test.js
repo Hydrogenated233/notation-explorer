@@ -18,6 +18,8 @@ class MemoryStorage {
    constructor() {
       this.data = new Map()
       this.writeError = null
+      this.writeCount = 0
+      this.failOnWrite = null
    }
 
    getItem(key) {
@@ -25,6 +27,8 @@ class MemoryStorage {
    }
 
    setItem(key, value) {
+      this.writeCount++
+      if (this.failOnWrite === this.writeCount) throw new Error('planned write failure')
       if (this.writeError) throw this.writeError
       this.data.set(key, String(value))
    }
@@ -226,6 +230,23 @@ test('storage failure rolls back a prepared enabled replacement', () => {
    assert.equal(store.getFile(uploaded.file.id).source, sourceFor('stored-old'))
    assert.equal(hub.main.get('stored-old'), originalEntry)
    assert.equal(hub.main.get('stored-new'), undefined)
+})
+
+test('enabled save commits source, registry, and draft removal in one storage write', () => {
+   const { hub, runtime, storage, store } = createHarness()
+   const uploaded = runtime.createUpload('Atomic.js', sourceFor('atomic-old'), true)
+   const replacement = sourceFor('atomic-new')
+   runtime.setDraft(uploaded.file.id, { name: 'Atomic.js', source: replacement })
+   storage.failOnWrite = storage.writeCount + 2
+
+   const saved = runtime.saveFile(uploaded.file.id, 'Atomic.js', replacement)
+
+   assert.equal(saved.sourceChanged, true)
+   assert.equal(store.getFile(uploaded.file.id).source, replacement)
+   assert.equal(runtime.getDraft(uploaded.file.id), undefined)
+   assert.equal(hub.main.get('atomic-old'), undefined)
+   assert.equal(hub.main.ownerOf('atomic-new'), uploaded.file.id)
+   assert.equal(storage.writeCount < storage.failOnWrite, true)
 })
 
 test('disable and re-enable report whether the retained source revision changed', () => {
