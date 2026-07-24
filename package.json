@@ -1,7 +1,7 @@
 {
   "private": true,
   "scripts": {
-    "build:smilelee-notations": "node scripts/build-smilelee-notation-bundle.js"
+    "build:ne-rewritten-notations": "node scripts/build-ne-rewritten-bundle.js"
   },
   "devDependencies": {
     "esbuild": "0.25.5"

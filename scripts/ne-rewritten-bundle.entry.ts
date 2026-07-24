@@ -196,10 +196,10 @@ const notationsById: Record<string, NotationDefinition<any>> = Object.create(nul
 
 for (const notation of notations) {
     if (!notation || typeof notation.id !== 'string' || notation.id.length === 0) {
-        throw new Error('SmileLee notation bundle contains an invalid notation definition.');
+        throw new Error('ne-rewritten notation bundle contains an invalid notation definition.');
     }
     if (notationsById[notation.id]) {
-        throw new Error(`SmileLee notation bundle contains duplicate id '${notation.id}'.`);
+        throw new Error(`ne-rewritten notation bundle contains duplicate id '${notation.id}'.`);
     }
     notationsById[notation.id] = notation;
 }
@@ -210,7 +210,7 @@ if (
     notations.length !== EXPECTED_NOTATION_COUNT
 ) {
     throw new Error(
-        'SmileLee notation bundle inventory changed: ' +
+        'ne-rewritten notation bundle inventory changed: ' +
             `${directNotations.length} direct + ${generatedNotations.length} generated = ${notations.length}; ` +
             `expected ${EXPECTED_DIRECT_COUNT} + ${EXPECTED_GENERATED_COUNT} = ${EXPECTED_NOTATION_COUNT}.`,
     );
@@ -263,7 +263,7 @@ const categories = allCategories.map((category) => {
 const categoriesById: Record<string, (typeof categories)[number]> = Object.create(null);
 for (const category of categories) {
     if (categoriesById[category.id]) {
-        throw new Error(`SmileLee notation bundle contains duplicate category id '${category.id}'.`);
+        throw new Error(`ne-rewritten notation bundle contains duplicate category id '${category.id}'.`);
     }
     categoriesById[category.id] = category;
 }
@@ -276,8 +276,8 @@ function createGeneratedNotation(categoryId: string, index: number): NotationDef
         throw new TypeError('Generator category id must be a non-empty string.');
     }
     const category = categoriesById[categoryId];
-    if (!category) throw new Error(`Unknown SmileLee notation category '${categoryId}'.`);
-    if (!category.generator) throw new Error(`SmileLee notation category '${categoryId}' is not generated.`);
+    if (!category) throw new Error(`Unknown ne-rewritten notation category '${categoryId}'.`);
+    if (!category.generator) throw new Error(`ne-rewritten notation category '${categoryId}' is not generated.`);
     return category.generator.create(index);
 }
 
@@ -370,7 +370,7 @@ const bundle = Object.freeze({
     credits: Object.freeze(credits),
 });
 
-Object.defineProperty(globalThis, 'SmileLeeNotationBundle', {
+Object.defineProperty(globalThis, 'NeRewrittenNotationBundle', {
     configurable: false,
     enumerable: true,
     writable: false,

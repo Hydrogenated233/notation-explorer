@@ -12,15 +12,15 @@ const EXPECTED_NOTATION_COUNT = 105
 const EXPECTED_DIRECT_COUNT = 73
 const EXPECTED_GENERATED_COUNT = 32
 const projectRoot = path.resolve(__dirname, '..')
-const entryPath = path.join(__dirname, 'smilelee-notation-bundle.entry.ts')
-const outputPath = path.join(projectRoot, 'js', 'smilelee-notation-bundle.js')
+const entryPath = path.join(__dirname, 'ne-rewritten-bundle.entry.ts')
+const outputPath = path.join(projectRoot, 'js', 'ne-rewritten-notation-bundle.js')
 
 function usage() {
   return [
-    'Usage: node scripts/build-smilelee-notation-bundle.js [--source PATH] [--check]',
+    'Usage: node scripts/build-ne-rewritten-bundle.js [--source PATH] [--check]',
     '',
-    '  --source PATH  Checkout of SmileLee-lyx/ne-rewritten at the pinned commit.',
-    '                 Defaults to ../ne-rewritten-source or SMILELEE_NE_SOURCE.',
+    '  --source PATH  Checkout of ne-rewritten at the pinned commit.',
+    '                 Defaults to ../ne-rewritten-source or NE_REWRITTEN_SOURCE.',
     '  --check        Verify that the committed bundle is current without writing it.',
   ].join('\n')
 }
@@ -49,7 +49,7 @@ function parseArgs(argv) {
 
   const defaultSource = path.resolve(projectRoot, '..', 'ne-rewritten-source')
   return {
-    source: path.resolve(source || process.env.SMILELEE_NE_SOURCE || defaultSource),
+    source: path.resolve(source || process.env.NE_REWRITTEN_SOURCE || defaultSource),
     check,
   }
 }
@@ -96,7 +96,7 @@ function normalize(source) {
 
 function validateInputs(inputs) {
   const allowed = [
-    /^notation-explorer-smilelee-entry\.ts$/,
+    /^notation-explorer-ne-rewritten-entry\.ts$/,
     /^src\/notations\//,
     /^src\/notation-definition\.ts$/,
     /^src\/utils\.ts$/,
@@ -108,7 +108,7 @@ function validateInputs(inputs) {
   })
   if (forbidden.length) {
     throw new Error(
-      'Algorithm bundle reached files outside the pure compatibility allowlist:\n' +
+      'Algorithm bundle reached files outside the pure ne-rewritten allowlist:\n' +
       forbidden.map((input) => '  ' + input).join('\n')
     )
   }
@@ -119,9 +119,9 @@ function validateBundle(source) {
   context.globalThis = context
   vm.runInNewContext(source, context, { filename: outputPath })
 
-  const bundle = context.SmileLeeNotationBundle
+  const bundle = context.NeRewrittenNotationBundle
   if (!bundle || typeof bundle !== 'object') {
-    throw new Error('Generated bundle did not expose globalThis.SmileLeeNotationBundle.')
+    throw new Error('Generated bundle did not expose globalThis.NeRewrittenNotationBundle.')
   }
   if (bundle.source.repository !== REPOSITORY || bundle.source.commit !== COMMIT) {
     throw new Error('Generated bundle source metadata does not match the pinned upstream.')
@@ -203,7 +203,7 @@ async function build(source) {
       contents: entry,
       loader: 'ts',
       resolveDir: source,
-      sourcefile: 'notation-explorer-smilelee-entry.ts',
+      sourcefile: 'notation-explorer-ne-rewritten-entry.ts',
     },
     absWorkingDir: source,
     tsconfig: path.join(source, 'tsconfig.json'),
@@ -217,7 +217,7 @@ async function build(source) {
     metafile: true,
     write: false,
     banner: {
-      js: '// Generated from ' + REPOSITORY + '\n// Pinned commit: ' + COMMIT + '\n// Run: npm run build:smilelee-notations -- --source <checkout>',
+      js: '// Generated from ' + REPOSITORY + '\n// Pinned commit: ' + COMMIT + '\n// Run: npm run build:ne-rewritten-notations -- --source <checkout>',
     },
   })
 
@@ -238,12 +238,12 @@ async function main() {
 
   if (options.check) {
     if (current !== generated) {
-      console.error('SmileLee notation bundle is stale. Rebuild it with:')
-      console.error('  npm run build:smilelee-notations -- --source "' + options.source + '"')
+      console.error('ne-rewritten notation bundle is stale. Rebuild it with:')
+      console.error('  npm run build:ne-rewritten-notations -- --source "' + options.source + '"')
       process.exitCode = 1
       return
     }
-    console.log('SmileLee notation bundle is current (' + EXPECTED_NOTATION_COUNT + ' unique ids).')
+    console.log('ne-rewritten notation bundle is current (' + EXPECTED_NOTATION_COUNT + ' unique ids).')
     return
   }
 

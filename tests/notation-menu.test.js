@@ -27,8 +27,7 @@ function integratedFixture() {
    })
    context.window = context
    context.globalThis = context
-   runFile(context, 'smilelee-notation-bundle.js', path.join(projectRoot, 'js'))
-   runFile(context, 'smilelee-notation-adapter.js', path.join(projectRoot, 'js'))
+   runFile(context, 'ne-rewritten-notation-bundle.js', path.join(projectRoot, 'js'))
 
    const catalog = []
    manifest.forEach((file) => {
@@ -49,8 +48,8 @@ function integratedFixture() {
          notations: hub.main.map((notation) => notation),
          getNotation: (id) => hub.main.get(id),
          getOwner: (id) => hub.main.ownerOf(id),
-         remoteCategories: context.SmileLeeNotationBundle.categories,
-         remoteNotationIds: context.SmileLeeNotationBundle.notations.map((notation) => notation.id),
+         categories: context.NeRewrittenNotationBundle.categories,
+         notationIds: context.NeRewrittenNotationBundle.notations.map((notation) => notation.id),
          generatorState,
       })
    }
@@ -223,7 +222,111 @@ test('ancestorKeysForNotation opens the complete current path', () => {
    assert.deepEqual(Menu.ancestorKeysForNotation(tree, 'missing'), [])
 })
 
-test('remote-only inventory follows the complete upstream category hierarchy without duplicates', () => {
+test('local generator categories stay inside their file folder and expose plus/minus metadata', () => {
+   const hub = new NotationRegistryHub()
+   const owner = 'local-demo-file'
+   const enabledFile = { id: owner, name: 'Demo.js', enabled: true }
+   hub.executeSource(owner, `
+      register_category({
+         id: 'n-demo',
+         name: 'Generated Demo',
+         simple_name: 'n-Demo',
+         path: ['Examples', 'n-Demo'],
+         generator: {
+            start: 1,
+            initial: 2,
+            maximum: 4,
+            create: function (index) {
+               return {
+                  id: 'demo-' + index,
+                  name: index + '-Demo',
+                  category_id: 'n-demo',
+                  display: function () { return ''; },
+                  able: function () { return false; },
+                  compare: function () { return 0; },
+                  FS: function () { return []; },
+                  init: function () {
+                     return [{ expr: [index], low: [[]], subitems: [] }];
+                  }
+               };
+            }
+         }
+      });
+      register.push({
+         id: 'local-plain',
+         name: 'Local plain',
+         display: function () { return ''; },
+         able: function () { return false; },
+         compare: function () { return 0; },
+         FS: function () { return []; },
+         init: function () { return [{ expr: [], low: [[]], subitems: [] }]; }
+      });
+   `)
+
+   function build(files) {
+      return Menu.buildTree({
+         notations: hub.main.slice(),
+         getOwner: (id) => hub.main.ownerOf(id),
+         localFiles: files,
+         entriesForOwner: (fileOwner) => hub.main.entriesForOwner(fileOwner),
+         localLabel: 'Local files',
+         categories: hub.categories(),
+         generatorDefinitions: hub.main.generatorDefinitions(),
+         generatorState: hub.main.getGeneratorState(),
+      })
+   }
+
+   const initialTree = build([enabledFile])
+   const initialFolder = categoryFolder(initialTree, 'n-demo')
+   const fileFolder = namedFolder(initialTree, 'Demo.js')
+
+   assert.deepEqual(pathLabels(initialTree, 'demo-1'), [
+      'Local files',
+      'Demo.js',
+      'Examples',
+      'n-Demo',
+   ])
+   assert.deepEqual(initialFolder.generator, {
+      categoryId: 'n-demo',
+      start: 1,
+      initial: 2,
+      current: 2,
+   })
+   assert.deepEqual(initialFolder.children.map((node) => node.id), ['demo-1', 'demo-2'])
+   assert.ok(fileFolder.children.some((node) => node.id === 'local-plain'))
+
+   hub.main.generatorAdd('n-demo')
+   const addedTree = build([enabledFile])
+   assert.deepEqual(categoryFolder(addedTree, 'n-demo').children.map((node) => node.id), [
+      'demo-1',
+      'demo-2',
+      'demo-3',
+   ])
+   assert.deepEqual(pathLabels(addedTree, 'demo-3'), [
+      'Local files',
+      'Demo.js',
+      'Examples',
+      'n-Demo',
+   ])
+
+   hub.main.generatorRemove('n-demo')
+   const removedTree = build([enabledFile])
+   assert.deepEqual(categoryFolder(removedTree, 'n-demo').children.map((node) => node.id), [
+      'demo-1',
+      'demo-2',
+   ])
+
+   const disabledTree = build([{ ...enabledFile, enabled: false }])
+   assert.equal(namedFolder(disabledTree, 'Demo.js'), undefined)
+   assert.equal(categoryFolder(disabledTree, 'n-demo'), undefined)
+
+   hub.removeOwner(owner)
+   const deletedTree = build([])
+   assert.equal(namedFolder(deletedTree, 'Demo.js'), undefined)
+   assert.equal(categoryFolder(deletedTree, 'n-demo'), undefined)
+})
+
+test('imported inventory follows the complete upstream category hierarchy without duplicates', () => {
    const { hub, build } = integratedFixture()
    const tree = build()
    const ids = notationIds(tree)
@@ -259,13 +362,8 @@ test('remote-only inventory follows the complete upstream category hierarchy wit
 })
 
 test('runtime generated entries stay ordered in their category and expose validated state', () => {
-   const { hub, context, build } = integratedFixture()
-   context.SmileLeeNotationAdapter.installGenerated(
-      hub.main,
-      'category-upms-partial',
-      4,
-      context.SmileLeeNotationBundle
-   )
+   const { hub, build } = integratedFixture()
+   hub.main.generatorAdd('category-upms-partial')
 
    const tree = build({ 'category-upms-partial': 4 })
    const folder = categoryFolder(tree, 'category-upms-partial')
@@ -291,8 +389,8 @@ test('runtime generated entries stay ordered in their category and expose valida
 })
 
 test('runtime n-CpS variants remain inside the n-CpS folder', () => {
-   const { hub, context, build } = integratedFixture()
-   hub.main.push(context.NotationGenerators['n-cps'].create(3))
+   const { hub, build } = integratedFixture()
+   hub.main.generatorAdd('n-cps')
 
    const tree = build({ 'n-cps': 3 })
    const folder = namedFolder(tree, 'n-CpS')
@@ -301,4 +399,56 @@ test('runtime n-CpS variants remain inside the n-CpS folder', () => {
    assert.deepEqual(folder.children.map((node) => node.id), ['1-cps', '2-cps', '3-cps'])
    assert.deepEqual(pathLabels(tree, '3-cps'), ['CpS', 'n-CpS'])
    assert.equal(folder.generator.current, 3)
+})
+
+test('n-MN generator controls use the historical nt-k-mn live IDs inside MN / n-MN', () => {
+   const { hub, build } = integratedFixture()
+   const familyId = 'category-n-mn'
+   const initialTree = build(hub.main.getGeneratorState())
+   const initialFolder = categoryFolder(initialTree, familyId)
+
+   assert.ok(initialFolder)
+   assert.deepEqual(pathLabels(initialTree, 'nt-1-mn'), ['MN', 'n-MN'])
+   assert.deepEqual(initialFolder.children.map((node) => node.id), [
+      'nt-1-mn',
+      'nt-2-mn',
+      'nt-3-mn',
+   ])
+   assert.equal(initialFolder.generator.categoryId, familyId)
+   assert.equal(initialFolder.generator.current, 3)
+
+   const added = hub.main.generatorAdd(familyId)
+   assert.equal(added.id, 'nt-4-mn')
+   assert.ok(hub.main.get('nt-4-mn'))
+   assert.equal(hub.main.get('4-MN'), undefined)
+   assert.deepEqual(pathLabels(build(hub.main.getGeneratorState()), 'nt-4-mn'), ['MN', 'n-MN'])
+
+   const removed = hub.main.generatorRemove(familyId)
+   assert.equal(removed.id, 'nt-4-mn')
+   assert.equal(hub.main.get('nt-4-mn'), undefined)
+   assert.equal(hub.main.generatorCurrent(familyId), 3)
+
+   const restored = hub.main.generatorAdd(familyId)
+   assert.equal(restored.id, 'nt-4-mn')
+   assert.ok(hub.main.get('nt-4-mn'))
+})
+
+test('registry exposes all eleven imported generator families through the canonical API', () => {
+   const { hub, context } = integratedFixture()
+   const expected = Array.from(context.NeRewrittenNotationBundle.generatorCategoryIds)
+   const actual = hub.main.generatorCategoryIds()
+
+   assert.equal(expected.length, 11)
+   expected.forEach((categoryId) => {
+      const family = hub.main.generatorDefinition(categoryId)
+      assert.ok(family, 'missing registry generator ' + categoryId)
+      assert.equal(family.id, categoryId)
+      assert.equal(family.categoryId, categoryId)
+      assert.equal(typeof family.create, 'function')
+   })
+   assert.deepEqual(
+      actual.filter((categoryId) => expected.includes(categoryId)).sort(),
+      expected.slice().sort()
+   )
+   assert.ok(actual.includes('n-cps'))
 })

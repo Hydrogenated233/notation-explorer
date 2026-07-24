@@ -6,7 +6,6 @@ const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
 const { NotationRegistryHub } = require('../js/notation-registry.js')
-const Adapter = require('../js/smilelee-notation-adapter.js')
 
 const projectRoot = path.join(__dirname, '..')
 const partialUpmsCategory = 'category-upms-partial'
@@ -15,10 +14,10 @@ function loadBundle() {
    const context = Object.create(null)
    context.globalThis = context
    vm.runInNewContext(
-      fs.readFileSync(path.join(projectRoot, 'js', 'smilelee-notation-bundle.js'), 'utf8'),
+      fs.readFileSync(path.join(projectRoot, 'js', 'ne-rewritten-notation-bundle.js'), 'utf8'),
       context
    )
-   return context.SmileLeeNotationBundle
+   return context.NeRewrittenNotationBundle
 }
 
 function memoryStorage(initialConfig, initialAnalysis) {
@@ -35,7 +34,7 @@ function memoryStorage(initialConfig, initialAnalysis) {
 function loadHarness(config, initialAnalysis, options) {
    const bundle = loadBundle()
    const hub = new NotationRegistryHub()
-   Adapter.install(hub.main, {
+   hub.main.installRewrittenBundle({
       add: ['upms-partial-2', 'upms-partial-3'],
    }, bundle)
    const storage = memoryStorage(config, initialAnalysis)
@@ -45,8 +44,7 @@ function loadHarness(config, initialAnalysis, options) {
       console,
       register: hub.main,
       analysis_register: hub.analysis,
-      SmileLeeNotationBundle: bundle,
-      SmileLeeNotationAdapter: Adapter,
+      NeRewrittenNotationBundle: bundle,
       localStorage: storage,
       document: {
          documentElement: { classList: { toggle() {} } },
@@ -92,6 +90,16 @@ function loadHarness(config, initialAnalysis, options) {
       vm.runInContext(
          fs.readFileSync(
             path.join(projectRoot, 'js', 'notations', 'CpS', 'n-CpS', 'n-CpS.js'),
+            'utf8'
+         ),
+         context
+      )
+   }
+
+   if (options && options.nMn) {
+      vm.runInContext(
+         fs.readFileSync(
+            path.join(projectRoot, 'js', 'notations', 'SMN', 'non-triagular-cMN.js'),
             'utf8'
          ),
          context
@@ -220,12 +228,12 @@ test('hidden-only generated nodes restore without gaining empty analysis text', 
 
 test('generated install refuses an identical id owned by a local file', () => {
    const { root, hub, context, alerts } = loadHarness()
-   const local = context.SmileLeeNotationAdapter.createGeneratedDefinition(
-      partialUpmsCategory,
-      4,
-      context.SmileLeeNotationBundle
+   const transaction = hub.begin('local-file')
+   transaction.main.registerNotation(
+      context.NeRewrittenNotationBundle.createGeneratedNotation(partialUpmsCategory, 4),
+      context.NeRewrittenNotationBundle
    )
-   hub.main.appendOwned('local-file', [local])
+   transaction.commit()
 
    root.incrementGenerator(partialUpmsCategory)
 
@@ -266,6 +274,31 @@ test('n-CpS folder controls add and remove independent notation entries', () => 
    assert.equal(hub.main.get('3-cps'), undefined)
    assert.equal(root.datasets['3-cps'], undefined)
    assert.equal(root.generatorCurrent('n-cps'), 2)
+})
+
+test('n-MN plus/minus uses nt-k-mn IDs and restores the removed variant data', () => {
+   const familyId = 'category-n-mn'
+   const { root, hub, alerts } = loadHarness(undefined, undefined, { nMn: true })
+
+   assert.equal(root.generatorCurrent(familyId), 3)
+   root.incrementGenerator(familyId)
+   assert.ok(hub.main.get('nt-4-mn'))
+   assert.equal(hub.main.get('4-MN'), undefined)
+   assert.ok(root.datasets['nt-4-mn'])
+   root.datasets['nt-4-mn'].subitems[1].analysis = 'retained n-MN analysis'
+
+   root.decrementGenerator(familyId)
+   assert.equal(hub.main.get('nt-4-mn'), undefined)
+   assert.equal(root.datasets['nt-4-mn'], undefined)
+   assert.equal(root.generatorCurrent(familyId), 3)
+
+   root.incrementGenerator(familyId)
+   assert.ok(hub.main.get('nt-4-mn'))
+   assert.equal(
+      root.datasets['nt-4-mn'].subitems[1].analysis,
+      'retained n-MN analysis'
+   )
+   assert.deepEqual(alerts, [])
 })
 
 test('legacy n-cps selection, analysis, and notes migrate to 2-CpS', () => {

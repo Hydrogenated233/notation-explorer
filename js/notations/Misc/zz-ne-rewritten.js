@@ -1,6 +1,6 @@
 ;(function (root) {
    'use strict'
-   root.SmileLeeNotationAdapter.install(root.register, {
+   root.register.installRewrittenBundle({
       add: ['omega', 'veblen-phi'],
-   }, root.SmileLeeNotationBundle)
+   }, root.NeRewrittenNotationBundle)
 })(typeof globalThis !== 'undefined' ? globalThis : this)

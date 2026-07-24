@@ -612,5 +612,37 @@
       }
    }
 
-   register.push(create(1), create(2), create(3))
+   var generator = {
+      id: 'category-n-mn',
+      categoryId: 'category-n-mn',
+      category: {
+         id: 'category-n-mn',
+         name: 'n-MN',
+         simple_name: 'n-MN',
+         parent_id: 'category-mn',
+         path: ['MN', 'n-MN'],
+      },
+      start: 1,
+      initial: 3,
+      maximum: 64,
+      resolveId: function (index) { return 'nt-' + index + '-mn' },
+      create: create,
+   }
+
+   if (register && typeof register.registerGenerator === 'function') {
+      // The local implementation owns the historical nt-k-mn IDs. Register
+      // the parent category here because this file can be loaded independently
+      // of the pinned ne-rewritten inventory.
+      if (typeof register.registerCategory === 'function') {
+         register.registerCategory({
+            id: 'category-mn',
+            name: 'Mountain Notation',
+            simple_name: 'MN',
+            path: ['MN'],
+         })
+      }
+      register.registerGenerator(generator)
+   } else {
+      register.push(create(1), create(2), create(3))
+   }
 })()

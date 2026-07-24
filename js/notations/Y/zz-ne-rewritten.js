@@ -1,6 +1,6 @@
 ;(function (root) {
    'use strict'
-   root.SmileLeeNotationAdapter.install(root.register, {
+   root.register.installRewrittenBundle({
       add: ['-1y', 't--1y', '0y'],
       decorate: [
          'y-seq',
@@ -9,5 +9,5 @@
          'omega-y-strong',
          { targetId: 'omega-y', sourceId: 'omega-y-actual' },
       ],
-   }, root.SmileLeeNotationBundle)
+   }, root.NeRewrittenNotationBundle)
 })(typeof globalThis !== 'undefined' ? globalThis : this)

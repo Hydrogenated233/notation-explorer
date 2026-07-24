@@ -17,9 +17,8 @@ notation-explorer/
 │   ├── latex-renderer.js   ← HTML/记号表达式到 KaTeX 的展示适配层
 │   ├── notation-display.js ← 主表示/等价表示统一解析层
 │   ├── notation-credits.js ← 记号归属的中英文文本与解析
-│   ├── notation-registry.js← 按 ID/文件 owner 管理主记号与分析记号
-│   ├── smilelee-notation-bundle.js ← 固定上游版本的纯算法 bundle（生成文件）
-│   ├── smilelee-notation-adapter.js← 上游定义到当前 register API 的兼容层
+│   ├── notation-registry.js← 按 ID/文件 owner 管理、归一化并注册记号
+│   ├── ne-rewritten-notation-bundle.js ← 固定上游算法与原始定义（生成文件）
 │   ├── local-notation-runtime.js ← 本地文件持久化与热加载事务
 │   ├── local-notation-ui.js← 设置页文件管理器与编辑器
 │   ├── notation-editor.js  ← 行号、高亮与括号匹配
@@ -53,7 +52,7 @@ notation-explorer/
 ├── dfs-detect.js           ← CLI 无穷降链检测器
 ├── dfs-diff.js             ← CLI DFS 差异对比工具
 ├── generate-notation-manifest.js ← 扫描并生成内置文件清单
-└── scripts/build-smilelee-notation-bundle.js ← 重建固定上游算法 bundle
+└── scripts/build-ne-rewritten-bundle.js ← 重建固定上游定义 bundle
 ```
 
 ## 核心概念
@@ -67,7 +66,7 @@ Notation Explorer 是一个 Vue 3 应用，用于**展开**各种大数/序数�
 | `register` | 主列表中的记号（可展开/可导航） |
 | `analysis_register` | 分析窗口中的记号（用于分析被展开序列的强度） |
 
-注册表保留数组兼容接口；现有记号文件仍通过 `register.push({...})` 或 `analysis_register.push({...})` 注册自己，也可用 `get(id)` 按稳定 ID 查找。主记号和分析记号使用独立的 ID 命名空间，因此同一个 ID 可以各出现一次，但同一注册表中不允许重复。
+注册表保留数组兼容接口；现有记号文件仍通过 `register.push({...})` 或 `analysis_register.push({...})` 注册自己，也可用 `get(id)` 按稳定 ID 查找。唯一的 `NotationRegistry` 同时接受本地注册对象和 `ne-rewritten` 定义，并在注册边界把后者归一化为同一个运行时记号契约；不存在第二套 registry 或专用适配器。主记号和分析记号使用独立的 ID 命名空间，因此同一个 ID 可以各出现一次，但同一注册表中不允许重复。
 
 ### 内置记号与本地记号文件
 
@@ -93,6 +92,67 @@ Notation Explorer 是一个 Vue 3 应用，用于**展开**各种大数/序数�
 清单按分类目录后按文件名字典序加载。根目录文件先于分类目录，数字前缀保证序列 helper 先于矩阵 helper，并且两者都先于谱系文件。
 
 ## register 对象的完整 API
+
+### 注册表方法与生成族
+
+普通记号继续使用 `register.push(notation)`；也可以使用等价的
+`register.registerNotation(notation)`。需要由菜单中的 `+ / -` 动态增加、移除整数变体时，
+通过主注册表注册一个生成族：
+
+```js
+register.registerCategory({
+  id: 'category-example',
+  name: 'Example',
+  path: ['Example'],
+})
+
+register.registerGenerator({
+  id: 'category-n-example',
+  category: {
+    id: 'category-n-example',
+    name: 'n-Example',
+    parent_id: 'category-example',
+  },
+  start: 1,
+  initial: 3,
+  maximum: 64,
+  create: function (n) {
+    return {
+      id: n + '-example',
+      name: n + '-Example',
+      // display / able / compare / FS / init ...
+    }
+  },
+})
+```
+
+注册时会创建 `start...initial`；若设置中保存了合法的当前上限，则恢复到该上限。
+框架和菜单只调用注册表的通用接口，不读取上游 bundle 或某个记号文件的私有生成器：
+
+| 方法 | 作用 |
+|------|------|
+| `register.generatorCurrent(id)` | 返回生成族当前已注册的最大整数参数 |
+| `register.generatorCanIncrement(id)` | 是否可以增加下一项 |
+| `register.generatorCanDecrement(id)` | 是否可以移除当前末项；始终保留 `start` |
+| `register.generatorAdd(id)` | 注册下一项并返回新记号对象 |
+| `register.generatorRemove(id)` | 注销当前末项并返回被移除的记号对象 |
+
+`generatorIncrement` / `generatorDecrement` 是 `generatorAdd` /
+`generatorRemove` 的兼容别名。若生成器产生的源码 ID 与本项目的稳定 ID 不同，可提供
+`resolveId(index, notation)`；例如 n-MN 用它把变体绑定到 `nt-1-mn`、`nt-2-mn` 等现有 ID。
+
+生成项会获得 `category_id` 和 `generatedFamily` 元数据，因此下拉菜单始终把它放回生成族文件夹。
+在本地记号文件中调用这些 API 时，分类、生成族及其初始项与该文件的普通注册一起暂存；只有整个文件
+校验成功才提交，提交后源码闭包已捕获的生成器控制方法会转发到实时注册表；禁用、删除或替换文件时按文件 owner 一起卸载。旧式
+`register.push(...)` / `analysis_register.push(...)` 保持兼容。
+
+`register.registerNotation(...)` 和全局 `register_notation(...)` 都接受本地注册对象或
+`ne-rewritten` 定义。后者常用的结构化 `display`、`is_limit`、`FS_alter`、`FS_short`
+以及返回原始表达式数组的 `init()` 会由注册表转换成当前框架契约。全局
+`register_category(...)`、`init_generator(...)`、`generator_increment(...)` 和
+`generator_decrement(...)` 也是同一注册表的原生入口；带 `generator` 的
+`register_category(...)` 会自动初始化，无需用户文件再显式调用 `init_generator(...)`。
+ne-rewritten 字段映射、本地上传步骤和完整生成器示例见 `docs/making-a-notation.md`。
 
 以下是一个记号 `register` 对象的所有字段：
 
@@ -364,15 +424,20 @@ node generate-notation-manifest.js
 
 > 注意：内置记号不受 Settings 中的本地文件管理器管理。需要让用户自行维护源码时，应改用下面的本地记号文件流程。
 
-### 固定上游算法 bundle
+### 固定上游定义 bundle
 
-从 `SmileLee-lyx/ne-rewritten` 合并的定义通过纯算法兼容 bundle 接入，不复制其 Vue、registry、settings 或状态架构。生成文件固定到源码中记录的 commit，运行时只暴露 `SmileLeeNotationBundle`；分类目录中的小型注册文件决定哪些缺失记号进入当前 `register`，并把兼容的等价表示和归属附加到现有同源 ID。
+从 `ne-rewritten` 合并的算法与原始定义保存在生成文件 `js/ne-rewritten-notation-bundle.js`，并固定到源码中记录的 commit。该 bundle 只暴露 `NeRewrittenNotationBundle` 数据，不包含上游的 Vue、registry、settings、状态模型或注册生命周期。运行时始终由本项目唯一的 `NotationRegistry` 负责定义归一化、owner、事务、注册、注销、树初始化和持久化。
+
+每个相关分类目录使用小型 `zz-ne-rewritten.js` 文件调用
+`register.installRewrittenBundle(spec, NeRewrittenNotationBundle)`。`spec.add` 选择需要新增的定义，
+`spec.generators` 选择需要注册的生成族，`spec.decorate` 把兼容的等价表示、归属等元数据附加到
+现有同源 ID。分类文件只声明选择关系；转换和生命周期规则均属于注册表。
 
 在依赖安装后，可用指定 commit 的干净上游 checkout 重建或校验：
 
 ```bash
-npm run build:smilelee-notations -- --source ../ne-rewritten-source
-npm run build:smilelee-notations -- --source ../ne-rewritten-source --check
+npm run build:ne-rewritten-notations -- --source ../ne-rewritten-source
+npm run build:ne-rewritten-notations -- --source ../ne-rewritten-source --check
 ```
 
 构建脚本拒绝非固定 commit、带 tracked 修改的上游 checkout，以及进入 Vue/UI/registry/settings 等非算法模块的依赖。Bundle schema v2 保留纯算法 generator 的 `start`、`initial` 和 `create(index)`，但实际注册、注销、树初始化和持久化仍由本项目现有 registry 与 `ne-config` 管理。
@@ -383,17 +448,18 @@ npm run build:smilelee-notations -- --source ../ne-rewritten-source --check
 
 Settings 中的 **Local notation files** 工作区将文件和草稿保存在 `localStorage`：
 
-1. **Upload .js**：确认信任后立即尝试加载；失败的源码仍以禁用文件保留，便于编辑修复。
-2. **New PrSS**：创建一个禁用的唯一命名模板，只打开编辑器，不执行源码。
-3. **Save**：禁用文件只保存；启用文件在完整校验成功后自动热替换该文件的全部注册。
-4. 文件列表开关：启用会加载整个文件，禁用会卸载整个文件但保留源码、分析和笔记。
-5. **Download**：下载单个文件；存在未保存草稿时可选择保存、直接下载草稿或取消。
-6. 删除：确认后永久删除文件源码、草稿及该文件拥有的分析和笔记。
+1. **Guide / 开发指南**：在应用内读取 `docs/making-a-notation.md`，不改变文件或草稿状态。
+2. **Upload .js**：确认信任后立即尝试加载；失败的源码仍以禁用文件保留，便于编辑修复。
+3. **New PrSS**：创建一个禁用的唯一命名模板，只打开编辑器，不执行源码。
+4. **Save**：禁用文件只保存；启用文件在完整校验成功后自动热替换该文件的全部注册。
+5. 文件列表开关：启用会加载整个文件，禁用会卸载整个文件但保留源码、分析和笔记。
+6. **Download**：下载单个文件；存在未保存草稿时可选择保存、直接下载草稿或取消。
+7. 删除：确认后永久删除文件源码、草稿及该文件拥有的分析和笔记。
 
 **工作原理：**
 
 ```
-文件源码 → 隔离函数作用域中执行 register.push()/analysis_register.push()
+文件源码 → 隔离函数作用域中执行 register.push()/register_notation()/register_category()/analysis_register.push()
   → 暂存并验证两个注册表、每个主记号的 init()
   → 在一次 localStorage 写入中更新源码并清除草稿，再原子提交 owner 的全部注册
   → 按 ID 更新选择和受影响的数据树

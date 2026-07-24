@@ -13,17 +13,17 @@ const { NotationRegistryHub } = require('../js/notation-registry.js')
 const projectRoot = path.resolve(__dirname, '..')
 const notationRoot = path.join(projectRoot, 'js', 'notations')
 const STUB_FILES = NotationFileIndex.sortPaths([
-   'Misc/zz-smilelee-remote.js',
-   'Y/zz-smilelee-remote.js',
-   'BM-like/zz-smilelee-remote.js',
-   'BM-like/GMS/zz-smilelee-remote.js',
-   'BM-like/nSS/zz-smilelee-remote.js',
-   'MN/zz-smilelee-remote.js',
-   'SMN/zz-smilelee-remote.js',
-   'OCN/zz-smilelee-remote.js',
-   'DEN/zz-smilelee-remote.js',
-   'TON/zz-smilelee-remote.js',
-   'aSAN/zz-smilelee-remote.js',
+   'Misc/zz-ne-rewritten.js',
+   'Y/zz-ne-rewritten.js',
+   'BM-like/zz-ne-rewritten.js',
+   'BM-like/GMS/zz-ne-rewritten.js',
+   'BM-like/nSS/zz-ne-rewritten.js',
+   'MN/zz-ne-rewritten.js',
+   'SMN/zz-ne-rewritten.js',
+   'OCN/zz-ne-rewritten.js',
+   'DEN/zz-ne-rewritten.js',
+   'TON/zz-ne-rewritten.js',
+   'aSAN/zz-ne-rewritten.js',
 ])
 
 function runFile(context, file, root) {
@@ -41,8 +41,7 @@ function loadIntegratedRegistry() {
    })
    context.window = context
    context.globalThis = context
-   runFile(context, 'smilelee-notation-bundle.js', path.join(projectRoot, 'js'))
-   runFile(context, 'smilelee-notation-adapter.js', path.join(projectRoot, 'js'))
+   runFile(context, 'ne-rewritten-notation-bundle.js', path.join(projectRoot, 'js'))
 
    const baseFiles = manifest.filter((file) => !STUB_FILES.includes(file))
    baseFiles.forEach((file) => runFile(context, file, notationRoot))
@@ -74,9 +73,9 @@ function json(value) {
    return JSON.stringify(value)
 }
 
-test('remote inventory adds exactly 68 missing definitions without duplicate IDs', () => {
+test('ne-rewritten inventory adds exactly 68 missing definitions without duplicate IDs', () => {
    const { hub, context, beforeIds, preserved } = loadIntegratedRegistry()
-   const bundle = context.SmileLeeNotationBundle
+   const bundle = context.NeRewrittenNotationBundle
    const afterIds = hub.main.map((notation) => notation.id)
    const before = new Set(beforeIds)
    const addedIds = afterIds.filter((id) => !before.has(id))
@@ -135,7 +134,7 @@ test('remote inventory adds exactly 68 missing definitions without duplicate IDs
 
 test('representative adapted FS calls exactly match the pinned upstream definitions', () => {
    const { hub, context } = loadIntegratedRegistry()
-   const bundle = context.SmileLeeNotationBundle
+   const bundle = context.NeRewrittenNotationBundle
    const fixtures = [
       ['WSMv1.4.1', 0, 1],
       ['-1y-2ss', 0, 1],
@@ -195,7 +194,7 @@ test('every imported OCN definition can expand its Limit above the initial lower
    })
 })
 
-test('WSMv1.4.1 carries Alice attribution and equivalent diagrams reach the adapter', () => {
+test('WSMv1.4.1 carries Alice attribution and equivalent diagrams reach the registry', () => {
    const { hub } = loadIntegratedRegistry()
    const wsm = hub.main.get('WSMv1.4.1')
    const omegaY = hub.main.get('omega-y')

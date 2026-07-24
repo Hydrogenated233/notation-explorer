@@ -31,8 +31,7 @@ function loadRegistry() {
    context.window = context
    context.globalThis = context
 
-   runFile(context, 'js/smilelee-notation-bundle.js')
-   runFile(context, 'js/smilelee-notation-adapter.js')
+   runFile(context, 'js/ne-rewritten-notation-bundle.js')
    manifest.forEach((filename) => runFile(context, filename, notationRoot))
    return hub.main
 }

@@ -138,12 +138,23 @@
 
   var generator = {
     id: GENERATOR_ID,
+    categoryId: GENERATOR_ID,
+    category: {
+      id: GENERATOR_ID,
+      name: 'n-CpS',
+      simple_name: 'n-CpS',
+      path: ['CpS', 'n-CpS'],
+    },
     start: START,
     initial: INITIAL,
     maximum: MAXIMUM,
     create: createNotation,
   };
-  root.NotationGenerators = root.NotationGenerators || Object.create(null);
-  root.NotationGenerators[GENERATOR_ID] = generator;
-  register.push(createNotation(1), createNotation(2));
+  if (register && typeof register.registerGenerator === 'function') {
+    register.registerGenerator(generator);
+  } else {
+    // Legacy harnesses may still expose a plain array. Keep that loading
+    // surface working while the live application uses the registry API.
+    register.push(createNotation(1), createNotation(2));
+  }
 })(typeof window !== 'undefined' ? window : globalThis);

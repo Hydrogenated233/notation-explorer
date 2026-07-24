@@ -2,7 +2,7 @@
 
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const Adapter = require('../js/smilelee-notation-adapter.js')
+const { NotationRegistryHub } = require('../js/notation-registry.js')
 
 const SOURCE = Object.freeze({
    repository: 'https://github.com/SmileLee-lyx/ne-rewritten',
@@ -14,6 +14,11 @@ function bundleFor(raw) {
 }
 
 function generatedBundle(overrides) {
+   const parent = {
+      id: 'category-parent',
+      name: 'Parent',
+      simple_name: 'Parent',
+   }
    const category = {
       id: 'category-generated',
       name: 'Generated family',
@@ -34,8 +39,8 @@ function generatedBundle(overrides) {
    const bundle = {
       source: SOURCE,
       notationsById: {},
-      categories: [category],
-      categoriesById: { [category.id]: category },
+      categories: [parent, category],
+      categoriesById: { [parent.id]: parent, [category.id]: category },
       createGeneratedNotation(categoryId, index) {
          return this.categoriesById[categoryId].generator.create(index)
       },
@@ -66,9 +71,22 @@ function rawDefinition(overrides) {
    }, overrides)
 }
 
-test('adaptDefinition maps the upstream surface without replacing its algorithms', () => {
+function localDefinition(id, overrides) {
+   return Object.assign({
+      id,
+      name: id,
+      display: () => '',
+      able: () => false,
+      compare: () => 0,
+      FS: () => [],
+      init: () => [],
+   }, overrides)
+}
+
+test('registerNotation normalizes the ne-rewritten surface without replacing its algorithms', () => {
    const raw = rawDefinition()
-   const adapted = Adapter.adaptDefinition(raw, bundleFor(raw))
+   const hub = new NotationRegistryHub()
+   const adapted = hub.main.registerNotation(raw, bundleFor(raw))
 
    assert.equal(adapted.id, raw.id)
    assert.equal(adapted.name, raw.name)
@@ -96,15 +114,19 @@ test('adaptDefinition maps the upstream surface without replacing its algorithms
 })
 
 test('display fallback derives LaTeX from an upstream function display', () => {
-   const normalized = Adapter.normalizeDisplay((value) => 'ω<sub>' + value + '</sub>')
-   assert.equal(normalized.plain(3), 'ω<sub>3</sub>')
-   assert.equal(normalized.html(3), 'ω<sub>3</sub>')
+   const raw = rawDefinition({ display: (value) => 'ω<sub>' + value + '</sub>' })
+   const hub = new NotationRegistryHub()
+   const normalized = hub.main.registerNotation(raw, bundleFor(raw))
+
+   assert.equal(normalized.displayPlain(3), 'ω<sub>3</sub>')
+   assert.equal(normalized.display(3), 'ω<sub>3</sub>')
    assert.equal(normalized.latex(3), '\\omega _{3}')
 })
 
 test('adapted initial lower bounds follow the next upstream expression', () => {
    const raw = rawDefinition({ init: () => [[Infinity], ['middle'], ['zero']] })
-   const adapted = Adapter.adaptDefinition(raw, bundleFor(raw))
+   const hub = new NotationRegistryHub()
+   const adapted = hub.main.registerNotation(raw, bundleFor(raw))
 
    assert.deepEqual(adapted.init(), [
       { expr: [Infinity], low: [['middle']], subitems: [] },
@@ -148,7 +170,8 @@ test('diagram conversion maps elements and extra text to legacy canvas actions',
       },
    })
 
-   const diagram = Adapter.createDrawDiagram(raw)('expr', 'DBMS_MN')
+   const hub = new NotationRegistryHub()
+   const diagram = hub.main.registerNotation(raw, bundleFor(raw)).drawDiagram('expr', 'DBMS_MN')
    assert.equal(receivedData.current_equiv, "DBMS'")
    assert.equal(receivedData.invert_vertical, true)
    assert.equal(defaults.current_equiv, undefined)
@@ -168,17 +191,16 @@ test('diagram conversion maps elements and extra text to legacy canvas actions',
    )
 })
 
-test('decorateDefinition keeps the local primary implementation and adds equivalent metadata only', () => {
+test('bundle decoration keeps the local primary implementation and adds equivalent metadata only', () => {
    const localDisplay = () => 'local'
    const localFS = () => ['local-fs']
    const localDraw = () => ({ width: 1, height: 1, actions: [{ type: 'local' }] })
-   const target = {
-      id: 'local',
+   const target = localDefinition('local', {
       display: localDisplay,
       FS: localFS,
       drawDiagram: localDraw,
       display_equiv: { local: () => 'local-equiv' },
-   }
+   })
    const raw = rawDefinition({
       id: 'remote',
       display_equiv: { remote: () => 'remote-equiv' },
@@ -188,7 +210,11 @@ test('decorateDefinition keeps the local primary implementation and adds equival
       },
    })
 
-   Adapter.decorateDefinition(target, raw, bundleFor(raw))
+   const hub = new NotationRegistryHub()
+   hub.main.push(target)
+   hub.main.installRewrittenBundle({
+      decorate: [{ targetId: target.id, sourceId: raw.id }],
+   }, bundleFor(raw))
 
    assert.equal(target.display, localDisplay)
    assert.equal(target.FS, localFS)
@@ -199,8 +225,12 @@ test('decorateDefinition keeps the local primary implementation and adds equival
    assert.equal(target.credit_text_id, raw.credit_text_id)
    assert.equal(target.provenance.notationId, raw.id)
 
-   const provenanceOnly = { id: 'provenance-only' }
-   Adapter.decorateDefinition(provenanceOnly, raw, bundleFor(raw), { metadata: false })
+   const provenanceOnly = localDefinition('provenance-only')
+   const provenanceHub = new NotationRegistryHub()
+   provenanceHub.main.push(provenanceOnly)
+   provenanceHub.main.installRewrittenBundle({
+      decorate: [{ targetId: provenanceOnly.id, sourceId: raw.id, metadata: false }],
+   }, bundleFor(raw))
    assert.equal(provenanceOnly.provenance.notationId, raw.id)
    assert.equal(provenanceOnly.credit_text_id, undefined)
    assert.equal(provenanceOnly.display_equiv, undefined)
@@ -208,7 +238,9 @@ test('decorateDefinition keeps the local primary implementation and adds equival
 
 test('generated definitions retain generator and category metadata', () => {
    const bundle = generatedBundle()
-   const adapted = Adapter.createGeneratedDefinition('category-generated', 4, bundle)
+   const hub = new NotationRegistryHub()
+   hub.main.installRewrittenBundle({ generators: ['category-generated'] }, bundle)
+   const adapted = hub.main.generatorAdd('category-generated')
 
    assert.equal(adapted.id, 'generated-4')
    assert.equal(adapted.upstream_category_id, 'category-generated')
@@ -229,61 +261,79 @@ test('bulk install retains generator coordinates for default variants', () => {
    bundle.notationsById = Object.fromEntries(defaults.map((raw) => [raw.id, raw]))
    bundle.generatorCategoryIds = ['category-generated']
    bundle.generatedNotationIds = defaults.map((raw) => raw.id)
-   const registry = []
+   const hub = new NotationRegistryHub()
 
-   Adapter.install(registry, { add: bundle.generatedNotationIds }, bundle)
+   hub.main.installRewrittenBundle({ add: bundle.generatedNotationIds }, bundle)
 
    assert.deepEqual(
-      registry.map((notation) => [notation.id, notation.upstreamGenerator.index]),
+      hub.main.map((notation) => [notation.id, notation.upstreamGenerator.index]),
       [['generated-2', 2], ['generated-3', 3]]
    )
-   assert.equal(registry[1].upstreamGenerator.categoryId, 'category-generated')
+   assert.equal(hub.main[1].upstreamGenerator.categoryId, 'category-generated')
 })
 
 test('generated definition indexes are validated before invoking upstream code', () => {
    let calls = 0
    const bundle = generatedBundle()
-   bundle.categoriesById['category-generated'].generator.create = function () {
+   bundle.categoriesById['category-generated'].generator.create = function (index) {
       calls++
-      return rawDefinition({ id: 'never', category_id: 'category-generated' })
+      return rawDefinition({
+         id: 'generated-check-' + index,
+         category_id: 'category-generated',
+      })
    }
+   const hub = new NotationRegistryHub()
+   hub.main.installRewrittenBundle({ generators: ['category-generated'] }, bundle)
+   const family = hub.main.generatorDefinition('category-generated')
+   calls = 0
 
    assert.throws(
-      () => Adapter.createGeneratedDefinition('category-generated', 1, bundle),
+      () => family.create(1),
       /must be at least 2; received 1/
    )
    assert.throws(
-      () => Adapter.createGeneratedDefinition('category-generated', 2.5, bundle),
+      () => family.create(2.5),
       /must be a safe integer/
    )
    assert.throws(
-      () => Adapter.createGeneratedDefinition('missing', 2, bundle),
-      /Unknown upstream generator category: missing/
+      () => new NotationRegistryHub().main.installRewrittenBundle(
+         { generators: ['missing'] },
+         bundle
+      ),
+      /Unknown ne-rewritten generator category: missing/
    )
    assert.equal(calls, 0)
 })
 
-test('installGenerated rejects duplicate ids and reports their generator coordinate', () => {
+test('registry rejects duplicate generated notation ids', () => {
    const bundle = generatedBundle()
-   const registry = []
-   const installed = Adapter.installGenerated(registry, 'category-generated', 4, bundle)
+   const hub = new NotationRegistryHub()
+   hub.main.installRewrittenBundle({ generators: ['category-generated'] }, bundle)
+   const installed = hub.main.generatorAdd('category-generated')
 
-   assert.equal(registry.length, 1)
-   assert.equal(registry[0], installed)
+   assert.equal(hub.main.get(installed.id), installed)
    assert.throws(
-      () => Adapter.installGenerated(registry, 'category-generated', 4, bundle),
-      /Generated notation id is already registered: generated-4 \(category-generated\[4\]\)/
+      () => hub.main.registerNotation(
+         bundle.createGeneratedNotation('category-generated', 4),
+         bundle
+      ),
+      /already registered/
    )
-   assert.equal(registry.length, 1)
+   assert.equal(hub.main.get('generated-4'), installed)
 })
 
 test('generated definitions must belong to the requested category', () => {
    const bundle = generatedBundle()
+   bundle.categoriesById['category-generated'].generator.start = 4
+   bundle.categoriesById['category-generated'].generator.initial = 4
    bundle.categoriesById['category-generated'].generator.create = function () {
       return rawDefinition({ id: 'wrong-category', category_id: 'category-other' })
    }
    assert.throws(
-      () => Adapter.createGeneratedDefinition('category-generated', 4, bundle),
+      () => new NotationRegistryHub().main.installRewrittenBundle(
+         { generators: ['category-generated'] },
+         bundle
+      ),
       /returned notation 'wrong-category' in category 'category-other'/
    )
 })

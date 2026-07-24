@@ -1,6 +1,6 @@
 // Generated from https://github.com/SmileLee-lyx/ne-rewritten
 // Pinned commit: 5413a94f0c5b6b56b4c13a91a8acf3a794698bb9
-// Run: npm run build:smilelee-notations -- --source <checkout>
+// Run: npm run build:ne-rewritten-notations -- --source <checkout>
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -17618,7 +17618,7 @@
     simple_name: "aSAN"
   };
 
-  // notation-explorer-smilelee-entry.ts
+  // notation-explorer-ne-rewritten-entry.ts
   var REPOSITORY = "https://github.com/SmileLee-lyx/ne-rewritten";
   var COMMIT = "5413a94f0c5b6b56b4c13a91a8acf3a794698bb9";
   var EXPECTED_NOTATION_COUNT = 105;
@@ -17733,16 +17733,16 @@
   var notationsById = /* @__PURE__ */ Object.create(null);
   for (const notation of notations) {
     if (!notation || typeof notation.id !== "string" || notation.id.length === 0) {
-      throw new Error("SmileLee notation bundle contains an invalid notation definition.");
+      throw new Error("ne-rewritten notation bundle contains an invalid notation definition.");
     }
     if (notationsById[notation.id]) {
-      throw new Error(`SmileLee notation bundle contains duplicate id '${notation.id}'.`);
+      throw new Error(`ne-rewritten notation bundle contains duplicate id '${notation.id}'.`);
     }
     notationsById[notation.id] = notation;
   }
   if (directNotations.length !== EXPECTED_DIRECT_COUNT || generatedNotations.length !== EXPECTED_GENERATED_COUNT || notations.length !== EXPECTED_NOTATION_COUNT) {
     throw new Error(
-      `SmileLee notation bundle inventory changed: ${directNotations.length} direct + ${generatedNotations.length} generated = ${notations.length}; expected ${EXPECTED_DIRECT_COUNT} + ${EXPECTED_GENERATED_COUNT} = ${EXPECTED_NOTATION_COUNT}.`
+      `ne-rewritten notation bundle inventory changed: ${directNotations.length} direct + ${generatedNotations.length} generated = ${notations.length}; expected ${EXPECTED_DIRECT_COUNT} + ${EXPECTED_GENERATED_COUNT} = ${EXPECTED_NOTATION_COUNT}.`
     );
   }
   function validateGeneratorIndex(categoryId, index, start) {
@@ -17784,7 +17784,7 @@
   var categoriesById = /* @__PURE__ */ Object.create(null);
   for (const category of categories) {
     if (categoriesById[category.id]) {
-      throw new Error(`SmileLee notation bundle contains duplicate category id '${category.id}'.`);
+      throw new Error(`ne-rewritten notation bundle contains duplicate category id '${category.id}'.`);
     }
     categoriesById[category.id] = category;
   }
@@ -17794,8 +17794,8 @@
       throw new TypeError("Generator category id must be a non-empty string.");
     }
     const category = categoriesById[categoryId];
-    if (!category) throw new Error(`Unknown SmileLee notation category '${categoryId}'.`);
-    if (!category.generator) throw new Error(`SmileLee notation category '${categoryId}' is not generated.`);
+    if (!category) throw new Error(`Unknown ne-rewritten notation category '${categoryId}'.`);
+    if (!category.generator) throw new Error(`ne-rewritten notation category '${categoryId}' is not generated.`);
     return category.generator.create(index);
   }
   var credits = {
@@ -17885,7 +17885,7 @@
     createGeneratedNotation,
     credits: Object.freeze(credits)
   });
-  Object.defineProperty(globalThis, "SmileLeeNotationBundle", {
+  Object.defineProperty(globalThis, "NeRewrittenNotationBundle", {
     configurable: false,
     enumerable: true,
     writable: false,

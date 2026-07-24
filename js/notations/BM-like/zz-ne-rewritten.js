@@ -1,6 +1,6 @@
 ;(function (root) {
    'use strict'
-   root.SmileLeeNotationAdapter.install(root.register, {
+   root.register.installRewrittenBundle({
       add: [
          'tbm',
          'lpms',
@@ -8,9 +8,8 @@
          'dsm',
          'WSMv1.4.1',
          'btbm',
-         'upms-partial-2',
-         'upms-partial-3',
       ],
+      generators: ['category-upms-partial'],
       decorate: [
          'bm4',
          'bhm',
@@ -20,6 +19,6 @@
          'wmm',
          { targetId: 'cm', sourceId: 'cms', metadata: false },
       ],
-   }, root.SmileLeeNotationBundle)
+   }, root.NeRewrittenNotationBundle)
    root.register.get('tbm4').credit_text_id = 'credit.tbm'
 })(typeof globalThis !== 'undefined' ? globalThis : this)

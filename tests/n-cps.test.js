@@ -5,11 +5,13 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
+const { NotationRegistryHub } = require('../js/notation-registry.js')
 
 const projectRoot = path.join(__dirname, '..')
 
 function loadGenerator() {
-   const context = vm.createContext({ register: [], window: null })
+   const hub = new NotationRegistryHub()
+   const context = vm.createContext({ register: hub.main, window: null })
    context.window = context
    context.globalThis = context
    vm.runInContext(
@@ -25,8 +27,8 @@ function loadGenerator() {
    )
    return {
       context,
-      generator: context.NotationGenerators['n-cps'],
-      initial: context.register,
+      generator: hub.main.generatorDefinition('n-cps'),
+      initial: hub.main,
    }
 }
 

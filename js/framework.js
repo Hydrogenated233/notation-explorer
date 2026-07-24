@@ -8,46 +8,22 @@ const N_CPS_GENERATOR_ID = 'n-cps'
 const BUILTIN_NOTATION_OWNER = '@notation-explorer/builtin'
 const MAX_GENERATOR_VALUE = 64
 
-const remote_generator_category = (categoryId) => {
-   var bundle = window.SmileLeeNotationBundle
-   if (!bundle || !bundle.categoriesById) return undefined
-   var category = bundle.categoriesById[categoryId]
-   return category && category.generator ? category : undefined
-}
-
 const generator_definition = (categoryId) => {
-   var local = window.NotationGenerators && window.NotationGenerators[categoryId]
-   if (local && typeof local.create === 'function') return local
-   var category = remote_generator_category(categoryId)
-   if (!category) return undefined
-   return {
-      id: categoryId,
-      start: category.generator.start,
-      initial: category.generator.initial,
-      maximum: Math.max(category.generator.initial, MAX_GENERATOR_VALUE),
-      create: function(index) {
-         var adapter = window.SmileLeeNotationAdapter
-         var bundle = window.SmileLeeNotationBundle
-         if (!adapter || typeof adapter.createGeneratedDefinition !== 'function' || !bundle) {
-            throw new Error('The notation generator runtime is unavailable.')
-         }
-         return adapter.createGeneratedDefinition(categoryId, index, bundle)
-      },
+   if (typeof register !== 'undefined' && typeof register.generatorDefinition === 'function') {
+      return register.generatorDefinition(categoryId)
    }
+   return undefined
 }
 
 const generator_category_ids = () => {
-   var ids = []
-   var bundle = window.SmileLeeNotationBundle
-   if (bundle && Array.isArray(bundle.generatorCategoryIds)) ids = bundle.generatorCategoryIds.slice()
-   Object.keys(window.NotationGenerators || {}).forEach(function(id) {
-      if (ids.indexOf(id) === -1) ids.push(id)
-   })
-   return ids
+   if (typeof register !== 'undefined' && typeof register.generatorCategoryIds === 'function') {
+      return register.generatorCategoryIds()
+   }
+   return []
 }
 
 const generated_notation_info = (notation) => {
-   return notation && (notation.generatedFamily || notation.upstreamGenerator)
+   return notation && (notation.generatedFamily || notation.generatorFamily || notation.upstreamGenerator)
 }
 
 const init_datasets = () => {
@@ -351,7 +327,6 @@ const app = Vue.createApp({
          void this.notationVersion;
          if (!window.NotationMenu) return [];
          var manager = window.localNotationManager;
-         var remoteBundle = window.SmileLeeNotationBundle;
          return window.NotationMenu.buildTree({
             catalog: window.BUILTIN_NOTATION_CATALOG || [],
             notations: register.map(function(notation) { return notation; }),
@@ -361,10 +336,9 @@ const app = Vue.createApp({
             entriesForOwner: function(ownerId) { return register.entriesForOwner(ownerId); },
             builtinLabel: this.L.notation_builtin_folder,
             localLabel: this.L.notation_local_folder,
-            remoteCategories: remoteBundle && remoteBundle.categories || [],
-            remoteNotationIds: remoteBundle && remoteBundle.notations
-               ? remoteBundle.notations.map(function(notation) { return notation.id; })
-               : [],
+            categories: typeof register.categories === 'function' ? register.categories() : [],
+            generatorDefinitions: typeof register.generatorDefinitions === 'function'
+               ? register.generatorDefinitions() : [],
             generatorState: this.generatorState,
          });
       },
@@ -470,6 +444,9 @@ const app = Vue.createApp({
    },
    methods: {
       generatorCurrent(categoryId) {
+         if (typeof register.generatorCurrent === 'function') {
+            return register.generatorCurrent(categoryId)
+         }
          var value = this.generatorState && this.generatorState[categoryId]
          var definition = generator_definition(categoryId)
          if (!definition) return 0
@@ -479,40 +456,36 @@ const app = Vue.createApp({
             : definition.initial
       },
       generatorMaximum(categoryId) {
+         if (typeof register.generatorMaximum === 'function') {
+            return register.generatorMaximum(categoryId)
+         }
          var definition = generator_definition(categoryId)
          if (!definition) return 0
          return Number.isSafeInteger(definition.maximum)
             ? definition.maximum : Math.max(definition.initial, MAX_GENERATOR_VALUE)
       },
       generatorCanIncrement(categoryId) {
-         return !!generator_definition(categoryId) &&
-            this.generatorCurrent(categoryId) < this.generatorMaximum(categoryId)
+         if (typeof register.generatorCanIncrement === 'function') {
+            return register.generatorCanIncrement(categoryId)
+         }
+         return !!generator_definition(categoryId) && this.generatorCurrent(categoryId) < this.generatorMaximum(categoryId)
       },
       generatorCanDecrement(categoryId) {
+         if (typeof register.generatorCanDecrement === 'function') {
+            return register.generatorCanDecrement(categoryId)
+         }
          var definition = generator_definition(categoryId)
          return !!definition && this.generatorCurrent(categoryId) > definition.start
       },
       installGeneratedNotation(categoryId, index, restoreAnalysis) {
-         var definition = generator_definition(categoryId)
-         if (!definition) throw new Error('Unknown notation generator: ' + categoryId)
-         var notation = definition.create(index)
-         var generatedInfo = generated_notation_info(notation)
-         var existing = register.get(notation.id)
-         if (existing) {
-            var existingInfo = generated_notation_info(existing)
-            if (
-               register.ownerOf(existing.id) === BUILTIN_NOTATION_OWNER &&
-               existingInfo && existingInfo.categoryId === categoryId &&
-               existingInfo.index === index
-            ) return existing
-            throw new Error('Notation id is already registered: ' + notation.id)
+         var notation
+         if (typeof register.materializeGenerator === 'function') {
+            notation = register.materializeGenerator(categoryId, index)
+         } else {
+            throw new Error('The notation registry does not support generated variants.')
          }
-         if (!generatedInfo || generatedInfo.categoryId !== categoryId || generatedInfo.index !== index) {
-            throw new Error('Generated notation metadata mismatch: ' + notation.id)
-         }
-
+         if (this.datasets[notation.id]) return notation
          var dataset = init_dataset(notation)
-         register.push(notation)
          this.datasets[notation.id] = dataset
          this.notationRevisions[notation.id] = (this.notationRevisions[notation.id] || 0) + 1
          if (restoreAnalysis) {
@@ -525,42 +498,43 @@ const app = Vue.createApp({
          return notation
       },
       restoreGeneratedNotations() {
+         if (typeof register.setGeneratorState === 'function') register.setGeneratorState(this.generatorState)
          var changed = false
          var self = this
          generator_category_ids().forEach(function(categoryId) {
             var definition = generator_definition(categoryId)
             if (!definition) return
             var target = self.generatorCurrent(categoryId)
-            for (var removeIndex = definition.initial; removeIndex > target; removeIndex--) {
-               try {
-                  var removeNotation = definition.create(removeIndex)
-                  register.unregister(removeNotation.id, BUILTIN_NOTATION_OWNER)
-                  delete self.datasets[removeNotation.id]
-                  changed = true
-               } catch (error) {
-                  self.generatorState[categoryId] = removeIndex
-                  console.warn(
-                     'Restore generated notation removal failed for ' + categoryId + '[' + removeIndex + ']',
-                     error
-                  )
-                  break
+            var actual = Number.isSafeInteger(definition.currentIndex)
+               ? definition.currentIndex : definition.initial
+            for (var removeIndex = actual; removeIndex > target; removeIndex--) {
+               var retained = definition.entries && definition.entries[removeIndex]
+               var removeNotation = retained && register.get(retained.id)
+               if (removeNotation) {
+                  try { self.stashNotationData(removeNotation.id, register.ownerOf(removeNotation.id)) }
+                  catch (error) { console.warn('Archive generated notation failed', error) }
                }
             }
-            if (target < definition.initial) return
-            var restored = definition.initial
-            for (var index = definition.initial + 1; index <= target; index++) {
-               try {
-                  self.installGeneratedNotation(categoryId, index, false)
-                  restored = index
-                  changed = true
-               } catch (error) {
-                  self.generatorState[categoryId] = restored
-                  console.warn(
-                     'Restore generated notation failed for ' + categoryId + '[' + index + ']',
-                     error
-                  )
-                  break
+            try {
+               var result = typeof register.initGenerator === 'function'
+                  ? register.initGenerator(categoryId, { target: target }) : null
+               if (result && Array.isArray(result.changed)) {
+                  result.changed.forEach(function(change) {
+                     var entry = change.notation
+                     if (!entry) return
+                     if (change.type === 'removed') {
+                        delete self.datasets[entry.id]
+                     } else if (change.type === 'added') {
+                        self.installGeneratedNotation(categoryId, generated_notation_info(entry).index, false)
+                        try { self.restoreNotationAnalysis(entry.id, register.ownerOf(entry.id)) }
+                        catch (error) { console.warn('Restore generated notation analysis failed', error) }
+                     }
+                     changed = true
+                  })
                }
+               self.generatorState[categoryId] = self.generatorCurrent(categoryId)
+            } catch (error) {
+               console.warn('Restore generated notation failed for ' + categoryId, error)
             }
          })
          if (changed) this.notationVersion++
@@ -568,10 +542,14 @@ const app = Vue.createApp({
       incrementGenerator(categoryId) {
          if (!this.generatorCanIncrement(categoryId)) return
          try {
-            var current = this.generatorCurrent(categoryId)
-            var next = current + 1
-            this.installGeneratedNotation(categoryId, next, true)
-            this.generatorState[categoryId] = next
+            var notation = typeof register.generatorAdd === 'function'
+               ? register.generatorAdd(categoryId) : undefined
+            if (!notation) return
+            this.datasets[notation.id] = init_dataset(notation)
+            this.notationRevisions[notation.id] = (this.notationRevisions[notation.id] || 0) + 1
+            try { this.restoreNotationAnalysis(notation.id, register.ownerOf(notation.id)) }
+            catch (error) { console.warn('Restore generated notation analysis failed', error) }
+            this.generatorState[categoryId] = this.generatorCurrent(categoryId)
             this.notationVersion++
             this.saveSettings()
             this.saveAnalysis()
@@ -583,20 +561,12 @@ const app = Vue.createApp({
       decrementGenerator(categoryId) {
          if (!this.generatorCanDecrement(categoryId)) return
          try {
-            var current = this.generatorCurrent(categoryId)
-            var next = current - 1
             var definition = generator_definition(categoryId)
-            var generated = definition.create(current)
-            var notation = register.get(generated.id)
-            var generatedInfo = generated_notation_info(notation)
-            if (
-               !notation || !generatedInfo ||
-               register.ownerOf(notation.id) !== BUILTIN_NOTATION_OWNER ||
-               generatedInfo.categoryId !== categoryId ||
-               generatedInfo.index !== current
-            ) {
-               throw new Error('Generated notation is not registered: ' + generated.id)
-            }
+            var current = Number.isSafeInteger(definition && definition.currentIndex)
+               ? definition.currentIndex : this.generatorCurrent(categoryId)
+            var retained = definition && definition.entries && definition.entries[current]
+            var notation = retained && register.get(retained.id)
+            if (!notation) throw new Error('Generated notation is not registered for ' + categoryId + '[' + current + ']')
 
             var oldOrder = register.map(function(entry) { return entry.id })
             var snapshot = {
@@ -604,14 +574,16 @@ const app = Vue.createApp({
                currentNotationId: this.currentNotationId,
                currentAnalysisId: this.currentAnalysisId,
             }
-            this.stashNotationData(notation.id, BUILTIN_NOTATION_OWNER)
+            this.stashNotationData(notation.id, register.ownerOf(notation.id))
             if (this.currentNotationId === notation.id) {
-               this.allNoteSheets[this.dataKeyForId(notation.id, BUILTIN_NOTATION_OWNER)] = this.noteSheets
+               this.allNoteSheets[this.dataKeyForId(notation.id, register.ownerOf(notation.id))] = this.noteSheets
             }
             this.saveAnalysis()
-            register.unregister(notation.id, BUILTIN_NOTATION_OWNER)
+            var removed = typeof register.generatorRemove === 'function'
+               ? register.generatorRemove(categoryId) : undefined
+            if (!removed) return
             delete this.datasets[notation.id]
-            this.generatorState[categoryId] = next
+            this.generatorState[categoryId] = this.generatorCurrent(categoryId)
             this.reconcileNotationSelections(
                snapshot,
                { change: { main: { added: [] } } },

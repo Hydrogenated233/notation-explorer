@@ -5,14 +5,14 @@ const path = require('node:path')
 const vm = require('node:vm')
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const Adapter = require('../js/smilelee-notation-adapter.js')
+const { NotationRegistryHub } = require('../js/notation-registry.js')
 
 function loadBundle() {
    const context = Object.create(null)
    context.globalThis = context
-   const bundlePath = path.resolve(__dirname, '..', 'js', 'smilelee-notation-bundle.js')
+   const bundlePath = path.resolve(__dirname, '..', 'js', 'ne-rewritten-notation-bundle.js')
    vm.runInNewContext(fs.readFileSync(bundlePath, 'utf8'), context, { filename: bundlePath })
-   return context.SmileLeeNotationBundle
+   return context.NeRewrittenNotationBundle
 }
 
 test('bundle exposes every upstream generator beyond its default initial index', () => {
@@ -35,20 +35,26 @@ test('bundle exposes every upstream generator beyond its default initial index',
    )
 })
 
-test('real generated definitions adapt and install with duplicate protection', () => {
+test('real generated definitions normalize and install through the registry', () => {
    const bundle = loadBundle()
-   const registry = []
-   const notation = Adapter.installGenerated(registry, 'category-upms-partial', 4, bundle)
+   const hub = new NotationRegistryHub()
+   hub.main.installRewrittenBundle({
+      add: ['upms-partial-2', 'upms-partial-3'],
+   }, bundle)
+   const notation = hub.main.generatorAdd('category-upms-partial')
 
    assert.equal(notation.id, 'upms-partial-4')
    assert.equal(notation.name, 'BMS(4 rows) + UPMS')
    assert.equal(notation.upstreamGenerator.index, 4)
    assert.equal(notation.upstreamGenerator.category.simple_name, '(>n)-UPMS')
    assert.equal(typeof notation.FS, 'function')
-   assert.equal(registry[0], notation)
+   assert.equal(hub.main.get(notation.id), notation)
    assert.throws(
-      () => Adapter.installGenerated(registry, 'category-upms-partial', 4, bundle),
-      /Generated notation id is already registered: upms-partial-4/
+      () => hub.main.registerNotation(
+         bundle.createGeneratedNotation('category-upms-partial', 4),
+         bundle
+      ),
+      /already registered/
    )
 })
 
@@ -65,6 +71,6 @@ test('bundle rejects invalid generator coordinates without invoking a generator'
    )
    assert.throws(
       () => bundle.createGeneratedNotation('category-missing', 2),
-      /Unknown SmileLee notation category 'category-missing'/
+      /Unknown ne-rewritten notation category 'category-missing'/
    )
 })

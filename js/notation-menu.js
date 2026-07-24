@@ -56,8 +56,10 @@
    }
 
    function upstreamCategoryId(notation, categoriesById) {
-      if (!notation || !notation.upstreamDefinition) return ''
-      var categoryId = notation.upstream_category_id || notation.category_id
+      if (!notation) return ''
+      var family = notation.generatedFamily || notation.generatorFamily || notation.upstreamGenerator
+      var categoryId = notation.category_id || notation.categoryId || notation.upstream_category_id ||
+         (family && family.categoryId)
       return typeof categoryId === 'string' && categoriesById[categoryId] ? categoryId : ''
    }
 
@@ -70,7 +72,18 @@
          var category = categoriesById[categoryId]
          if (!category) return []
          path.unshift(category)
-         categoryId = category.parent_id
+         categoryId = category.parent_id === undefined ? category.parentId : category.parent_id
+      }
+      if (path.length === 1 && Array.isArray(path[0].path) && path[0].path.length > 1) {
+         var leaf = path[0]
+         return leaf.path.map(function (label, index) {
+            if (index === leaf.path.length - 1) return leaf
+            return {
+               id: '@path:' + leaf.id + ':' + index,
+               name: label,
+               simple_name: label,
+            }
+         })
       }
       return path
    }
@@ -109,6 +122,10 @@
 
    function markParameterGenerator(folder, notation, generatorState) {
       var definition = notation && notation.parameterGenerator
+      if (!definition && notation && notation.generatorFamily) definition = notation.generatorFamily
+      if (!definition && notation && notation.generatedFamily && notation.generatedFamily.start) {
+         definition = notation.generatedFamily
+      }
       if (!folder || !definition || typeof definition !== 'object') return
       var id = typeof definition.id === 'string' && definition.id ? definition.id : notation.id
       var metadata = generatorMetadata({ id: id, generator: definition }, generatorState)
@@ -168,6 +185,57 @@
       return folder
    }
 
+   function localCategoryKey(ownerId, category, labels) {
+      if (String(category.id).indexOf('@path:') === 0) {
+         return 'local-category-path:' + ownerId + ':' + labels.join('/')
+      }
+      return 'local-category:' + ownerId + ':' + category.id
+   }
+
+   function markLocalFolder(folder, category, generatorState, ownerId, generatorsById) {
+      if (String(category.id).indexOf('@path:') !== 0) folder.categoryId = category.id
+      var generator = generatorsById[category.id] || category.generator
+      if (!generator || (generator.owner && generator.owner !== ownerId)) return folder
+      var metadata = generatorMetadata({ id: category.id, generator: generator }, generatorState)
+      if (metadata) folder.generator = metadata
+      return folder
+   }
+
+   function getOrCreateLocalCategoryFolder(
+      children,
+      category,
+      ownerId,
+      labels,
+      generatorState,
+      generatorsById
+   ) {
+      var label = categoryLabel(category)
+      var key = localCategoryKey(ownerId, category, labels)
+      for (var index = 0; index < children.length; index++) {
+         if (children[index].key === key) {
+            return markLocalFolder(
+               children[index],
+               category,
+               generatorState,
+               ownerId,
+               generatorsById
+            )
+         }
+      }
+
+      var folder = folderNode(
+         key,
+         label,
+         'local-category',
+         [ownerId, category.id, category.name, category.simple_name]
+            .filter(Boolean)
+            .join(' ')
+      )
+      markLocalFolder(folder, category, generatorState, ownerId, generatorsById)
+      children.push(folder)
+      return folder
+   }
+
    function buildTree(options) {
       options = options || {}
       var catalog = options.catalog || []
@@ -178,14 +246,16 @@
       var entriesForOwner = options.entriesForOwner || function () { return [] }
       var builtinLabel = options.builtinLabel || 'Built-in'
       var localLabel = options.localLabel || 'Local files'
-      var remoteCategories = options.remoteCategories || []
-      var remoteNotationIds = options.remoteNotationIds || []
+      var remoteCategories = options.categories || options.remoteCategories || []
+      var remoteNotationIds = options.notationIds || options.remoteNotationIds || []
+      var generatorDefinitions = options.generatorDefinitions || []
       var generatorState = options.generatorState || {}
       var roots = []
       var seen = Object.create(null)
       var categoriesById = Object.create(null)
       var categoryOrder = Object.create(null)
       var notationOrder = Object.create(null)
+      var generatorsById = Object.create(null)
       var remotePending = []
 
       remoteCategories.forEach(function (category, index) {
@@ -193,6 +263,15 @@
          categoriesById[category.id] = category
          categoryOrder[category.id] = index
       })
+      generatorDefinitions.forEach(function (generator) {
+         if (!generator || typeof generator.id !== 'string') return
+         generatorsById[generator.id] = generator
+      })
+      if (!remoteNotationIds.length) {
+         allNotations.forEach(function (notation, index) {
+            if (notation && notation.id) notationOrder[notation.id] = index
+         })
+      }
       remoteNotationIds.forEach(function (id, index) { notationOrder[id] = index })
 
       catalog.forEach(function (record) {
@@ -284,8 +363,10 @@
             ? notationOrder[rightSourceId] : Number.MAX_SAFE_INTEGER
          if (leftOrder !== rightOrder) return leftOrder - rightOrder
 
-         var leftGeneratorIndex = left.notation.upstreamGenerator && left.notation.upstreamGenerator.index
-         var rightGeneratorIndex = right.notation.upstreamGenerator && right.notation.upstreamGenerator.index
+         var leftFamily = left.notation.generatedFamily || left.notation.generatorFamily || left.notation.upstreamGenerator
+         var rightFamily = right.notation.generatedFamily || right.notation.generatorFamily || right.notation.upstreamGenerator
+         var leftGeneratorIndex = leftFamily && leftFamily.index
+         var rightGeneratorIndex = rightFamily && rightFamily.index
          if (Number.isSafeInteger(leftGeneratorIndex) && Number.isSafeInteger(rightGeneratorIndex) &&
             leftGeneratorIndex !== rightGeneratorIndex) return leftGeneratorIndex - rightGeneratorIndex
          if (Number.isSafeInteger(leftGeneratorIndex) !== Number.isSafeInteger(rightGeneratorIndex)) {
@@ -342,7 +423,23 @@
             file.name
          )
          entries.forEach(function (notation) {
-            fileFolder.children.push(notationNode(notation, 'local', file.name, file.name))
+            var categoryId = upstreamCategoryId(notation, categoriesById)
+            var path = categoryId ? categoryPath(categoriesById, categoryId) : []
+            var children = fileFolder.children
+            var labels = []
+            path.forEach(function (category) {
+               labels.push(categoryLabel(category))
+               var folder = getOrCreateLocalCategoryFolder(
+                  children,
+                  category,
+                  file.id,
+                  labels,
+                  generatorState,
+                  generatorsById
+               )
+               children = folder.children
+            })
+            children.push(notationNode(notation, 'local', file.name, file.name))
          })
          localRoot.children.push(fileFolder)
       })

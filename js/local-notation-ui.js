@@ -18,6 +18,13 @@
    var STRINGS = {
       en: {
          title: 'Local notation files',
+         guide: 'Guide',
+         guideTitle: 'Making a notation file',
+         guideLoading: 'Loading the development guide...',
+         guideLoadFailed: 'The development guide could not be loaded.',
+         guideUnavailable: 'The documentation renderer is unavailable.',
+         retry: 'Retry',
+         closeGuide: 'Close guide',
          upload: 'Upload .js',
          newPrss: 'New PrSS',
          empty: 'No local notation files',
@@ -73,6 +80,13 @@
       },
       zh: {
          title: '\u672c\u5730\u8bb0\u53f7\u6587\u4ef6',
+         guide: '\u5f00\u53d1\u6307\u5357',
+         guideTitle: '\u5982\u4f55\u5f00\u53d1\u4e00\u4e2a\u8bb0\u53f7\u6587\u4ef6',
+         guideLoading: '\u6b63\u5728\u52a0\u8f7d\u5f00\u53d1\u6307\u5357...',
+         guideLoadFailed: '\u65e0\u6cd5\u52a0\u8f7d\u5f00\u53d1\u6307\u5357\u3002',
+         guideUnavailable: '\u6587\u6863\u6e32\u67d3\u5668\u4e0d\u53ef\u7528\u3002',
+         retry: '\u91cd\u8bd5',
+         closeGuide: '\u5173\u95ed\u5f00\u53d1\u6307\u5357',
          upload: '\u4e0a\u4f20 .js',
          newPrss: '\u65b0\u5efa PrSS',
          empty: '\u6682\u65e0\u672c\u5730\u8bb0\u53f7\u6587\u4ef6',
@@ -209,6 +223,10 @@
             <header class="ne-local-manager__header">
                <h4 class="ne-local-manager__title">{{ copy.title }}</h4>
                <div class="ne-local-toolbar">
+                  <button ref="guideButton" type="button" class="ne-local-button ne-local-button--secondary"
+                     @click="openGuide">
+                     <span aria-hidden="true">&#128214;</span><span>{{ copy.guide }}</span>
+                  </button>
                   <input ref="uploadInput" type="file" accept=".js,text/javascript,application/javascript"
                      class="ne-local-toolbar__file-input" @change="onUploadChange">
                   <button type="button" class="ne-local-button ne-local-button--secondary"
@@ -322,6 +340,28 @@
                </main>
             </div>
 
+            <div v-if="guideOpen" class="ne-local-guide" role="presentation" @mousedown.self="closeGuide">
+               <section ref="guideDialog" class="ne-local-guide__dialog" role="dialog" aria-modal="true"
+                  :aria-labelledby="guideTitleId">
+                  <header class="ne-local-guide__header">
+                     <h4 :id="guideTitleId">{{ copy.guideTitle }}</h4>
+                     <button type="button" class="ne-local-guide__close" :title="copy.closeGuide"
+                        :aria-label="copy.closeGuide" @click="closeGuide">&times;</button>
+                  </header>
+                  <div class="ne-local-guide__body">
+                     <p v-if="guideLoading" class="ne-local-guide__state" role="status">
+                        {{ copy.guideLoading }}
+                     </p>
+                     <div v-else-if="guideError" class="ne-local-guide__state is-error" role="alert">
+                        <p>{{ copy.guideLoadFailed }} {{ guideError }}</p>
+                        <button type="button" class="ne-local-button ne-local-button--secondary"
+                           @click="loadGuide">{{ copy.retry }}</button>
+                     </div>
+                     <article v-else class="ne-local-guide__article" v-html="guideHtml"></article>
+                  </div>
+               </section>
+            </div>
+
             <div v-if="modal.open" class="ne-local-modal" role="presentation" @mousedown.self="cancelModal">
                <section class="ne-local-modal__dialog" role="dialog" aria-modal="true"
                   :aria-labelledby="modalTitleId" @keydown.esc.prevent.stop="cancelModal">
@@ -357,6 +397,11 @@
             operationError: null,
             draftError: null,
             draftTimer: null,
+            guideOpen: false,
+            guideLoading: false,
+            guideError: '',
+            guideHtml: '',
+            guideTitleId: 'ne-local-guide-title-' + Math.random().toString(36).slice(2),
             modalResolver: null,
             modalPromise: null,
             modalTitleId: 'ne-local-modal-title-' + Math.random().toString(36).slice(2),
@@ -427,12 +472,20 @@
       mounted: function() {
          this._beforeUnload = this.onBeforeUnload.bind(this)
          window.addEventListener('beforeunload', this._beforeUnload)
+         this._guideKeydown = this.onGuideDocumentKeydown.bind(this)
+         if (root && root.document) {
+            root.document.addEventListener('keydown', this._guideKeydown, true)
+         }
       },
 
       beforeUnmount: function() {
          this.cancelDraftTimer()
          if (this.dirty) this.persistDraftNow()
          if (this._beforeUnload) window.removeEventListener('beforeunload', this._beforeUnload)
+         if (this._guideKeydown && root && root.document) {
+            root.document.removeEventListener('keydown', this._guideKeydown, true)
+         }
+         this.guideOpen = false
          if (this.modalResolver) this.resolveModal('cancel')
       },
 
@@ -441,6 +494,111 @@
             var runtime = root && root.localNotationManager
             if (!runtime) throw new Error(this.copy.managerUnavailable)
             return runtime
+         },
+
+         guideDocumentUrl: function() {
+            if (!root || !root.document || !root.document.baseURI) {
+               throw new Error('Document base URL is unavailable.')
+            }
+            return new URL('docs/making-a-notation.md', root.document.baseURI).href
+         },
+
+         focusGuideDialog: function() {
+            var dialog = this.$refs && this.$refs.guideDialog
+            if (!dialog) return
+            dialog.setAttribute('tabindex', '-1')
+            dialog.focus()
+         },
+
+         guideFocusableElements: function(dialog) {
+            if (!dialog || typeof dialog.querySelectorAll !== 'function') return []
+            var selector = [
+               'a[href]',
+               'button:not([disabled])',
+               'input:not([disabled])',
+               'select:not([disabled])',
+               'textarea:not([disabled])',
+               '[tabindex]:not([tabindex="-1"])',
+            ].join(',')
+            return Array.prototype.filter.call(dialog.querySelectorAll(selector), function(element) {
+               return element.getAttribute('aria-hidden') !== 'true'
+            })
+         },
+
+         onGuideDocumentKeydown: function(event) {
+            if (!this.guideOpen || !event) return
+            if (event.key === 'Escape' || event.key === 'Esc') {
+               event.preventDefault()
+               event.stopPropagation()
+               this.closeGuide()
+               return
+            }
+            if (event.key !== 'Tab') return
+
+            var dialog = this.$refs && this.$refs.guideDialog
+            if (!dialog) return
+            var focusable = this.guideFocusableElements(dialog)
+            var active = root && root.document && root.document.activeElement
+            var index = focusable.indexOf(active)
+            var next
+
+            if (!focusable.length) {
+               next = dialog
+            } else if (event.shiftKey && (active === dialog || index <= 0)) {
+               next = focusable[focusable.length - 1]
+            } else if (!event.shiftKey && (active === dialog || index < 0 || index === focusable.length - 1)) {
+               next = focusable[0]
+            }
+
+            if (!next) return
+            event.preventDefault()
+            event.stopPropagation()
+            next.focus()
+         },
+
+         openGuide: function() {
+            this.guideOpen = true
+            var component = this
+            this.$nextTick(function() { component.focusGuideDialog() })
+            if (this.guideHtml || this.guideLoading) return Promise.resolve(this.guideHtml)
+            return this.loadGuide()
+         },
+
+         loadGuide: async function() {
+            if (this.guideLoading) return this.guideHtml
+            this.guideLoading = true
+            this.guideError = ''
+            try {
+               var renderer = root && root.MarkdownRenderer
+               if (!renderer || typeof renderer.render !== 'function') {
+                  throw new Error(this.copy.guideUnavailable)
+               }
+               if (!root || typeof root.fetch !== 'function') throw new Error('Fetch is unavailable.')
+               var url = this.guideDocumentUrl()
+               var response = await root.fetch(url)
+               if (!response || response.ok === false) {
+                  var status = response && response.status ? 'HTTP ' + response.status : 'No response'
+                  throw new Error(status)
+               }
+               var markdown = await response.text()
+               this.guideHtml = renderer.render(markdown, { baseUrl: url })
+               return this.guideHtml
+            } catch (error) {
+               this.guideError = error && error.message || String(error)
+               return ''
+            } finally {
+               this.guideLoading = false
+            }
+         },
+
+         closeGuide: function() {
+            if (!this.guideOpen) return
+            this.guideOpen = false
+            var component = this
+            this.$nextTick(function() {
+               var button = component.$refs && component.$refs.guideButton
+               if (button) button.focus()
+            })
          },
 
          refreshFiles: function(preferredId, reloadEditor) {

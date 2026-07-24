@@ -1,6 +1,6 @@
 ;(function (root) {
    'use strict'
-   root.SmileLeeNotationAdapter.install(root.register, {
+   root.register.installRewrittenBundle({
       decorate: [
          'ton-drc',
          'ton-drp',
@@ -12,5 +12,5 @@
          'ton-mc',
          'ton-mpc',
       ],
-   }, root.SmileLeeNotationBundle)
+   }, root.NeRewrittenNotationBundle)
 })(typeof globalThis !== 'undefined' ? globalThis : this)

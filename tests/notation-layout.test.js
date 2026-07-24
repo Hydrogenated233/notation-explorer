@@ -75,8 +75,8 @@ test('generated manifest exactly matches repository discovery and deterministic 
    assert.equal(discovered.some((file) => file.includes('fPPS4')), false)
    assert.equal(discovered.includes('MN/Tomega^omegaMN.js'), true)
    assert.equal(discovered.includes('aSAN/aSAN~3+.js'), true)
-   assert.equal(discovered.includes('BM-like/GMS/zz-smilelee-remote.js'), true)
-   assert.equal(discovered.includes('BM-like/nSS/zz-smilelee-remote.js'), true)
+   assert.equal(discovered.includes('BM-like/GMS/zz-ne-rewritten.js'), true)
+   assert.equal(discovered.includes('BM-like/nSS/zz-ne-rewritten.js'), true)
 })
 
 test('index delegates notation and application startup to the generated loader', () => {
@@ -91,17 +91,21 @@ test('index delegates notation and application startup to the generated loader',
    assert.match(html, /<script src="lib\/katex\/katex\.min\.js"><\/script>/)
    assert.match(html, new RegExp('<script src="js/latex-renderer\\.js\\?v=' + assetVersion + '"><\\/script>'))
    assert.match(html, new RegExp('<script src="js/notation-registry\\.js\\?v=' + assetVersion + '"><\\/script>'))
-   assert.match(html, /<script src="js\/smilelee-notation-bundle\.js(?:\?[^"\s]*)?"><\/script>/)
-   assert.match(html, /<script src="js\/smilelee-notation-adapter\.js(?:\?[^"\s]*)?"><\/script>/)
+   assert.match(html, /<script src="js\/ne-rewritten-notation-bundle\.js(?:\?[^"\s]*)?"><\/script>/)
+   assert.doesNotMatch(html, /<script src="js\/smilelee-notation-adapter\.js(?:\?[^"\s]*)?"><\/script>/)
    assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1">/)
    assert.match(html, /class="ns-generator-controls"/)
    assert.doesNotMatch(html, /class="notation-generator-bar"/)
    assert.ok(html.indexOf('lib/katex/katex.min.js') < html.indexOf('js/latex-renderer.js'))
    assert.ok(html.indexOf('js/latex-renderer.js') < html.indexOf('js/notation-loader.js'))
-   assert.ok(html.indexOf('js/smilelee-notation-bundle.js') < html.indexOf('js/smilelee-notation-adapter.js'))
-   assert.ok(html.indexOf('js/smilelee-notation-adapter.js') < html.indexOf('js/notation-loader.js'))
+   assert.ok(html.indexOf('js/ne-rewritten-notation-bundle.js') < html.indexOf('js/notation-loader.js'))
    assert.equal(Loader.APP_SCRIPTS.includes('js/notation-display.js'), true)
    assert.equal(Loader.APP_SCRIPTS.includes('js/notation-credits.js'), true)
+   assert.equal(Loader.APP_SCRIPTS.includes('js/markdown-renderer.js'), true)
+   assert.ok(
+      Loader.APP_SCRIPTS.indexOf('js/markdown-renderer.js') <
+      Loader.APP_SCRIPTS.indexOf('js/local-notation-ui.js')
+   )
 })
 
 test('fundamental-sequence tooltip shares one grid across every rendered row', () => {
@@ -134,9 +138,12 @@ test('every discovered built-in loads and initializes in manifest order', () => 
    context.globalThis = context
    const catalog = []
 
-   for (const file of ['js/smilelee-notation-bundle.js', 'js/smilelee-notation-adapter.js']) {
-      vm.runInContext(fs.readFileSync(path.join(projectRoot, file), 'utf8'), context, { filename: file })
-   }
+   const bundleFile = 'js/ne-rewritten-notation-bundle.js'
+   vm.runInContext(
+      fs.readFileSync(path.join(projectRoot, bundleFile), 'utf8'),
+      context,
+      { filename: bundleFile }
+   )
 
    for (const file of manifest) {
       const mainBefore = Loader.registrySnapshot(hub.main)

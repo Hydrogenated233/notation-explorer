@@ -1,6 +1,6 @@
 ;(function (root) {
    'use strict'
-   root.SmileLeeNotationAdapter.install(root.register, {
+   root.register.installRewrittenBundle({
       decorate: ['den', 'den2', 'den3'],
-   }, root.SmileLeeNotationBundle)
+   }, root.NeRewrittenNotationBundle)
 })(typeof globalThis !== 'undefined' ? globalThis : this)

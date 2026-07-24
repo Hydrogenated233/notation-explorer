@@ -83,8 +83,11 @@ The primary representation of a **Main notation**, shown alongside an active **E
 **Notation attribution**:
 Localized credit text owned by one **Registered notation** and displayed below its expansion tree. Attribution is not inferred from its source file or category.
 
+**Rewritten notation definition**:
+An external notation object using the `ne-rewritten` API surface, including structured `display`, `is_limit`, raw-expression `init()`, and optional category generator metadata. It is an input format normalized by the local registry, not a second registry or runtime model.
+
 **Generated notation family**:
-A built-in upstream category whose integer generator creates an ordered sequence of distinct **Main notations**. Its pinned default range is loaded initially; users may move the contiguous upper bound between `start` and the application safety limit.
+A notation category, owned either by the application or by one **Local notation file**, whose integer generator creates an ordered sequence of distinct **Main notations**. Its `start...initial` range is loaded first; users may move the contiguous upper bound between `start` and the declared maximum.
 
 **Generator state**:
 The current upper integer for each **Generated notation family**, persisted in `ne-config`.
@@ -117,6 +120,7 @@ User-authored free-form notes associated with a **Main notation** independently 
 - Changing an included or excluded built-in file requires regenerating the browser manifest; automated tests reject a stale manifest
 - The local notation manager does not list or modify **Built-in notation files** or **Excluded built-in notation files**
 - A **Local notation file** may contribute one or more **Registered notations**
+- A **Local notation file** may also own categories and **Generated notation families**; they share that file's lifecycle
 - A **Local notation file** may depend on built-in APIs and **Built-in notations**, but not on another **Local notation file**
 - A **Local notation file** must not create unmanaged side effects that survive its registered entries
 - **Main notations** and **Analysis notations** have independent identity namespaces
@@ -126,8 +130,8 @@ User-authored free-form notes associated with a **Main notation** independently 
 - A **Disabled local notation file** may retain conflicting source, but cannot be enabled until every conflict is resolved
 - The local notation manager enables, disables, and deletes an entire **Local notation file** as one unit
 - The local notation manager does not modify **Built-in notations**
-- Enabling a **Local notation file** loads all **Registered notations** contributed by that file
-- Saving an **Enabled local notation file** replaces only that file's loaded **Registered notations**
+- Enabling a **Local notation file** loads all **Registered notations**, categories, and **Generated notation families** contributed by that file
+- Saving an **Enabled local notation file** replaces only that file's loaded registrations, categories, and **Generated notation families**
 - Saving an **Enabled local notation file** commits only after every replacement **Registered notation** loads successfully
 - A failed save leaves the prior enabled version loaded and retained while preserving the attempted source as a **Draft edit**
 - A successful replacement rebuilds only the expansion trees contributed by that **Local notation file**
@@ -135,7 +139,7 @@ User-authored free-form notes associated with a **Main notation** independently 
 - A successful replacement preserves the affected **Note sheets** and the newly committed file source
 - An unaffected **Registered notation** retains its current expansion tree during another file's replacement
 - Saving a **Disabled local notation file** changes its retained source without loading it
-- Disabling or deleting a **Local notation file** unloads all **Registered notations** contributed by that file
+- Disabling or deleting a **Local notation file** unloads all **Registered notations**, categories, and **Generated notation families** contributed by that file
 - Disabling a **Local notation file** retains its saved **Analysis text** and **Note sheets**
 - Re-enabling an unchanged **Source revision** restores retained user data by notation ID
 - Re-enabling a changed **Source revision** clears prior **Analysis text** while retaining **Note sheets**
@@ -191,10 +195,13 @@ User-authored free-form notes associated with a **Main notation** independently 
 - Equivalent representation state belongs only to **Main notations**; **Analysis notations** remain independent and unchanged
 - **Notation attribution** is notation-level metadata; two definitions from one built-in file may carry different credit text
 - Missing upstream attribution remains blank rather than being inferred
-- Algorithms imported from the external rewritten project are isolated in a pinned compatibility bundle; its Vue UI, registries, settings, and state model are not part of this application
+- Algorithms imported from the external rewritten project are pinned in a generated definition bundle; its Vue UI, registries, settings, and state model are not part of this application
+- The local registry natively normalizes a **Rewritten notation definition** into the existing registered-notation contract; there is no dedicated compatibility adapter or parallel runtime registry
+- `register_notation(...)` accepts either the existing local contract or a **Rewritten notation definition**, while legacy `register.push(...)` remains unchanged
+- `register_category(...)` automatically initializes a declared generator, matching the external user-file loader even when the source does not call `init_generator(...)` itself
 - Only genuinely missing external definitions are registered; semantic duplicates retain this application's existing IDs and algorithms while compatible display metadata may be attached
-- Remote-only definitions follow the upstream category and parent-category hierarchy rather than the compatibility bundle's physical JavaScript file layout
-- Every **Generated notation family** starts with the pinned upstream `start...initial` range; `+` registers exactly the next integer variant and `-` unregisters the current last variant down to, but never including, `start`
+- Remote-only definitions follow the upstream category and parent-category hierarchy rather than the generated bundle's physical JavaScript file layout
+- Every **Generated notation family** starts with its declared `start...initial` range; `+` registers exactly the next integer variant and `-` unregisters the current last variant down to, but never including, `start`
 - **Generator state** is restored before the saved current notation so an extra generated variant can remain selected across reloads
 - Unregistering an extra generated variant removes its live tree but retains its **Analysis text** and **Note sheets**; registering that same variant again restores them
 - `CpS / n-CpS` is a **Generated notation family** whose items are independent `1-CpS`, `2-CpS`, ... entries with separate trees and FS caches; legacy `n-cps` selection and saved analysis migrate to `2-CpS`

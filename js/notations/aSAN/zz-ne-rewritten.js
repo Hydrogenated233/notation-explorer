@@ -1,6 +1,6 @@
 ;(function (root) {
    'use strict'
-   root.SmileLeeNotationAdapter.install(root.register, {
+   root.register.installRewrittenBundle({
       decorate: ['asan-1', 'asan-2', 'asan-3', 'asan-tilde3plus'],
-   }, root.SmileLeeNotationBundle)
+   }, root.NeRewrittenNotationBundle)
 })(typeof globalThis !== 'undefined' ? globalThis : this)

@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const {
    BUILTIN_OWNER,
    FILE_STORE_VERSION,
+   installGlobals,
    NotationRegistryHub,
    NotationRegistryError,
    LocalNotationFileStore,
@@ -51,6 +52,111 @@ function sourceFor(mainId, analysisId) {
       });`)
    }
    return lines.join('\n')
+}
+
+function generatorSource(options) {
+   options = options || {}
+   const familyId = options.familyId || 'local-family'
+   const rawPrefix = options.rawPrefix || familyId + '-variant-'
+   const categoryName = options.categoryName || familyId
+   const marker = options.marker || 'default'
+   const parent = options.parentId
+      ? ', parent_id: ' + JSON.stringify(options.parentId)
+      : ''
+   const resolver = options.livePrefix
+      ? `resolveId: function (index) { return ${JSON.stringify(options.livePrefix)} + index; },`
+      : ''
+   return `register.registerGenerator({
+      id: ${JSON.stringify(familyId)},
+      category: {
+         id: ${JSON.stringify(familyId)},
+         name: ${JSON.stringify(categoryName)},
+         path: ['Local', ${JSON.stringify(categoryName)}]${parent}
+      },
+      start: ${options.start === undefined ? 1 : options.start},
+      initial: ${options.initial === undefined ? 2 : options.initial},
+      maximum: ${options.maximum === undefined ? 4 : options.maximum},
+      ${resolver}
+      create: function (index) {
+         return {
+            id: ${JSON.stringify(rawPrefix)} + index,
+            name: ${JSON.stringify(categoryName + ' ')} + index,
+            factoryVersion: ${JSON.stringify(marker)},
+            display: function () { return ''; },
+            able: function () { return false; },
+            compare: function () { return 0; },
+            FS: function () { return []; },
+            init: function () {
+               return [{ expr: [index], low: [[]], subitems: [] }];
+            }
+         };
+      }
+   });`
+}
+
+function categoryGeneratorSource(options) {
+   options = options || {}
+   const familyId = options.familyId || 'category-generator-family'
+   const prefix = options.prefix || familyId + '-variant-'
+   return `register_category({
+      id: ${JSON.stringify(familyId)},
+      name: ${JSON.stringify(options.name || familyId)},
+      generator: {
+         start: 1,
+         initial: 2,
+         maximum: 3,
+         create: function (index) {
+            return {
+               id: ${JSON.stringify(prefix)} + index,
+               name: ${JSON.stringify((options.name || familyId) + ' ')} + index,
+               display: function () { return ''; },
+               able: function () { return false; },
+               compare: function () { return 0; },
+               FS: function () { return []; },
+               init: function () { return []; }
+            };
+         }
+      }
+   });`
+}
+
+function officialRewrittenSource() {
+   return `register_notation({
+      id: 'official-direct',
+      name: 'Official direct',
+      display: {
+         plain: function (value) { return 'plain:' + value; },
+         html: function (value) { return '<b>' + value + '</b>'; },
+         latex: function (value) { return '\\\\mathbf{' + value + '}'; },
+         from_display: function (value) { return Number(value); }
+      },
+      is_limit: function (value) { return value === Infinity; },
+      compare: function (left, right) { return left === right ? 0 : left < right ? -1 : 1; },
+      FS: function (value, index) { return value === Infinity ? index + 1 : 0; },
+      init: function () { return [Infinity, 0]; }
+   });
+   register_category({
+      id: 'official-family',
+      name: 'Official family',
+      simple_name: 'n-Official',
+      generator: {
+         start: 1,
+         initial: 2,
+         maximum: 3,
+         create: function (index) {
+            return {
+               id: 'official-generated-' + index,
+               name: index + '-Official',
+               category_id: 'official-family',
+               display: function (value) { return String(value); },
+               is_limit: function (value) { return value === Infinity; },
+               compare: function (left, right) { return left === right ? 0 : left < right ? -1 : 1; },
+               FS: function (value, fsIndex) { return value === Infinity ? index + fsIndex : 0; },
+               init: function () { return [Infinity, index]; }
+            };
+         }
+      }
+   });`
 }
 
 class MemoryStorage {
@@ -336,6 +442,403 @@ test('commit uses the exact registration batch captured during validation', () =
    assert.deepEqual(change.main.added.map((entry) => entry.id), ['prepared'])
    assert.deepEqual(change.main.initialData.map((entry) => entry.id), ['prepared'])
    assert.deepEqual(hub.main.map((entry) => entry.id), ['prepared'])
+})
+
+test('local source generator commits to the hub and remains controllable through plus/minus', () => {
+   const hub = new NotationRegistryHub()
+   const familyId = 'local-source-family'
+   hub.executeSource('file-generator', generatorSource({
+      familyId,
+      rawPrefix: 'local-source-',
+      marker: 'v1',
+   }))
+
+   assert.equal(hub.main.generatorCurrent(familyId), 2)
+   assert.deepEqual(hub.main.idsForOwner('file-generator'), ['local-source-1', 'local-source-2'])
+   const added = hub.main.generatorAdd(familyId)
+   assert.equal(added.id, 'local-source-3')
+   assert.equal(added.factoryVersion, 'v1')
+   assert.equal(hub.main.ownerOf(added.id), 'file-generator')
+   assert.equal(hub.main.generatorCurrent(familyId), 3)
+
+   const removed = hub.main.generatorRemove(familyId)
+   assert.equal(removed.id, 'local-source-3')
+   assert.equal(hub.main.get('local-source-3'), undefined)
+   assert.equal(hub.main.generatorCurrent(familyId), 2)
+})
+
+test('generator controls captured by local source switch from staged to live state after commit', () => {
+   const hub = new NotationRegistryHub()
+   const owner = 'file-captured-controls'
+   const familyId = 'captured-controls-family'
+   let controls
+   const source = generatorSource({
+      familyId,
+      rawPrefix: 'captured-controls-',
+      maximum: 5,
+   }) + `
+      var staged = generator_increment(${JSON.stringify(familyId)});
+      if (!staged || staged.id !== 'captured-controls-3') throw new Error('staged increment failed');
+      captureControls({
+         current: generator_current,
+         canIncrement: generator_can_increment,
+         increment: generator_increment,
+         decrement: generator_decrement,
+         register: register
+      });`
+
+   const transaction = hub.prepareSource(owner, source, {
+      context: { captureControls(value) { controls = value } },
+   })
+
+   assert.deepEqual(transaction.main.stagedEntries().map((entry) => entry.id), [
+      'captured-controls-1',
+      'captured-controls-2',
+      'captured-controls-3',
+   ])
+   assert.deepEqual(hub.main.idsForOwner(owner), [])
+   assert.throws(
+      () => controls.decrement(familyId),
+      (error) => error.code === 'TRANSACTION_PREPARED'
+   )
+
+   transaction.commit()
+
+   assert.equal(controls.current(familyId), 3)
+   assert.equal(controls.register.generatorCurrent(familyId), 3)
+   assert.equal(controls.canIncrement(familyId), true)
+   assert.equal(controls.increment(familyId).id, 'captured-controls-4')
+   assert.equal(hub.main.get('captured-controls-4').id, 'captured-controls-4')
+   assert.equal(controls.register.generatorDecrement(familyId).id, 'captured-controls-4')
+   assert.equal(hub.main.get('captured-controls-4'), undefined)
+   assert.equal(controls.register.generatorAdd(familyId).id, 'captured-controls-4')
+   assert.equal(controls.register.generatorRemove(familyId).id, 'captured-controls-4')
+   assert.equal(hub.main.generatorCurrent(familyId), 3)
+})
+
+test('captured generator controls stay isolated after source failure or explicit rollback', () => {
+   const hub = new NotationRegistryHub()
+   const familyId = 'rolled-back-controls-family'
+   let failedControls
+   const failedSource = generatorSource({
+      familyId,
+      rawPrefix: 'failed-controls-',
+   }) + `
+      captureFailed({ increment: generator_increment, register: register });
+      throw new Error('stop after capture');`
+
+   assert.throws(
+      () => hub.prepareSource('file-failed-controls', failedSource, {
+         context: { captureFailed(value) { failedControls = value } },
+      }),
+      (error) => error.code === 'SOURCE_EXECUTION_FAILED'
+   )
+   assert.throws(
+      () => failedControls.increment(familyId),
+      (error) => error.code === 'TRANSACTION_CLOSED'
+   )
+   assert.throws(
+      () => failedControls.register.generatorIncrement(familyId),
+      (error) => error.code === 'TRANSACTION_CLOSED'
+   )
+   assert.deepEqual(hub.main.idsForOwner('file-failed-controls'), [])
+   assert.equal(hub.main.generatorDefinition(familyId), undefined)
+
+   let rolledBackControls
+   const transaction = hub.prepareSource(
+      'file-explicit-rollback',
+      generatorSource({
+         familyId: 'explicit-rollback-family',
+         rawPrefix: 'explicit-rollback-',
+      }) + `captureRolledBack({ decrement: generator_decrement, register: register });`,
+      { context: { captureRolledBack(value) { rolledBackControls = value } } }
+   )
+   transaction.rollback()
+
+   assert.throws(
+      () => rolledBackControls.decrement('explicit-rollback-family'),
+      (error) => error.code === 'TRANSACTION_CLOSED'
+   )
+   assert.throws(
+      () => rolledBackControls.register.generatorCurrent('explicit-rollback-family'),
+      (error) => error.code === 'TRANSACTION_CLOSED'
+   )
+   assert.deepEqual(hub.main.idsForOwner('file-explicit-rollback'), [])
+   assert.equal(hub.main.generatorDefinition('explicit-rollback-family'), undefined)
+})
+
+test('reloading one owner atomically replaces its generator factory and bounds', () => {
+   const hub = new NotationRegistryHub()
+   const owner = 'file-generator'
+   const familyId = 'replaceable-family'
+   hub.executeSource(owner, generatorSource({
+      familyId,
+      rawPrefix: 'replaceable-',
+      start: 1,
+      initial: 2,
+      maximum: 4,
+      marker: 'old',
+   }))
+   const oldFamily = hub.main.generatorDefinition(familyId)
+   const transaction = hub.prepareSource(owner, generatorSource({
+      familyId,
+      rawPrefix: 'replaceable-',
+      start: 2,
+      initial: 3,
+      maximum: 5,
+      marker: 'new',
+   }))
+
+   assert.equal(hub.main.generatorDefinition(familyId), oldFamily)
+   assert.deepEqual(hub.main.idsForOwner(owner), ['replaceable-1', 'replaceable-2'])
+   transaction.commit()
+
+   const family = hub.main.generatorDefinition(familyId)
+   assert.notEqual(family, oldFamily)
+   assert.deepEqual(
+      { start: family.start, initial: family.initial, maximum: family.maximum },
+      { start: 2, initial: 3, maximum: 5 }
+   )
+   assert.deepEqual(hub.main.idsForOwner(owner), ['replaceable-2', 'replaceable-3'])
+   assert.equal(hub.main.get('replaceable-2').factoryVersion, 'new')
+   assert.equal(hub.main.generatorAdd(familyId).factoryVersion, 'new')
+   assert.ok(hub.main.get('replaceable-4'))
+})
+
+test('failed family commit rolls back notation entries, categories, and generators together', () => {
+   const hub = new NotationRegistryHub()
+   const transaction = hub.begin('file-broken')
+   transaction.main.registerGenerator({
+      id: 'rollback-family-a',
+      category: { id: 'rollback-family-a', name: 'Rollback family A' },
+      start: 1,
+      initial: 1,
+      maximum: 2,
+      create(index) { return main('rollback-a-' + index) },
+   })
+   transaction.main.registerGenerator({
+      id: 'rollback-family-b',
+      category: { id: 'rollback-family-b', name: 'Rollback family B' },
+      start: 1,
+      initial: 1,
+      maximum: 2,
+      create(index) { return main('rollback-b-local-' + index) },
+   })
+   transaction.validate()
+
+   const occupied = hub.main.registerGenerator({
+      id: 'rollback-family-b',
+      category: { id: 'rollback-family-b', name: 'Rollback family B' },
+      start: 1,
+      initial: 1,
+      maximum: 2,
+      create(index) { return main('rollback-b-live-' + index) },
+   })
+   const baselineIds = hub.main.map((entry) => entry.id)
+   const baselineCategories = hub.categories().map((category) => category.id)
+   const baselineGenerators = hub.main.generatorCategoryIds()
+
+   assert.throws(
+      () => transaction.commit(),
+      (error) => error.code === 'DUPLICATE_GENERATOR'
+   )
+   assert.deepEqual(hub.main.map((entry) => entry.id), baselineIds)
+   assert.deepEqual(hub.categories().map((category) => category.id), baselineCategories)
+   assert.deepEqual(hub.main.generatorCategoryIds(), baselineGenerators)
+   assert.equal(hub.main.generatorDefinition('rollback-family-b'), occupied)
+   assert.equal(hub.main.generatorDefinition('rollback-family-a'), undefined)
+   assert.equal(hub.getCategory('rollback-family-a'), undefined)
+})
+
+test('removeOwner removes its generated family, category, state, and live variants', () => {
+   const hub = new NotationRegistryHub()
+   const owner = 'file-generator'
+   const familyId = 'removable-family'
+   hub.executeSource(owner, generatorSource({
+      familyId,
+      rawPrefix: 'removable-',
+   }))
+   hub.main.generatorAdd(familyId)
+
+   assert.equal(hub.categoryOwnerOf(familyId), owner)
+   assert.equal(hub.main.generatorCurrent(familyId), 3)
+   hub.removeOwner(owner)
+
+   assert.deepEqual(hub.main.idsForOwner(owner), [])
+   assert.equal(hub.main.generatorDefinition(familyId), undefined)
+   assert.equal(hub.getCategory(familyId), undefined)
+   assert.equal(Object.prototype.hasOwnProperty.call(hub.getGeneratorState(), familyId), false)
+})
+
+test('resolveId keeps alias live IDs for defaults and later plus/minus variants', () => {
+   const hub = new NotationRegistryHub()
+   const familyId = 'aliased-family'
+   hub.executeSource('file-alias', generatorSource({
+      familyId,
+      rawPrefix: 'raw-alias-',
+      livePrefix: 'live-alias-',
+   }))
+
+   assert.deepEqual(hub.main.idsForOwner('file-alias'), ['live-alias-1', 'live-alias-2'])
+   assert.equal(hub.main.get('raw-alias-1'), undefined)
+   assert.equal(hub.main.get('live-alias-1').generatedFamily.sourceId, 'raw-alias-1')
+   assert.equal(hub.main.get('live-alias-1').generatedFamily.liveId, 'live-alias-1')
+
+   const added = hub.main.generatorAdd(familyId)
+   const family = hub.main.generatorDefinition(familyId)
+   const factoryEntry = family.created[3]
+   assert.equal(added.id, 'live-alias-3')
+   assert.equal(hub.main.get('raw-alias-3'), undefined)
+   assert.notEqual(added, factoryEntry)
+   assert.equal(factoryEntry.id, 'raw-alias-3')
+   assert.equal(factoryEntry.generatedFamily, undefined)
+   assert.equal(hub.main.generatorRemove(familyId).id, 'live-alias-3')
+   assert.equal(hub.main.get('live-alias-3'), undefined)
+   const readded = hub.main.generatorAdd(familyId)
+   assert.equal(readded.generatedFamily.sourceId, 'raw-alias-3')
+   assert.equal(factoryEntry.id, 'raw-alias-3')
+})
+
+test('staged categories use stable topological order when a parent is declared late', () => {
+   const hub = new NotationRegistryHub()
+   const transaction = hub.begin('file-category-order')
+   transaction.main.registerCategory({
+      id: 'ordered-child',
+      name: 'Ordered child',
+      parent_id: 'ordered-parent',
+   })
+   transaction.main.registerCategory({ id: 'ordered-parent', name: 'Ordered parent' })
+   transaction.main.registerCategory({ id: 'ordered-sibling', name: 'Ordered sibling' })
+   transaction.main.push(main('ordered-anchor'))
+
+   transaction.commit()
+
+   assert.deepEqual(hub.categoryIds(), [
+      'ordered-parent',
+      'ordered-child',
+      'ordered-sibling',
+   ])
+})
+
+test('global generator category registration rolls back partial defaults', () => {
+   const hub = new NotationRegistryHub()
+
+   assert.throws(
+      () => hub.main.registerCategory({
+         id: 'broken-live-family',
+         name: 'Broken live family',
+         generator: {
+            start: 1,
+            initial: 2,
+            create(index) {
+               if (index === 2) throw new Error('default failed')
+               return main('broken-live-' + index)
+            },
+         },
+      }),
+      (error) => error.code === 'GENERATOR_FAILED'
+   )
+   assert.deepEqual(hub.main.map((entry) => entry.id), [])
+   assert.equal(hub.getCategory('broken-live-family'), undefined)
+   assert.equal(hub.main.generatorDefinition('broken-live-family'), undefined)
+   assert.equal(
+      Object.prototype.hasOwnProperty.call(hub.main.getGeneratorState(), 'broken-live-family'),
+      false
+   )
+})
+
+test('official ne-rewritten local source uses only register_notation and register_category', () => {
+   const hub = new NotationRegistryHub()
+   const owner = 'official-local-file'
+   const transaction = hub.prepareSource(owner, officialRewrittenSource())
+
+   assert.equal(hub.main.length, 0)
+   assert.deepEqual(transaction.main.map((entry) => entry.id), [
+      'official-direct',
+      'official-generated-1',
+      'official-generated-2',
+   ])
+   const staged = transaction.main.get('official-direct')
+   assert.equal(staged.display(4), '<b>4</b>')
+   assert.equal(staged.displayPlain(4), 'plain:4')
+   assert.equal(staged.fromDisplay('12'), 12)
+   assert.equal(staged.able(Infinity), true)
+   assert.deepEqual(staged.init(), [
+      { expr: Infinity, low: [0], subitems: [] },
+      { expr: 0, low: [0], subitems: [] },
+   ])
+
+   transaction.commit()
+
+   assert.deepEqual(hub.main.idsForOwner(owner), [
+      'official-direct',
+      'official-generated-1',
+      'official-generated-2',
+   ])
+   assert.equal(hub.main.ownerOf('official-direct'), owner)
+   assert.equal(hub.main.ownerOf('official-generated-1'), owner)
+   assert.equal(hub.main.get('official-generated-1').able(Infinity), true)
+   assert.equal(hub.main.generatorDefinition('official-family').owner, owner)
+   assert.equal(hub.main.generatorAdd('official-family').id, 'official-generated-3')
+   assert.equal(hub.main.ownerOf('official-generated-3'), owner)
+
+   hub.removeOwner(owner)
+   assert.equal(hub.main.get('official-direct'), undefined)
+   assert.equal(hub.main.generatorDefinition('official-family'), undefined)
+})
+
+test('global register_category auto-materializes a generator and init_generator is idempotent', () => {
+   const target = {}
+   const hub = installGlobals(target)
+   const category = target.register_category({
+      id: 'global-category-family',
+      name: 'Global category family',
+      generator: {
+         start: 1,
+         initial: 2,
+         maximum: 3,
+         create(index) { return main('global-category-' + index) },
+      },
+   })
+
+   assert.deepEqual(hub.main.map((entry) => entry.id), [
+      'global-category-1',
+      'global-category-2',
+   ])
+   const defaults = hub.main.slice()
+   const initialized = target.init_generator(category)
+   assert.deepEqual(initialized.changed, [])
+   assert.deepEqual(hub.main.slice(), defaults)
+   assert.equal(hub.main.ownerOf('global-category-1'), BUILTIN_OWNER)
+   assert.equal(hub.main.generatorCurrent('global-category-family'), 2)
+   assert.equal(target.generator_increment('global-category-family').id, 'global-category-3')
+})
+
+test('local source register_category auto-initializes while staged and keeps its owner', () => {
+   const hub = new NotationRegistryHub()
+   const owner = 'file-category-generator'
+   const familyId = 'local-category-family'
+   const transaction = hub.prepareSource(owner, categoryGeneratorSource({
+      familyId,
+      prefix: 'local-category-',
+      name: 'Local category family',
+   }))
+
+   assert.equal(hub.main.get('local-category-1'), undefined)
+   assert.equal(hub.getCategory(familyId), undefined)
+   assert.equal(hub.main.generatorDefinition(familyId), undefined)
+   transaction.commit()
+
+   assert.deepEqual(hub.main.idsForOwner(owner), ['local-category-1', 'local-category-2'])
+   assert.equal(hub.categoryOwnerOf(familyId), owner)
+   assert.equal(hub.main.generatorDefinition(familyId).owner, owner)
+   assert.equal(hub.main.generatorAdd(familyId).id, 'local-category-3')
+   assert.equal(hub.main.ownerOf('local-category-3'), owner)
+
+   hub.removeOwner(owner)
+   assert.equal(hub.main.generatorDefinition(familyId), undefined)
+   assert.equal(hub.getCategory(familyId), undefined)
+   assert.equal(hub.main.get('local-category-3'), undefined)
 })
 
 test('file store persists records and drafts in stable creation order', () => {

@@ -13,13 +13,14 @@
    'use strict'
 
    var NOTATION_ROOT = 'js/notations/'
-   var ASSET_VERSION = 'smilelee-merge-5'
+   var ASSET_VERSION = 'ne-rewritten-native-3'
    var APP_SCRIPTS = [
       'js/diagram/Diagram.js',
       'js/notation-display.js',
       'js/notation-credits.js',
       'js/prss-template.js',
       'js/notation-editor.js',
+      'js/markdown-renderer.js',
       'js/local-notation-runtime.js',
       'js/local-notation-ui.js',
       'js/notation-menu.js',

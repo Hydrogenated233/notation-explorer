@@ -6,8 +6,13 @@
       ;['omega-P', 'pQSS', 'QSS', 'Full', 'Weirdly Full'].forEach(function (projection) {
          ids.push(version + system + '-' + projection)
       })
-      ids.push(version + system + '-n-2-P')
-      ids.push(version + system + '-n-3-P')
    })
-   root.SmileLeeNotationAdapter.install(root.register, { add: ids }, root.SmileLeeNotationBundle)
+   root.register.installRewrittenBundle({
+      add: ids,
+      generators: [
+         'category-GMS-20260721-v10-weirdfull-display-GBMS-n-P',
+         'category-GMS-20260721-v10-weirdfull-display-UPMS-n-P',
+         'category-GMS-20260721-v10-weirdfull-display-LPMS2-n-P',
+      ],
+   }, root.NeRewrittenNotationBundle)
 })(typeof globalThis !== 'undefined' ? globalThis : this)

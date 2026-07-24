@@ -1,6 +1,6 @@
 ;(function (root) {
    'use strict'
-   root.SmileLeeNotationAdapter.install(root.register, {
+   root.register.installRewrittenBundle({
       add: [
          'bocf-ebo',
          'mocf-ebo',
@@ -10,5 +10,5 @@
          'ups1.1r5',
       ],
       decorate: ['lmn', 'lon', 'cocf', 'hspn'],
-   }, root.SmileLeeNotationBundle)
+   }, root.NeRewrittenNotationBundle)
 })(typeof globalThis !== 'undefined' ? globalThis : this)
