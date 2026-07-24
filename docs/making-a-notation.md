@@ -165,8 +165,8 @@ able: function(seq) {
 compare: sequence_compare  // 序列型——使用 00-shared-seq.js 提供的函数
 ```
 
-对于序列型记号（`number[]`），直接用 `sequence_compare`。
-对于矩阵型记号（`number[][]`），用 `matrix_compare`。
+对于满足字典序的序列型记号（`number[]`），直接用 `sequence_compare`。
+对于满足字典序的矩阵型记号（`number[][]`），用 `matrix_compare`。
 对于自定义表达式类型，需要自己实现三路比较。
 
 ### `FS`（必填，expr, n → expr）

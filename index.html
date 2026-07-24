@@ -19,9 +19,11 @@
    <script src="js/ne-rewritten-notation-bundle.js?v=ne-rewritten-native-3"></script>
    <div id="app">
       <div class="nav-bar">
-         <button :class="{active: page==='explore'}" @mousedown.prevent="navigateToPage('explore')">{{ L.explore }}</button>
+         <button :class="{active: page==='explore'}" @mousedown.prevent="navigateToPage('explore')">{{ L.explore
+            }}</button>
          <button :class="{active: page==='tools'}" @mousedown.prevent="navigateToPage('tools')">{{ L.tools }}</button>
-         <button :class="{active: page==='settings'}" @mousedown.prevent="navigateToPage('settings')">{{ L.settings }}</button>
+         <button :class="{active: page==='settings'}" @mousedown.prevent="navigateToPage('settings')">{{ L.settings
+            }}</button>
          <span class="lang-bar">
             <button :class="{active: lang==='en'}" @mousedown="lang='en'">EN</button>
             <button :class="{active: lang==='zh'}" @mousedown="lang='zh'">中文</button>
@@ -47,21 +49,17 @@
                <div id="notation-tree" class="ns-options" role="tree" :aria-label="L.notation_select_label">
                   <div v-for="(row, index) in notationMenuRows" :key="row.key" class="ns-tree-line"
                      :class="{ 'is-folder': row.kind === 'folder', 'has-generator': !!row.generator }">
-                     <button ref="notationMenuRows" type="button" role="treeitem" class="ns-tree-row"
-                        :class="{
+                     <button ref="notationMenuRows" type="button" role="treeitem" class="ns-tree-row" :class="{
                            'is-folder': row.kind === 'folder',
                            'is-notation': row.kind === 'notation',
                            'is-expanded': row.kind === 'folder' && row.expanded,
                            'selected': row.kind === 'notation' && row.id === currentNotationId
-                        }"
-                        :style="{ paddingLeft: (10 + row.depth * 16) + 'px' }" :aria-level="row.level"
+                        }" :style="{ paddingLeft: (10 + row.depth * 16) + 'px' }" :aria-level="row.level"
                         :aria-expanded="row.kind === 'folder' ? String(row.expanded) : null"
                         :aria-selected="row.kind === 'notation' ? String(row.id === currentNotationId) : null"
-                        :tabindex="notationMenuFocusIndex === index ? 0 : -1"
-                        :title="row.kind === 'folder'
+                        :tabindex="notationMenuFocusIndex === index ? 0 : -1" :title="row.kind === 'folder'
                            ? (row.expanded ? L.notation_collapse_folder : L.notation_expand_folder)
-                           : row.name + ' (' + row.id + ')'"
-                        @mousedown.prevent.stop="activateNotationMenuRow(row)"
+                           : row.name + ' (' + row.id + ')'" @mousedown.prevent.stop="activateNotationMenuRow(row)"
                         @keydown="handleNotationMenuKeydown($event, row, index)">
                         <span v-if="row.kind === 'folder'" class="ns-tree-chevron" aria-hidden="true"></span>
                         <span v-else class="ns-tree-spacer" aria-hidden="true"></span>
@@ -73,7 +71,8 @@
                         <button type="button" :disabled="!generatorCanDecrement(row.generator.categoryId)"
                            :title="L.generator_remove" :aria-label="L.generator_remove"
                            @click.stop="decrementGenerator(row.generator.categoryId)">-</button>
-                        <output :aria-label="L.n_param_label" :title="row.generator.help || null">{{ generatorCurrent(row.generator.categoryId) }}</output>
+                        <output :aria-label="L.n_param_label" :title="row.generator.help || null">{{
+                           generatorCurrent(row.generator.categoryId) }}</output>
                         <button type="button" :disabled="!generatorCanIncrement(row.generator.categoryId)"
                            :title="L.generator_add" :aria-label="L.generator_add"
                            @click.stop="incrementGenerator(row.generator.categoryId)">+</button>
@@ -86,17 +85,15 @@
             </div>
             <div v-if="dropdownOpen" class="ns-backdrop" @mousedown="closeDropdown(true)"></div>
          </div>
-         <div v-if="currentEquivalentOptions.length" class="equiv-bar" role="group"
-            :aria-label="L['equiv.label']">
+         <div v-if="currentEquivalentOptions.length" class="equiv-bar" role="group" :aria-label="L['equiv.label']">
             <span class="equiv-bar__label">{{ L['equiv.label'] }}</span>
-            <button type="button" :class="{ active: !currentEquivalentId }"
-               :aria-pressed="String(!currentEquivalentId)" @click="setCurrentEquivalent('')">
+            <button type="button" :class="{ active: !currentEquivalentId }" :aria-pressed="String(!currentEquivalentId)"
+               @click="setCurrentEquivalent('')">
                {{ L['equiv.default'] }}
             </button>
             <button v-for="option in currentEquivalentOptions" :key="option.id" type="button"
                :class="{ active: currentEquivalentId === option.id }"
-               :aria-pressed="String(currentEquivalentId === option.id)"
-               @click="setCurrentEquivalent(option.id)">
+               :aria-pressed="String(currentEquivalentId === option.id)" @click="setCurrentEquivalent(option.id)">
                {{ option.label }}
             </button>
             <label v-if="currentEquivalentId" class="equiv-bar__toggle">
@@ -120,8 +117,8 @@
             {{ L.navigate }}: <input type="text" ref="navigate_input" @keydown="navigate_keydown"> <button
                @mousedown="(e) => {e.preventDefault(); find_notation()}">{{ L.find }}</button>
          </div>
-          <notation-tree v-if="currentNotation.id" :key="currentNotationKey" :notation-id="currentNotationId"
-             :subitems="currentDataset.subitems" ref="list"></notation-tree>
+         <notation-tree v-if="currentNotation.id" :key="currentNotationKey" :notation-id="currentNotationId"
+            :subitems="currentDataset.subitems" ref="list"></notation-tree>
          <p v-if="currentNotationCredit" class="notation-credit">{{ currentNotationCredit }}</p>
       </div>
       <!-- Tools Page -->
@@ -133,8 +130,8 @@
             <h4 class="tools-section-title">{{ L.tools_inf_chain }}</h4>
             <div class="tools-toolbar">
                <label class="tools-label">{{ L.tools_notation_select }}<br>
-                   <select v-model="toolsNotation">
-                      <option v-for="item in toolsNotations" :key="item.id" :value="item.id">{{ item.name }}</option>
+                  <select v-model="toolsNotation">
+                     <option v-for="item in toolsNotations" :key="item.id" :value="item.id">{{ item.name }}</option>
                   </select>
                </label>
                <label class="tools-label">{{ L.tools_limit }}<br>
@@ -153,7 +150,7 @@
                   <input type="number" v-model.number="toolsOpts.maxVisited" min="100" step="100" style="width:80px" />
                </label>
                <div class="tools-actions" style="display:block;margin-top:8px">
-                   <button @click="runInfChain()" class="tools-btn">{{ L.tools_run }}</button>
+                  <button @click="runInfChain()" class="tools-btn">{{ L.tools_run }}</button>
                </div>
             </div>
          </div>
@@ -163,13 +160,13 @@
             <h4 class="tools-section-title">{{ L.tools_bfs_diff }}</h4>
             <div class="tools-toolbar">
                <label class="tools-label">{{ L.tools_notation_a }}<br>
-                   <select v-model="toolsDiffA">
-                      <option v-for="item in toolsNotations" :key="item.id" :value="item.id">{{ item.name }}</option>
+                  <select v-model="toolsDiffA">
+                     <option v-for="item in toolsNotations" :key="item.id" :value="item.id">{{ item.name }}</option>
                   </select>
                </label>
                <label class="tools-label">{{ L.tools_notation_b }}<br>
-                   <select v-model="toolsDiffB">
-                      <option v-for="item in toolsNotations" :key="item.id" :value="item.id">{{ item.name }}</option>
+                  <select v-model="toolsDiffB">
+                     <option v-for="item in toolsNotations" :key="item.id" :value="item.id">{{ item.name }}</option>
                   </select>
                </label>
                <label class="tools-label">{{ L.tools_limit }}<br>
@@ -190,14 +187,26 @@
                </div>
             </div>
          </div>
+         <!-- PPS 翻译 -->
+         <div class="tools-section">
+            <h4 class="tools-section-title">{{ L.tools_pps_translate }}</h4>
+            <div class="tools-toolbar">
+               <label class="tools-label">{{ L.tools_pps_input }}<br>
+                  <input type="text" v-model="toolsPPSInput" placeholder="e.g. 0,1,0,2,0,3" style="width:280px" />
+               </label>
+               <div class="tools-actions" style="display:block;margin-top:8px">
+                  <button @click="runPPS()" class="tools-btn">{{ L.tools_pps_convert }}</button>
+               </div>
+            </div>
+         </div>
 
          <!-- 直接展开 -->
          <div class="tools-section">
             <h4 class="tools-section-title">{{ L.tools_direct_expand }}</h4>
             <div class="tools-toolbar">
                <label class="tools-label">{{ L.tools_notation_select }}<br>
-                   <select v-model="toolsExpandNotation">
-                      <option v-for="item in toolsNotations" :key="item.id" :value="item.id">{{ item.name }}</option>
+                  <select v-model="toolsExpandNotation">
+                     <option v-for="item in toolsNotations" :key="item.id" :value="item.id">{{ item.name }}</option>
                   </select>
                </label>
                <label v-if="toolsExpandEquivalentOptions.length" class="tools-label">
@@ -224,145 +233,131 @@
             </div>
          </div>
 
-         <!-- PPS 翻译 -->
-         <div class="tools-section">
-            <h4 class="tools-section-title">{{ L.tools_pps_translate }}</h4>
-            <div class="tools-toolbar">
-               <label class="tools-label">{{ L.tools_pps_input }}<br>
-                  <input type="text" v-model="toolsPPSInput" placeholder="e.g. 0,1,0,2,0,3" style="width:280px" />
-               </label>
-               <div class="tools-actions" style="display:block;margin-top:8px">
-                  <button @click="runPPS()" class="tools-btn">{{ L.tools_pps_convert }}</button>
-               </div>
-            </div>
-         </div>
+
 
          <pre class="tools-output">{{ toolsOutput }}</pre>
       </div>
       <div v-if="page==='settings'" class="settings-page">
          <div class="settings-general">
-         <h3>{{ L.settings_title }}</h3>
-          <label class="setting-row">
-             <span>{{ L.dark_mode }}</span>
-             <input type="checkbox" v-model="darkMode" />
-          </label>
-          <div class="setting-row">
-             <span>{{ L.display_mode }}</span>
-             <span class="setting-segment" role="group" :aria-label="L.display_mode">
-                <button type="button" :class="{ active: displayMode === 'html' }"
-                   :aria-pressed="String(displayMode === 'html')" @click="setDisplayMode('html')">
-                   {{ L.display_html }}
-                </button>
-                <button type="button" :class="{ active: displayMode === 'latex' }"
-                   :aria-pressed="String(displayMode === 'latex')" @click="setDisplayMode('latex')">
-                   {{ L.display_latex }}
-                </button>
-             </span>
-          </div>
-          <div v-if="currentEquivalentOptions.length" class="setting-row">
-             <label for="settings-equivalent">{{ L['equiv.label'] }}</label>
-             <select id="settings-equivalent" :value="currentEquivalentId"
-                @change="setCurrentEquivalent($event.target.value)">
-                <option value="">{{ L['equiv.default'] }}</option>
-                <option v-for="option in currentEquivalentOptions" :key="option.id" :value="option.id">
-                   {{ option.label }}
-                </option>
-             </select>
-          </div>
-          <label v-if="currentEquivalentId" class="setting-row">
-             <span>{{ L['equiv.hide-original'] }}</span>
-             <input type="checkbox" :checked="currentEquivalentHideOriginal"
-                @change="setCurrentEquivalentHideOriginal($event.target.checked)" />
-          </label>
-          <label class="setting-block" for="latex-commands">
-             <span class="setting-block__label">{{ L.latex_commands }}</span>
-             <textarea id="latex-commands" class="latex-command-input" v-model="latexCommands"
-                :placeholder="L.latex_commands_placeholder" maxlength="20000" rows="5"
-                spellcheck="false"></textarea>
-             <span v-if="latexCommandsError" class="setting-block__error" role="alert">
-                {{ L.latex_commands_error }}: {{ latexCommandsError }}
-             </span>
-          </label>
-          <label class="setting-row">
-             <span>{{ L.analysis_latex_preview }}</span>
-             <input type="checkbox" v-model="analysisLatexPreview" />
-          </label>
-          <label class="setting-row" :class="{ 'is-disabled': !analysisLatexPreview }">
-             <span>{{ L.analysis_latex_inline }}</span>
-             <input type="checkbox" v-model="analysisLatexInline" :disabled="!analysisLatexPreview" />
-          </label>
-          <label class="setting-row">
-             <span>{{ L.analysis_input_visible }}</span>
-             <input type="checkbox" v-model="analysisInputVisible" />
-          </label>
-          <label v-if="analysisInputVisible" class="setting-row">
-             <span>{{ L.analysis_input_width }}: {{ analysisInputWidth }}px</span>
-             <input type="range" min="60" max="600" step="10" v-model.number="analysisInputWidth" />
-          </label>
-          <label class="setting-row">
-             <span>{{ L.diagram_follow }}</span>
-            <input type="checkbox" v-model="diagram_follow" />
-         </label>
-         <label class="setting-row">
-            <span>{{ L.auto_scroll }}</span>
-            <input type="checkbox" v-model="auto_scroll" />
-         </label>
-         <label class="setting-row">
-            <span>{{ L.use_alternative }}</span>
-            <input type="checkbox" v-model="use_alternative" />
-         </label>
-         <label class="setting-row">
-            <span>{{ L.diagram_size }}: {{diagram_scale}}</span>
-            <input type="range" min="-5" max="5" step="0.1" v-model="diagram_scale" />
-         </label>
-         <label class="setting-row">
-            <span>{{ L.expansion_tier }}</span>
-            <span><button @mousedown="decr_tier()" class="small-btn">-</button> {{tiername}} <button
-                  @mousedown="incr_tier()" class="small-btn">+</button></span>
-         </label>
-         <label class="setting-row">
-            <span>{{ L.auto_fs_limit }}</span>
-            <span><button @mousedown="length_limit--" class="small-btn">-</button> {{length_limit}} <button
-                  @mousedown="length_limit++" class="small-btn">+</button></span>
-         </label>
-         <label class="setting-row">
-            <span>{{ L.tooltip_fs }}</span>
-            <span><button @mousedown="decrFS()" class="small-btn">-</button> {{FS_shown}} <button @mousedown="incrFS()"
-                  class="small-btn">+</button></span>
-         </label>
-         <label class="setting-row">
-            <span>{{ L.analysis_notation }}</span>
-            <select v-model="currentAnalysisId">
-               <option value=""></option>
-               <option v-for="item in analysisNotations" :key="item.id" :value="item.id">{{ item.name }}</option>
-            </select>
-         </label>
-         <h4 class="settings-section-title">{{ L.auto_save }}</h4>
-         <label class="setting-row">
-            <span>{{ L.auto_save_interval }}</span>
-            <input type="number" v-model.number="autoSaveInterval" min="10" class="n-input" style="width:70px" />
-         </label>
-         <label class="setting-row">
-            <span>{{ L.auto_save_hidden }}</span>
-            <input type="checkbox" v-model="autoSaveHidden" />
-         </label>
-         <button @mousedown="resetSettings()" class="reset-btn">{{ L.reset_settings }}</button>
+            <h3>{{ L.settings_title }}</h3>
+            <label class="setting-row">
+               <span>{{ L.dark_mode }}</span>
+               <input type="checkbox" v-model="darkMode" />
+            </label>
+            <div class="setting-row">
+               <span>{{ L.display_mode }}</span>
+               <span class="setting-segment" role="group" :aria-label="L.display_mode">
+                  <button type="button" :class="{ active: displayMode === 'html' }"
+                     :aria-pressed="String(displayMode === 'html')" @click="setDisplayMode('html')">
+                     {{ L.display_html }}
+                  </button>
+                  <button type="button" :class="{ active: displayMode === 'latex' }"
+                     :aria-pressed="String(displayMode === 'latex')" @click="setDisplayMode('latex')">
+                     {{ L.display_latex }}
+                  </button>
+               </span>
+            </div>
+            <div v-if="currentEquivalentOptions.length" class="setting-row">
+               <label for="settings-equivalent">{{ L['equiv.label'] }}</label>
+               <select id="settings-equivalent" :value="currentEquivalentId"
+                  @change="setCurrentEquivalent($event.target.value)">
+                  <option value="">{{ L['equiv.default'] }}</option>
+                  <option v-for="option in currentEquivalentOptions" :key="option.id" :value="option.id">
+                     {{ option.label }}
+                  </option>
+               </select>
+            </div>
+            <label v-if="currentEquivalentId" class="setting-row">
+               <span>{{ L['equiv.hide-original'] }}</span>
+               <input type="checkbox" :checked="currentEquivalentHideOriginal"
+                  @change="setCurrentEquivalentHideOriginal($event.target.checked)" />
+            </label>
+            <label class="setting-block" for="latex-commands">
+               <span class="setting-block__label">{{ L.latex_commands }}</span>
+               <textarea id="latex-commands" class="latex-command-input" v-model="latexCommands"
+                  :placeholder="L.latex_commands_placeholder" maxlength="20000" rows="5" spellcheck="false"></textarea>
+               <span v-if="latexCommandsError" class="setting-block__error" role="alert">
+                  {{ L.latex_commands_error }}: {{ latexCommandsError }}
+               </span>
+            </label>
+            <label class="setting-row">
+               <span>{{ L.analysis_latex_preview }}</span>
+               <input type="checkbox" v-model="analysisLatexPreview" />
+            </label>
+            <label class="setting-row" :class="{ 'is-disabled': !analysisLatexPreview }">
+               <span>{{ L.analysis_latex_inline }}</span>
+               <input type="checkbox" v-model="analysisLatexInline" :disabled="!analysisLatexPreview" />
+            </label>
+            <label class="setting-row">
+               <span>{{ L.analysis_input_visible }}</span>
+               <input type="checkbox" v-model="analysisInputVisible" />
+            </label>
+            <label v-if="analysisInputVisible" class="setting-row">
+               <span>{{ L.analysis_input_width }}: {{ analysisInputWidth }}px</span>
+               <input type="range" min="60" max="600" step="10" v-model.number="analysisInputWidth" />
+            </label>
+            <label class="setting-row">
+               <span>{{ L.diagram_follow }}</span>
+               <input type="checkbox" v-model="diagram_follow" />
+            </label>
+            <label class="setting-row">
+               <span>{{ L.auto_scroll }}</span>
+               <input type="checkbox" v-model="auto_scroll" />
+            </label>
+            <label class="setting-row">
+               <span>{{ L.use_alternative }}</span>
+               <input type="checkbox" v-model="use_alternative" />
+            </label>
+            <label class="setting-row">
+               <span>{{ L.diagram_size }}: {{diagram_scale}}</span>
+               <input type="range" min="-5" max="5" step="0.1" v-model="diagram_scale" />
+            </label>
+            <label class="setting-row">
+               <span>{{ L.expansion_tier }}</span>
+               <span><button @mousedown="decr_tier()" class="small-btn">-</button> {{tiername}} <button
+                     @mousedown="incr_tier()" class="small-btn">+</button></span>
+            </label>
+            <label class="setting-row">
+               <span>{{ L.auto_fs_limit }}</span>
+               <span><button @mousedown="length_limit--" class="small-btn">-</button> {{length_limit}} <button
+                     @mousedown="length_limit++" class="small-btn">+</button></span>
+            </label>
+            <label class="setting-row">
+               <span>{{ L.tooltip_fs }}</span>
+               <span><button @mousedown="decrFS()" class="small-btn">-</button> {{FS_shown}} <button
+                     @mousedown="incrFS()" class="small-btn">+</button></span>
+            </label>
+            <label class="setting-row">
+               <span>{{ L.analysis_notation }}</span>
+               <select v-model="currentAnalysisId">
+                  <option value=""></option>
+                  <option v-for="item in analysisNotations" :key="item.id" :value="item.id">{{ item.name }}</option>
+               </select>
+            </label>
+            <h4 class="settings-section-title">{{ L.auto_save }}</h4>
+            <label class="setting-row">
+               <span>{{ L.auto_save_interval }}</span>
+               <input type="number" v-model.number="autoSaveInterval" min="10" class="n-input" style="width:70px" />
+            </label>
+            <label class="setting-row">
+               <span>{{ L.auto_save_hidden }}</span>
+               <input type="checkbox" v-model="autoSaveHidden" />
+            </label>
+            <button @mousedown="resetSettings()" class="reset-btn">{{ L.reset_settings }}</button>
          </div>
          <local-notation-manager ref="localNotationManagerComponent"></local-notation-manager>
       </div>
       <div class="floating-canvas" id="floatingCanvas" :style="{ left: pCanvas.x + 'px', top: pCanvas.y + 'px' }"
          v-show="showCanvas && !pCanvasModifier.hide">
          <canvas id="hoverCanvas" width="10" height="10"
-               :style="{ width: pCanvasScaled.w + 'px', height: pCanvasScaled.h + 'px' }" />
+            :style="{ width: pCanvasScaled.w + 'px', height: pCanvasScaled.h + 'px' }" />
       </div>
-      <div v-if="analysisLatexState.visible && analysisLatexState.source" class="analysis-latex-preview"
-         role="status" aria-live="polite"
-         :style="{ left: analysisLatexState.x + 'px', top: analysisLatexState.y + 'px' }"
+      <div v-if="analysisLatexState.visible && analysisLatexState.source" class="analysis-latex-preview" role="status"
+         aria-live="polite" :style="{ left: analysisLatexState.x + 'px', top: analysisLatexState.y + 'px' }"
          @mousedown.stop>
          <button type="button" class="analysis-latex-preview__close" title="Close LaTeX preview"
             aria-label="Close LaTeX preview" @mousedown.stop.prevent="hideAnalysisLatexPreview">&times;</button>
-         <div class="analysis-latex-preview__content"
-            v-html="renderAnalysisLatex(analysisLatexState.source)"></div>
+         <div class="analysis-latex-preview__content" v-html="renderAnalysisLatex(analysisLatexState.source)"></div>
       </div>
       <div class="summary-window" v-show="showSummary"
          :style="{ left: summaryX + 'px', top: summaryY + 'px', width: summaryW + 'px', height: summaryH + 'px' }">
