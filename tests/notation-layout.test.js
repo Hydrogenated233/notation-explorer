@@ -108,6 +108,24 @@ test('index delegates notation and application startup to the generated loader',
    )
 })
 
+test('direct expansion notes open beside Notes and render as keyed disposable windows', () => {
+   const html = fs.readFileSync(path.join(projectRoot, 'index.html'), 'utf8')
+   const framework = fs.readFileSync(path.join(projectRoot, 'js', 'framework.js'), 'utf8')
+   const css = fs.readFileSync(path.join(projectRoot, 'css', 'index.css'), 'utf8')
+
+   assert.match(html, /toggleSummary\(\)[^>]*>\{\{ L\.note \}\}<\/button>\s*<button[^>]*createDirectExpandNote\(\)/)
+   assert.match(html, /v-for="note in directExpandNotes"\s+:key="note\.id"[^>]*role="dialog"/)
+   assert.match(html, /v-model="note\.expression"/)
+   assert.match(html, /runDirectExpandNote\(note\)/)
+   assert.match(html, /closeDirectExpandNote\(note\.id\)/)
+   assert.match(html, /class="direct-expand-note__new"[^>]*tools_expand_note_new/)
+   assert.match(html, /@keydown\.esc\.stop\.prevent="closeDirectExpandNote\(note\.id\)"/)
+   assert.doesNotMatch(framework, /directExpandNotes:\s*this\.directExpandNotes/)
+   assert.doesNotMatch(framework, /localStorage\.(?:setItem|getItem)\([^\n]*direct-expand/)
+   assert.match(css, /\.direct-expand-note__header\s*\{[^}]*touch-action:\s*none;/s)
+   assert.match(css, /\.direct-expand-note__output\s*\{[^}]*user-select:\s*text;/s)
+})
+
 test('fundamental-sequence tooltip shares one grid across every rendered row', () => {
    const framework = fs.readFileSync(path.join(projectRoot, 'js', 'framework.js'), 'utf8')
    const css = fs.readFileSync(path.join(projectRoot, 'css', 'index.css'), 'utf8')

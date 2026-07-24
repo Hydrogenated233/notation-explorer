@@ -1310,6 +1310,135 @@ html.dark .summary-resize-handle {
   background: linear-gradient(135deg, transparent 50%, #3a3a3a 50%, #3a3a3a 55%, transparent 55%);
 }
 
+/* ---------- Direct Expansion Notes ---------- */
+.direct-expand-note {
+  min-width: 0;
+  min-height: 0;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  max-height: calc(100dvh - 16px);
+  box-sizing: border-box;
+}
+.direct-expand-note__header {
+  flex: 0 0 auto;
+  touch-action: none;
+}
+.direct-expand-note__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.direct-expand-note__header-actions {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+.direct-expand-note__header-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+}
+.direct-expand-note__header:focus-visible,
+.direct-expand-note__resize:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+.direct-expand-note__header .direct-expand-note__new:hover {
+  color: #2563eb;
+}
+html.dark .direct-expand-note__header .direct-expand-note__new:hover {
+  color: #93b4ff;
+}
+html.dark .direct-expand-note__header button,
+html.dark .direct-expand-note__header button:hover {
+  background: transparent;
+}
+.direct-expand-note__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  padding: 10px;
+  overflow: auto;
+  box-sizing: border-box;
+  background: #fff;
+  user-select: text;
+}
+.direct-expand-note__controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.direct-expand-note__field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  color: #667085;
+  font-size: 11px;
+}
+.direct-expand-note__field--wide,
+.direct-expand-note__actions {
+  grid-column: 1 / -1;
+}
+.direct-expand-note__field input,
+.direct-expand-note__field select {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 4px 7px;
+  box-sizing: border-box;
+}
+.direct-expand-note__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.direct-expand-note__actions .tools-btn {
+  min-width: 88px;
+  margin: 0;
+}
+.direct-expand-note__output {
+  flex: 1 1 auto;
+  min-height: 72px;
+  margin: 10px 0 0;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+  box-sizing: border-box;
+  background: #f8f9fa;
+  color: #1f2937;
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  user-select: text;
+  white-space: pre-wrap;
+}
+.direct-expand-note__resize {
+  width: 24px;
+  height: 24px;
+  touch-action: none;
+}
+html.dark .direct-expand-note__body {
+  background: #1e1e1e;
+}
+html.dark .direct-expand-note__field {
+  color: #aeb3bb;
+}
+html.dark .direct-expand-note__output {
+  border-color: #3a3a3a;
+  background: #111;
+  color: #d4d4d4;
+}
+
 /* ---------- Tools Page ---------- */
 .tools-page {
   max-width: 800px;
@@ -1340,7 +1469,7 @@ html.dark .summary-resize-handle {
 .tools-btn {
   margin-right: 8px;
   padding: 6px 14px;
-  background: #3b82f6;
+  background: #2563eb;
   color: #fff;
   border: none;
   border-radius: 6px;
@@ -1348,7 +1477,7 @@ html.dark .summary-resize-handle {
   font-size: 13px;
 }
 .tools-btn:hover {
-  background: #2563eb;
+  background: #1d4ed8;
 }
 .tools-section {
   margin-bottom: 16px;
@@ -1392,6 +1521,15 @@ html.dark .summary-resize-handle {
 html.dark .tools-section-title {
   color: #e0e0e0;
   border-bottom-color: #4a4a4a;
+}
+html.dark .tools-btn.tools-btn {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+html.dark .tools-btn.tools-btn:hover {
+  border-color: #1d4ed8;
+  background: #1d4ed8;
 }
 html.dark .tools-label {
   color: #999;

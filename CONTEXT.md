@@ -110,6 +110,9 @@ The hover panel that shows a node, indexed fundamental-sequence expressions, and
 **Note sheet**:
 User-authored free-form notes associated with a **Main notation** independently of its expansion tree.
 
+**Direct-expansion note**:
+A disposable floating instance of the Direct Expansion tool with its own notation, equivalent representation, expression, fundamental-sequence range, and output.
+
 ## Relationships
 
 - **Built-in notation files** are discovered recursively through at most four category-directory levels
@@ -180,6 +183,9 @@ User-authored free-form notes associated with a **Main notation** independently 
 - Unloading the selected **Main notation** selects its next remaining neighbour, or its previous neighbour when no next item exists
 - Unloading the selected **Analysis notation** clears the analysis selection
 - A tool whose selected notation is unloaded selects the first available **Main notation**
+- The Direct Expansion button beside the Note button opens a new **Direct-expansion note** for the current **Main notation** and selected **Equivalent representation**
+- Multiple **Direct-expansion notes** may remain open with independent inputs, output, position, size, and stacking order
+- A **Direct-expansion note** is never persisted; closing it or reloading the application permanently discards that instance
 - Replacing a file preserves a current selection whose notation ID still exists
 - **Built-in notations** keep deterministic built-in file order ahead of enabled local entries; registrations from one file keep source order
 - **Local notation files** keep creation order, and their contributed entries keep registration order

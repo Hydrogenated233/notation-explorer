@@ -7,6 +7,7 @@ const second_main_id = () => register.length > 1 ? register[1].id : first_main_i
 const N_CPS_GENERATOR_ID = 'n-cps'
 const BUILTIN_NOTATION_OWNER = '@notation-explorer/builtin'
 const MAX_GENERATOR_VALUE = 64
+const DIRECT_EXPAND_MAX_COUNT = 1000
 
 const generator_definition = (categoryId) => {
    if (typeof register !== 'undefined' && typeof register.generatorDefinition === 'function') {
@@ -109,6 +110,10 @@ const app = Vue.createApp({
       toolsExpandEquiv: '',
       toolsExpandExpr: '',
       toolsExpandN: 0,
+      directExpandNotes: [],
+      directExpandNoteSequence: 1,
+      directExpandTopZ: 0,
+      directExpandPointer: null,
       notationSearch: '',
       dropdownOpen: false,
       notationExpandedNodes: Object.create(null),
@@ -210,9 +215,14 @@ const app = Vue.createApp({
                tools_direct_expand: 'Direct Expansion',
                tools_expand_expr: 'Expression',
                tools_expand_n: 'Start n',
-               tools_expand_count: 'Count',
-               tools_expand_run: 'Expand',
-               tools_pps_translate: 'PPS Translation',
+                tools_expand_count: 'Count',
+                tools_expand_run: 'Expand',
+                tools_expand_note_new: 'Open another direct expansion window',
+                tools_expand_note_close: 'Close direct expansion window',
+                tools_expand_note_move: 'Move direct expansion window',
+                tools_expand_note_resize: 'Resize direct expansion window',
+                tools_expand_note_output: 'Result',
+                tools_pps_translate: 'PPS Translation',
                tools_pps_input: 'PPS Sequence',
                tools_pps_convert: 'Translate',
                n_param_label: 'n =',
@@ -299,9 +309,14 @@ const app = Vue.createApp({
                tools_direct_expand: '直接展开',
                tools_expand_expr: '表达式',
                tools_expand_n: '起始 n',
-               tools_expand_count: '项数',
-               tools_expand_run: '展开',
-               tools_pps_translate: 'PPS 翻译',
+                tools_expand_count: '项数',
+                tools_expand_run: '展开',
+                tools_expand_note_new: '新建直接展开窗口',
+                tools_expand_note_close: '关闭直接展开窗口',
+                tools_expand_note_move: '移动直接展开窗口',
+                tools_expand_note_resize: '调整直接展开窗口大小',
+                tools_expand_note_output: '结果',
+                tools_pps_translate: 'PPS 翻译',
                tools_pps_input: 'PPS 序列',
                tools_pps_convert: '转换',
                n_param_label: 'n =',
@@ -722,6 +737,31 @@ const app = Vue.createApp({
             this.toolsExpandEquiv = ''
          }
       },
+      directExpandEquivalentOptions(note) {
+         void this.notationVersion
+         return this.equivalentOptionsFor(note && register.get(note.notationId))
+      },
+      ensureDirectExpandNoteEquivalent(note) {
+         if (!note) return
+         var notation = register.get(note.notationId)
+         if (!notation || !note.equivalentId) {
+            note.equivalentId = ''
+            return
+         }
+         try {
+            if (!this.resolveNotationDisplay(notation, note.equivalentId).effectiveId) {
+               note.equivalentId = ''
+            }
+         } catch (error) {
+            note.equivalentId = ''
+         }
+      },
+      selectDirectExpandNoteNotation(note) {
+         if (!note) return
+         var notation = register.get(note.notationId)
+         note.ownerId = notation ? register.ownerOf(notation.id) : ''
+         this.ensureDirectExpandNoteEquivalent(note)
+      },
       setDisplayMode(mode) {
          if (mode === 'html' || mode === 'latex') this.displayMode = mode
       },
@@ -968,6 +1008,24 @@ Ctrl + E: expand analysis fundamental sequence
             import_analysis(dataset, analysisList, notation, this.use_alternative, false, this.length_limit);
          }
       },
+      reconcileDirectExpandNotes(firstNotationId) {
+         var fallbackId = firstNotationId || ''
+         var fallback = fallbackId && register.get(fallbackId)
+         var fallbackOwner = fallback ? register.ownerOf(fallback.id) : ''
+         var self = this
+         this.directExpandNotes.forEach(function(note) {
+            var notation = note && register.get(note.notationId)
+            var owner = notation ? register.ownerOf(notation.id) : ''
+            if (!notation || (note.ownerId && note.ownerId !== owner)) {
+               note.notationId = fallbackId
+               note.ownerId = fallbackOwner
+               note.equivalentId = ''
+            } else {
+               note.ownerId = owner
+               self.ensureDirectExpandNoteEquivalent(note)
+            }
+         })
+      },
       reconcileNotationSelections(snapshot, result, action) {
          var available = register.map(function (entry) { return entry.id });
          var selected = snapshot && snapshot.currentNotationId || this.currentNotationId;
@@ -1004,6 +1062,7 @@ Ctrl + E: expand analysis fundamental sequence
          if (!register.get(this.toolsDiffA)) this.toolsDiffA = first;
          if (!register.get(this.toolsDiffB)) this.toolsDiffB = available[1] || first;
          if (!register.get(this.toolsExpandNotation)) this.toolsExpandNotation = first;
+         this.reconcileDirectExpandNotes(first);
          this.initSheets();
          this.saveSettings();
          this.$nextTick(() => { this.suppressSelectionWatch = false; });
@@ -1777,71 +1836,298 @@ Ctrl + E: expand analysis fundamental sequence
          console.log(lines.join('\n'));
       },
       // ---- 直接展开 ----
-      runExpand() {
-         var self = this;
-         var notation = register.get(self.toolsExpandNotation);
-         if (!notation) { self.toolsOutput = 'Notation not found'; return; }
-         var exprStr = self.toolsExpandExpr.trim();
-         if (!exprStr) { self.toolsOutput = 'Please enter an expression'; return; }
+      directExpansionOutput(request) {
+         var notation = register.get(request.notationId)
+         if (!notation) return 'Notation not found'
+         var exprStr = String(request.expression === undefined ? '' : request.expression).trim()
+         if (!exprStr) return 'Please enter an expression'
 
          var displaySpec
          try {
-            displaySpec = self.resolveNotationDisplay(notation, self.toolsExpandEquiv || undefined)
+            displaySpec = this.resolveNotationDisplay(notation, request.equivalentId || undefined)
          } catch (error) {
-            self.toolsOutput = 'Display error: ' + error.message
-            return
+            return 'Display error: ' + error.message
          }
 
-         // 解析表达式
-         var expr;
-         if (displaySpec.isEquivalent) {
+         var expr
+         if (exprStr === 'Limit' || exprStr === 'Infinity' || exprStr === '\u221e') {
+            expr = Infinity
+         } else if (displaySpec.isEquivalent) {
             if (typeof displaySpec.fromDisplay !== 'function' &&
                typeof displaySpec.fromDisplayAlter !== 'function') {
-               self.toolsOutput = 'Parse error: selected representation cannot parse input'
-               return
+               return 'Parse error: selected representation cannot parse input'
             }
             expr = safeFromResolvedDisplay(displaySpec, exprStr)
-            if (expr === undefined) {
-               self.toolsOutput = 'Parse error: invalid expression'
-               return
-            }
-         } else if (exprStr === 'Limit' || exprStr === 'Infinity' || exprStr === '\u221e') {
-            expr = Infinity;
+            if (expr === undefined) return 'Parse error: invalid expression'
          } else {
             try {
-               if (typeof notation.fromDisplay === 'function') {
-                  expr = notation.fromDisplay(exprStr);
-               } else {
-                  expr = JSON.parse(exprStr);
-               }
-            } catch (e) {
-               self.toolsOutput = 'Parse error: ' + e.message;
-               return;
+               if (typeof notation.fromDisplay === 'function') expr = notation.fromDisplay(exprStr)
+               else expr = JSON.parse(exprStr)
+            } catch (error) {
+               return 'Parse error: ' + error.message
             }
          }
 
-         var display = displaySpec.plain || function (x) { return JSON.stringify(x); };
-         var lines = [];
-         lines.push('Notation: ' + notation.name + ' (' + notation.id + ')');
-         lines.push('Expression: ' + display(expr));
-         lines.push('');
+         var display = displaySpec.plain || function (value) { return JSON.stringify(value) }
+         var lines = ['Notation: ' + notation.name + ' (' + notation.id + ')']
+         try {
+            lines.push('Expression: ' + display(expr))
+         } catch (error) {
+            return 'Display error: ' + error.message
+         }
+         lines.push('')
 
-         var nStart = self.toolsExpandN;
-         var count = self.toolsExpandCount;
-
-         for (var i = nStart; i < nStart + count; i++) {
+         var startValue = request.startN
+         var startMissing = startValue === null || startValue === undefined ||
+            (typeof startValue === 'string' && startValue.trim() === '')
+         var nStart = startMissing ? NaN : Number(startValue)
+         var count = Number(request.count)
+         if (!Number.isSafeInteger(nStart) || nStart < 0) {
+            return 'Start n must be a non-negative safe integer'
+         }
+         if (!Number.isSafeInteger(count) || count < 1 || count > DIRECT_EXPAND_MAX_COUNT) {
+            return 'Count must be an integer from 1 to ' + DIRECT_EXPAND_MAX_COUNT
+         }
+         if (nStart > Number.MAX_SAFE_INTEGER - count + 1) {
+            return 'Fundamental-sequence index exceeds the safe integer range'
+         }
+         for (var offset = 0; offset < count; offset++) {
+            var i = nStart + offset
             try {
-               var result = notation.FS(expr, i);
-               var displayResult = ('' + result === 'Infinity') ? 'Limit' : display(result);
-               lines.push('FS(' + i + ') = ' + displayResult);
-            } catch (e) {
-               lines.push('FS(' + i + ') = Error: ' + e.message);
+               var result = notation.FS(expr, i)
+               var displayResult = display(result)
+               lines.push('FS(' + i + ') = ' + displayResult)
+            } catch (error) {
+               lines.push('FS(' + i + ') = Error: ' + error.message)
             }
          }
-
-         self.toolsOutput = lines.join('\n');
-         console.log('=== Direct Expansion ===');
-         console.log(lines.join('\n'));
+         return lines.join('\n')
+      },
+      runExpand() {
+         this.toolsOutput = this.directExpansionOutput({
+            notationId: this.toolsExpandNotation,
+            equivalentId: this.toolsExpandEquiv,
+            expression: this.toolsExpandExpr,
+            startN: this.toolsExpandN,
+            count: this.toolsExpandCount,
+         })
+         console.log('=== Direct Expansion ===')
+         console.log(this.toolsOutput)
+      },
+      runDirectExpandNote(note) {
+         if (!note) return
+         note.output = this.directExpansionOutput(note)
+         console.log('=== Direct Expansion #' + note.id + ' ===')
+         console.log(note.output)
+      },
+      directExpandViewport() {
+         return {
+            width: Math.max(0, Number(window.innerWidth) || 1024),
+            height: Math.max(0, Number(window.innerHeight) || 768),
+         }
+      },
+      directExpandClamp(value, minimum, maximum) {
+         maximum = Math.max(minimum, maximum)
+         return Math.min(maximum, Math.max(minimum, Number(value) || 0))
+      },
+      clampDirectExpandNote(note) {
+         if (!note) return
+         var viewport = this.directExpandViewport()
+         var maxWidth = Math.max(160, viewport.width - 16)
+         var maxHeight = Math.max(180, viewport.height - 16)
+         var minWidth = Math.min(300, maxWidth)
+         var minHeight = Math.min(260, maxHeight)
+         note.width = this.directExpandClamp(note.width, minWidth, maxWidth)
+         note.height = this.directExpandClamp(note.height, minHeight, maxHeight)
+         note.x = this.directExpandClamp(note.x, 8, viewport.width - note.width - 8)
+         note.y = this.directExpandClamp(note.y, 8, viewport.height - note.height - 8)
+      },
+      clampDirectExpandNotes() {
+         var self = this
+         this.directExpandNotes.forEach(function(note) { self.clampDirectExpandNote(note) })
+         this.arrangeDirectExpandSingleColumn()
+      },
+      arrangeDirectExpandSingleColumn() {
+         var viewport = this.directExpandViewport()
+         var width = Math.min(400, Math.max(160, viewport.width - 16))
+         var columns = Math.max(1, Math.floor(
+            (viewport.width - 16 + 12) / (width + 12)
+         ))
+         if (columns !== 1) return
+         var self = this
+         this.directExpandNotes.slice().sort(function(a, b) {
+            return a.z - b.z || a.id - b.id
+         }).forEach(function(note, index) {
+            note.x = 8
+            note.y = 56 + index * 44
+            self.clampDirectExpandNote(note)
+         })
+      },
+      createDirectExpandNote() {
+         var viewport = this.directExpandViewport()
+         var notation = register.get(this.currentNotationId) || register[0]
+         var width = Math.min(400, Math.max(160, viewport.width - 16))
+         var height = Math.min(400, Math.max(180, viewport.height - 16))
+         var gap = 12
+         var margin = 8
+         var columns = Math.max(1, Math.floor(
+            (viewport.width - margin * 2 + gap) / (width + gap)
+         ))
+         var usedSlots = new Set(this.directExpandNotes.map(function(note) { return note.slot }))
+         var slot = 0
+         while (usedSlots.has(slot)) slot++
+         var column = slot % columns
+         var layer = Math.floor(slot / columns)
+         var note = {
+            id: this.directExpandNoteSequence++,
+            slot: slot,
+            notationId: notation ? notation.id : '',
+            ownerId: notation ? register.ownerOf(notation.id) : '',
+            equivalentId: notation && notation.id === this.currentNotationId ? this.currentEquivalentId : '',
+            expression: '',
+            startN: 0,
+            count: 1,
+            output: '',
+            x: margin + column * (width + gap),
+            y: 56 + layer * 44,
+            width: width,
+            height: height,
+            z: 0,
+         }
+         this.ensureDirectExpandNoteEquivalent(note)
+         this.clampDirectExpandNote(note)
+         this.directExpandNotes.push(note)
+         this.focusDirectExpandNote(note)
+         if (!this._directExpandReturnFocus) this._directExpandReturnFocus = new Map()
+         if (typeof document !== 'undefined' && document.activeElement) {
+            this._directExpandReturnFocus.set(note.id, document.activeElement)
+         }
+         this.$nextTick(function() {
+            if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return
+            var input = document.querySelector(
+               '[data-direct-expand-note-id="' + note.id + '"] [data-direct-expand-expression]'
+            )
+            if (input && typeof input.focus === 'function') input.focus()
+         })
+         return note
+      },
+      closeDirectExpandNote(noteId) {
+         if (this.directExpandPointer && this.directExpandPointer.noteId === noteId) {
+            this.endDirectExpandPointer()
+         }
+         var index = this.directExpandNotes.findIndex(function(note) { return note.id === noteId })
+         if (index < 0) return
+         this.directExpandNotes.splice(index, 1)
+         this.arrangeDirectExpandSingleColumn()
+         var returnFocus = this._directExpandReturnFocus && this._directExpandReturnFocus.get(noteId)
+         if (this._directExpandReturnFocus) this._directExpandReturnFocus.delete(noteId)
+         this.$nextTick(function() {
+            if (returnFocus && typeof returnFocus.focus === 'function' && returnFocus.isConnected !== false) {
+               returnFocus.focus()
+            }
+         })
+      },
+      focusDirectExpandNote(note) {
+         if (!note) return
+         var previousTop = this.directExpandNotes.reduce(function(top, item) {
+            return !top || item.z > top.z ? item : top
+         }, null)
+         if (this.directExpandTopZ >= 600) {
+            this.directExpandNotes.slice().sort(function(a, b) { return a.z - b.z })
+               .forEach(function(item, index) { item.z = index + 1 })
+            this.directExpandTopZ = this.directExpandNotes.length
+         }
+         this.directExpandTopZ++
+         note.z = this.directExpandTopZ
+         if (previousTop && previousTop !== note) this.arrangeDirectExpandSingleColumn()
+      },
+      directExpandNoteStyle(note) {
+         return {
+            left: note.x + 'px',
+            top: note.y + 'px',
+            width: note.width + 'px',
+            height: note.height + 'px',
+            zIndex: 1100 + note.z,
+         }
+      },
+      handleDirectExpandWindowKeydown(note, mode, event) {
+         if (!note || !event || ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].indexOf(event.key) < 0) {
+            return
+         }
+         var step = event.shiftKey ? 40 : 10
+         var horizontal = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0
+         var vertical = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0
+         this.focusDirectExpandNote(note)
+         if (mode === 'resize') {
+            note.width += horizontal
+            note.height += vertical
+         } else {
+            note.x += horizontal
+            note.y += vertical
+         }
+         this.clampDirectExpandNote(note)
+         if (typeof event.preventDefault === 'function') event.preventDefault()
+      },
+      startDirectExpandPointer(note, mode, event) {
+         if (!note || !event || (event.pointerType === 'mouse' && event.button !== 0)) return
+         if (this.directExpandPointer) this.endDirectExpandPointer()
+         this.focusDirectExpandNote(note)
+         this.directExpandPointer = {
+            noteId: note.id,
+            mode: mode,
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            x: note.x,
+            y: note.y,
+            width: note.width,
+            height: note.height,
+            captureTarget: event.currentTarget,
+         }
+         if (event.currentTarget && typeof event.currentTarget.setPointerCapture === 'function') {
+            try { event.currentTarget.setPointerCapture(event.pointerId) } catch (error) { }
+         }
+         if (document && typeof document.addEventListener === 'function') {
+            document.addEventListener('pointermove', this.onDirectExpandPointerMove)
+            document.addEventListener('pointerup', this.endDirectExpandPointer)
+            document.addEventListener('pointercancel', this.endDirectExpandPointer)
+         }
+      },
+      onDirectExpandPointerMove(event) {
+         var pointer = this.directExpandPointer
+         if (!pointer || (event && event.pointerId !== undefined &&
+            pointer.pointerId !== undefined && event.pointerId !== pointer.pointerId)) return
+         var note = this.directExpandNotes.find(function(item) { return item.id === pointer.noteId })
+         if (!note) {
+            this.endDirectExpandPointer(event)
+            return
+         }
+         if (event && typeof event.preventDefault === 'function') event.preventDefault()
+         var deltaX = event.clientX - pointer.startX
+         var deltaY = event.clientY - pointer.startY
+         if (pointer.mode === 'drag') {
+            note.x = pointer.x + deltaX
+            note.y = pointer.y + deltaY
+         } else {
+            note.width = pointer.width + deltaX
+            note.height = pointer.height + deltaY
+         }
+         this.clampDirectExpandNote(note)
+      },
+      endDirectExpandPointer(event) {
+         var pointer = this.directExpandPointer
+         if (event && pointer && event.pointerId !== undefined &&
+            pointer.pointerId !== undefined && event.pointerId !== pointer.pointerId) return
+         this.directExpandPointer = null
+         if (pointer && pointer.captureTarget &&
+            typeof pointer.captureTarget.releasePointerCapture === 'function') {
+            try { pointer.captureTarget.releasePointerCapture(pointer.pointerId) } catch (error) { }
+         }
+         if (document && typeof document.removeEventListener === 'function') {
+            document.removeEventListener('pointermove', this.onDirectExpandPointerMove)
+            document.removeEventListener('pointerup', this.endDirectExpandPointer)
+            document.removeEventListener('pointercancel', this.endDirectExpandPointer)
+         }
       },
 
       runDiff() {
@@ -2066,7 +2352,16 @@ Ctrl + E: expand analysis fundamental sequence
       this.loadSettings()
       this.loadAnalysis()
       this.startAutoSave()
+      if (typeof window.addEventListener === 'function') {
+         window.addEventListener('resize', this.clampDirectExpandNotes)
+      }
       this.$nextTick(() => { this.isHydrating = false; });
+   },
+   beforeUnmount() {
+      this.endDirectExpandPointer()
+      if (typeof window.removeEventListener === 'function') {
+         window.removeEventListener('resize', this.clampDirectExpandNotes)
+      }
    }
 })
 

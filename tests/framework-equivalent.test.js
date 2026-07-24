@@ -30,7 +30,7 @@ function fixtureNotation() {
       init() { return [{ expr: 0, low: [[0]], subitems: [] }] },
       display_equiv: {
          layer: {
-            plain(expr) { return `L${expr}` },
+            plain(expr) { return expr === Infinity ? 'LayerLimit' : `L${expr}` },
             html(expr) { return `L<sup>${expr}</sup>` },
             latex(expr) { return `L^{${expr}}` },
             from_display(source) { return Number(String(source).slice(1)) },
@@ -47,7 +47,14 @@ function fixtureNotation() {
 function loadHarness() {
    const hub = new NotationRegistryHub()
    hub.main.push(fixtureNotation())
-   hub.main.push(Object.assign(fixtureNotation(), { id: 'other', name: 'Other' }))
+   hub.main.push(Object.assign(fixtureNotation(), {
+      id: 'other',
+      name: 'Other',
+      display(expr) { return `Q<sub>${expr}</sub>` },
+      displayPlain(expr) { return `Q${expr}` },
+      fromDisplay(source) { return Number(String(source).slice(1)) },
+      FS(expr, index) { return expr + index + 100 },
+   }))
    const storage = memoryStorage()
    const components = Object.create(null)
    let root
@@ -338,6 +345,183 @@ test('an equivalent without a parser never falls back to the primary parser', ()
    root.runExpand()
 
    assert.equal(root.toolsOutput, 'Parse error: selected representation cannot parse input')
+})
+
+test('direct expansion notes are disposable independent instances', () => {
+   const { root, storage } = loadHarness()
+   root.setCurrentEquivalent('layer')
+
+   const first = root.createDirectExpandNote()
+   root.currentNotationId = 'other'
+   const second = root.createDirectExpandNote()
+
+   assert.notEqual(first.id, second.id)
+   assert.equal(first.notationId, 'fixture')
+   assert.equal(first.equivalentId, 'layer')
+   assert.equal(second.notationId, 'other')
+   assert.equal(second.equivalentId, '')
+   assert.ok(first.x + first.width < second.x)
+
+   root.toolsOutput = 'shared tools output'
+   first.expression = 'L4'
+   first.startN = 1
+   first.count = 2
+   second.expression = 'Q10'
+   second.startN = 2
+   second.count = 1
+
+   root.runDirectExpandNote(first)
+   assert.match(first.output, /Expression: L4/)
+   assert.match(first.output, /FS\(1\) = L5/)
+   assert.match(first.output, /FS\(2\) = L6/)
+   assert.equal(second.output, '')
+
+   root.runDirectExpandNote(second)
+   assert.match(second.output, /Notation: Other \(other\)/)
+   assert.match(second.output, /Expression: Q10/)
+   assert.match(second.output, /FS\(2\) = Q112/)
+   assert.match(first.output, /FS\(2\) = L6/)
+   assert.equal(root.toolsOutput, 'shared tools output')
+
+   root.closeDirectExpandNote(first.id)
+   assert.equal(root.directExpandNotes.length, 1)
+   assert.equal(root.directExpandNotes[0], second)
+   const replacement = root.createDirectExpandNote()
+   assert.equal(replacement.slot, first.slot)
+   assert.notEqual(replacement.x, second.x)
+   root.closeDirectExpandNote(replacement.id)
+   root.closeDirectExpandNote(999999)
+   assert.equal(root.directExpandNotes.length, 1)
+   assert.equal(root.directExpandNotes[0], second)
+
+   root.saveSettings()
+   const saved = JSON.parse(storage.getItem('ne-config'))
+   assert.equal(Object.prototype.hasOwnProperty.call(saved, 'directExpandNotes'), false)
+})
+
+test('direct expansion notes reconcile unloaded notations and invalid equivalents', () => {
+   const { root, hub } = loadHarness()
+   root.setCurrentEquivalent('layer')
+   const note = root.createDirectExpandNote()
+
+   hub.main.unregister('fixture', '@notation-explorer/builtin')
+   root.reconcileDirectExpandNotes('other')
+
+   assert.equal(note.notationId, 'other')
+   assert.equal(note.ownerId, '@notation-explorer/builtin')
+   assert.equal(note.equivalentId, '')
+})
+
+test('direct expansion validates its numeric range before iterating', () => {
+   const { root } = loadHarness()
+   const base = {
+      notationId: 'fixture', equivalentId: '', expression: 'P4', startN: 0, count: 1,
+   }
+
+   assert.equal(
+      root.directExpansionOutput(Object.assign({}, base, { startN: -1 })),
+      'Start n must be a non-negative safe integer'
+   )
+   assert.equal(
+      root.directExpansionOutput(Object.assign({}, base, { startN: '' })),
+      'Start n must be a non-negative safe integer'
+   )
+   assert.equal(
+      root.directExpansionOutput(Object.assign({}, base, { count: 1001 })),
+      'Count must be an integer from 1 to 1000'
+   )
+   assert.equal(
+      root.directExpansionOutput(Object.assign({}, base, { count: 1e308 })),
+      'Count must be an integer from 1 to 1000'
+   )
+   assert.equal(
+      root.directExpansionOutput(Object.assign({}, base, {
+         startN: Number.MAX_SAFE_INTEGER,
+         count: 2,
+      })),
+      'Fundamental-sequence index exceeds the safe integer range'
+   )
+})
+
+test('Limit aliases use the selected equivalent representation for input and output', () => {
+   const { root } = loadHarness()
+
+   for (const expression of ['Limit', 'Infinity', '\u221e']) {
+      const output = root.directExpansionOutput({
+         notationId: 'fixture',
+         equivalentId: 'layer',
+         expression,
+         startN: 0,
+         count: 1,
+      })
+      assert.match(output, /Expression: LayerLimit/)
+      assert.match(output, /FS\(0\) = LayerLimit/)
+   }
+})
+
+test('direct expansion note pointer interactions clamp geometry to the viewport', () => {
+   const { root } = loadHarness()
+   const note = root.createDirectExpandNote()
+   const target = {
+      setPointerCapture() {},
+      releasePointerCapture() {},
+   }
+
+   root.startDirectExpandPointer(note, 'drag', {
+      pointerType: 'mouse', button: 0, pointerId: 1,
+      clientX: 100, clientY: 100, currentTarget: target,
+   })
+   root.onDirectExpandPointerMove({
+      pointerId: 1, clientX: -1000, clientY: -1000, preventDefault() {},
+   })
+   assert.equal(note.x, 8)
+   assert.equal(note.y, 8)
+   root.endDirectExpandPointer({ pointerId: 1 })
+
+   root.startDirectExpandPointer(note, 'resize', {
+      pointerType: 'mouse', button: 0, pointerId: 2,
+      clientX: 0, clientY: 0, currentTarget: target,
+   })
+   root.onDirectExpandPointerMove({
+      pointerId: 2, clientX: 5000, clientY: 5000, preventDefault() {},
+   })
+   assert.ok(note.width <= 1008)
+   assert.ok(note.height <= 752)
+   root.endDirectExpandPointer({ pointerId: 2 })
+   assert.equal(root.directExpandPointer, null)
+})
+
+test('single-column direct expansion notes keep every title reachable after focus changes', () => {
+   const { context, root } = loadHarness()
+   context.innerWidth = 390
+   context.innerHeight = 844
+
+   const first = root.createDirectExpandNote()
+   root.createDirectExpandNote()
+   root.createDirectExpandNote()
+   assert.equal(root.directExpandNotes.map((note) => note.y).join(','), '56,100,144')
+
+   root.focusDirectExpandNote(first)
+   const byLayer = root.directExpandNotes.slice().sort((a, b) => a.z - b.z)
+   assert.equal(byLayer.map((note) => note.y).join(','), '56,100,144')
+   assert.equal(byLayer.at(-1), first)
+
+   let prevented = false
+   root.handleDirectExpandWindowKeydown(first, 'drag', {
+      key: 'ArrowDown', shiftKey: false, preventDefault() { prevented = true },
+   })
+   assert.equal(first.y, 154)
+   assert.equal(prevented, true)
+   root.handleDirectExpandWindowKeydown(first, 'drag', {
+      key: 'ArrowDown', shiftKey: false, preventDefault() {},
+   })
+   assert.equal(first.y, 164)
+
+   root.closeDirectExpandNote(first.id)
+   assert.equal(
+      root.directExpandNotes.slice().sort((a, b) => a.z - b.z).map((note) => note.y).join(','),
+      '56,100'
+   )
 })
 
 test('credit text follows the current UI language', () => {

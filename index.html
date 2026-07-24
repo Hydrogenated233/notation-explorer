@@ -7,16 +7,16 @@
    <meta name="author" content="hyp_cos">
    <title>Notation Explorer</title>
    <link rel="stylesheet" type="text/css" href="lib/katex/katex.min.css">
-   <link rel="stylesheet" type="text/css" href="css/index.css?v=ne-rewritten-native-3">
+   <link rel="stylesheet" type="text/css" href="css/index.css?v=ne-rewritten-native-4">
 </head>
 
 <body>
    <script src="lib/Vue.js"></script>
    <script src="lib/xlsx.full.min.js"></script>
    <script src="lib/katex/katex.min.js"></script>
-   <script src="js/latex-renderer.js?v=ne-rewritten-native-3"></script>
-   <script src="js/notation-registry.js?v=ne-rewritten-native-3"></script>
-   <script src="js/ne-rewritten-notation-bundle.js?v=ne-rewritten-native-3"></script>
+   <script src="js/latex-renderer.js?v=ne-rewritten-native-4"></script>
+   <script src="js/notation-registry.js?v=ne-rewritten-native-4"></script>
+   <script src="js/ne-rewritten-notation-bundle.js?v=ne-rewritten-native-4"></script>
    <div id="app">
       <div class="nav-bar">
          <button :class="{active: page==='explore'}" @mousedown.prevent="navigateToPage('explore')">{{ L.explore
@@ -109,6 +109,7 @@
             <button @mousedown="export_xlsx()">{{ L.export }}</button>
             <button @mousedown="import_xlsx()">{{ L.import }}</button>
             <button @mousedown="toggleSummary()">{{ L.note }}</button>
+            <button @click="createDirectExpandNote()">{{ L.tools_direct_expand }}</button>
             <input type="file" id="hiddenFileInput" style="display: none;" accept=".xlsx, .xls" ref="file_input"
                @change="handle_import_file">
          </div>
@@ -222,10 +223,11 @@
                   <input type="text" v-model="toolsExpandExpr" placeholder="e.g. 0,1,2,3" style="width:220px" />
                </label>
                <label class="tools-label">{{ L.tools_expand_n }}<br>
-                  <input type="number" v-model.number="toolsExpandN" min="0" style="width:60px" />
+                  <input type="number" v-model.number="toolsExpandN" min="0" step="1" style="width:60px" />
                </label>
                <label class="tools-label">{{ L.tools_expand_count }}<br>
-                  <input type="number" v-model.number="toolsExpandCount" min="1" style="width:60px" />
+                  <input type="number" v-model.number="toolsExpandCount" min="1" max="1000" step="1"
+                     style="width:60px" />
                </label>
                <div class="tools-actions" style="display:block;margin-top:8px">
                   <button @click="runExpand()" class="tools-btn">{{ L.tools_expand_run }}</button>
@@ -377,14 +379,75 @@
             :style="{ height: (summaryH - 30) + 'px' }"></textarea>
          <div class="summary-resize-handle" @mousedown.prevent="startResizeSummary($event)"></div>
       </div>
+      <section v-for="note in directExpandNotes" :key="note.id" class="summary-window direct-expand-note"
+         role="dialog" aria-modal="false" :aria-labelledby="'direct-expand-note-title-' + note.id"
+         :data-direct-expand-note-id="note.id" :style="directExpandNoteStyle(note)"
+         @pointerdown="focusDirectExpandNote(note)" @keydown.esc.stop.prevent="closeDirectExpandNote(note.id)">
+         <header class="summary-header direct-expand-note__header" tabindex="0"
+            :aria-label="L.tools_expand_note_move"
+            @pointerdown.stop.prevent="startDirectExpandPointer(note, 'drag', $event)"
+            @keydown.self="handleDirectExpandWindowKeydown(note, 'drag', $event)">
+            <span class="direct-expand-note__title" :id="'direct-expand-note-title-' + note.id">
+               {{ L.tools_direct_expand }} #{{ note.id }}
+            </span>
+            <span class="direct-expand-note__header-actions">
+               <button type="button" class="direct-expand-note__new" :title="L.tools_expand_note_new"
+                  :aria-label="L.tools_expand_note_new" @pointerdown.stop
+                  @click.stop.prevent="createDirectExpandNote()">+</button>
+               <button type="button" :title="L.tools_expand_note_close" :aria-label="L.tools_expand_note_close"
+                  @pointerdown.stop @click.stop.prevent="closeDirectExpandNote(note.id)">&times;</button>
+            </span>
+         </header>
+         <form class="direct-expand-note__body" @submit.prevent="runDirectExpandNote(note)">
+            <div class="direct-expand-note__controls">
+               <label class="direct-expand-note__field direct-expand-note__field--wide">
+                  <span>{{ L.tools_notation_select }}</span>
+                  <select v-model="note.notationId" @change="selectDirectExpandNoteNotation(note)">
+                     <option v-for="item in toolsNotations" :key="item.id" :value="item.id">{{ item.name }}</option>
+                  </select>
+               </label>
+               <label v-if="directExpandEquivalentOptions(note).length"
+                  class="direct-expand-note__field direct-expand-note__field--wide">
+                  <span>{{ L['expand.equiv'] }}</span>
+                  <select v-model="note.equivalentId">
+                     <option value="">{{ L['equiv.default'] }}</option>
+                     <option v-for="option in directExpandEquivalentOptions(note)" :key="option.id"
+                        :value="option.id">{{ option.label }}</option>
+                  </select>
+               </label>
+               <label class="direct-expand-note__field direct-expand-note__field--wide">
+                  <span>{{ L.tools_expand_expr }}</span>
+                  <input type="text" v-model="note.expression" data-direct-expand-expression
+                     placeholder="e.g. 0,1,2,3" />
+               </label>
+               <label class="direct-expand-note__field">
+                  <span>{{ L.tools_expand_n }}</span>
+                  <input type="number" v-model.number="note.startN" min="0" step="1" />
+               </label>
+               <label class="direct-expand-note__field">
+                  <span>{{ L.tools_expand_count }}</span>
+                  <input type="number" v-model.number="note.count" min="1" max="1000" step="1" />
+               </label>
+               <div class="direct-expand-note__actions">
+                  <button type="submit" class="tools-btn">{{ L.tools_expand_run }}</button>
+               </div>
+            </div>
+            <pre class="direct-expand-note__output" :aria-label="L.tools_expand_note_output"
+               aria-live="polite">{{ note.output }}</pre>
+         </form>
+         <div class="summary-resize-handle direct-expand-note__resize" role="button" tabindex="0"
+            :aria-label="L.tools_expand_note_resize"
+            @pointerdown.stop.prevent="startDirectExpandPointer(note, 'resize', $event)"
+            @keydown="handleDirectExpandWindowKeydown(note, 'resize', $event)"></div>
+      </section>
       <div class="save-status" v-if="lastSaveLabel">
          <span class="save-status-text">{{ lastSaveLabel }}</span>
       </div>
       <fs-dialog v-model="show_fs_dialog" :init="current_analysis_notation.fs_default" @confirm="calc_analysis_fs" />
    </div>
-   <script src="js/notation-file-index.js?v=ne-rewritten-native-3"></script>
-   <script src="js/notation-manifest.js?v=ne-rewritten-native-3"></script>
-   <script src="js/notation-loader.js?v=ne-rewritten-native-3"></script>
+   <script src="js/notation-file-index.js?v=ne-rewritten-native-4"></script>
+   <script src="js/notation-manifest.js?v=ne-rewritten-native-4"></script>
+   <script src="js/notation-loader.js?v=ne-rewritten-native-4"></script>
 </body>
 
 </html>
