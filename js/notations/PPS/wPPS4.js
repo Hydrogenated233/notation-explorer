@@ -104,7 +104,7 @@
 
   register.push({
     id: 'wpps4',
-    name: 'wPPS4',
+    name: 'Weak PPS4',
     display: function (expr) {
       if ('' + expr === 'Infinity') return 'Limit';
       return '' + expr;

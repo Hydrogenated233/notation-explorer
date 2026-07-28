@@ -123,7 +123,7 @@
 
   register.push({
     id: 'fpps4',
-    name: 'fPPS4',
+    name: 'Fourth PPS4',
     display: function (expr) {
       if ('' + expr === 'Infinity') return 'Limit';
       return '' + expr;

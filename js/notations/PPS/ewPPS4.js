@@ -82,7 +82,7 @@
 
   register.push({
     id: 'ewpps4',
-    name: 'ewPPS4',
+    name: 'Extremely Weak PPS4',
     display: function (expr) {
       if ('' + expr === 'Infinity') return 'Limit';
       return '' + expr;

@@ -20,11 +20,6 @@ function loadNotation() {
    })
    const root = path.join(__dirname, '..')
    vm.runInContext(
-      fs.readFileSync(path.join(root, 'js', 'notations', '00-shared-seq.js'), 'utf8'),
-      context,
-      { filename: '00-shared-seq.js' }
-   )
-   vm.runInContext(
       fs.readFileSync(path.join(root, 'js', 'notations', 'PPS', 'sPPS4.js'), 'utf8'),
       context,
       { filename: 'sPPS4.js' }
@@ -36,57 +31,68 @@ function plain(value) {
    return Array.from(value)
 }
 
-test('spps4 registers the upstream legacy surface', () => {
+test('spps4 keeps its stable identity and framework surface', () => {
    const notation = loadNotation()
 
    assert.equal(notation.name, 'Second PPS4')
    assert.equal(typeof notation.FS, 'function')
-   assert.equal(typeof notation.FSalter, 'function')
-   assert.equal(typeof notation.FSShort, 'function')
+   assert.equal(notation.FSalter, notation.FS)
+   assert.equal(notation.FSShort, notation.FS)
    assert.deepEqual(Array.from(notation.init(), (item) => plain(item.expr)), [[Infinity], []])
 })
 
-test('spps4 display, parsing, and comparison match PPS.ts', () => {
+test('spps4 uses Limit instead of 0,2 as its compatibility sentinel', () => {
    const notation = loadNotation()
 
    assert.equal(notation.display([Infinity]), 'Limit')
-   assert.equal(notation.display([]), '')
+   assert.equal(notation.display(Infinity), 'Limit')
+   assert.equal(notation.display([]), '(empty)')
+   assert.equal(notation.latex([]), '\\emptyset')
    assert.deepEqual(plain(notation.fromDisplay('Limit')), [Infinity])
+   assert.deepEqual(plain(notation.fromDisplay('Infinity')), [Infinity])
+   assert.deepEqual(plain(notation.fromDisplay('∞')), [Infinity])
+   assert.deepEqual(plain(notation.fromDisplay('w')), [Infinity])
+   assert.deepEqual(plain(notation.fromDisplay('(empty)')), [])
+   assert.deepEqual(plain(notation.fromDisplay('0,2')), [0, 2])
    assert.deepEqual(plain(notation.fromDisplay(' 0, 1x, +2, 3.9 ')), [0, 1, 2, 3])
-   assert.throws(() => notation.fromDisplay(''))
-   assert.throws(() => notation.fromDisplay('Limit '))
-   assert.throws(() => notation.fromDisplay('1,,2'))
+   assert.throws(() => notation.fromDisplay('1,,2'), /Illegal Second PPS4 sequence/)
+   assert.equal(notation.display(null), 'null')
    assert.equal(notation.compare([], [0]), -1)
-   assert.equal(notation.compare([0, 2], [0, 2, 0]), -1)
+   assert.equal(notation.compare([0, 2], [Infinity]), -1)
 })
 
-test('spps4 FS matches upstream weak, strong, shifted, and stop cases', () => {
+test('spps4 Limit expands independently from the finite expression 0,2', () => {
    const notation = loadNotation()
 
+   assert.deepEqual(plain(notation.FS([Infinity], 0)), [0])
    assert.deepEqual(plain(notation.FS([Infinity], 3)), [0, 1, 2, 3])
+   assert.deepEqual(plain(notation.FS([0, 2], 0)), [0])
+   assert.deepEqual(plain(notation.FS([0, 2], 3)), [0, 2])
+})
+
+test('spps4 matches the supplied weak, strong, shifted, and stop rules', () => {
+   const notation = loadNotation()
+
    assert.deepEqual(plain(notation.FS([], 7)), [])
    assert.deepEqual(plain(notation.FS([0, 1, 0], 99)), [0, 1])
-   assert.deepEqual(plain(notation.FS([0, 1, 1, 1, 3], 0)), [0, 1, 1, 1])
    assert.deepEqual(plain(notation.FS([0, 1, 1, 1, 3], 2)), [0, 1, 1, 1, 1, 1, 1, 1])
    assert.deepEqual(plain(notation.FS([0, 1, 0, 2, 3], 2)), [0, 1, 0, 2, 1, 2, 3, 2])
    assert.deepEqual(plain(notation.FS([0, 1, 0, 4, 3], 2)), [0, 1, 0, 4, 1, 6, 3, 8])
-   assert.deepEqual(plain(notation.FS([0, 2, 1, 0, 1, 2, 5], 2)), [0, 2, 1, 0, 1, 2, 1, 2, 1, 2])
+   assert.deepEqual(
+      plain(notation.FS([0, 2, 1, 0, 1, 2, 5], 2)),
+      [0, 2, 1, 0, 1, 2, 3, 2, 5, 2]
+   )
+   assert.deepEqual(plain(notation.FS([0, 1, 1, 1, 3, 4], 1)), [0, 1, 1, 1, 3, 3, 3])
 })
 
-test('spps4 preserves the upstream b-offset quirk', () => {
+test('spps4 alternative modes use the replacement algorithm', () => {
    const notation = loadNotation()
+   const expression = [0, 1, 0, 2, 3]
 
-   assert.deepEqual(plain(notation.FS([0, 1, 1, 1, 3, 4], 1)), [0, 1, 1, 1, 3, 4, 3])
-})
-
-test('spps4 short FS follows upstream Y_FS_variants indexing', () => {
-   const notation = loadNotation()
-
-   assert.deepEqual(plain(notation.FSalter([0, 1, 0, 2, 3], 2)), [0, 1, 0, 2, 1, 2, 3])
-   assert.deepEqual(plain(notation.FSShort([Infinity], 3)), [0, 1, 2, 3])
-   assert.deepEqual(plain(notation.FSShort([0, 1, 0, 2, 3], 2)), [0, 1, 0, 2, 1, 2, 3])
-   assert.deepEqual(plain(notation.FSShort([0, 1, 0, 3], 0)), [0, 1, 0])
-   assert.deepEqual(plain(notation.FSShort([0, 1, 0, 3], 1)), [0, 1, 0, 1])
-   assert.deepEqual(plain(notation.FSShort([0, 1, 0, 3], 2)), [0, 1, 0])
-   assert.deepEqual(plain(notation.FSShort([0, 1, 0, 3], 3)), [0, 1, 0, 1])
+   assert.deepEqual(plain(notation.FSalter(expression, 2)), plain(notation.FS(expression, 2)))
+   assert.deepEqual(plain(notation.FSShort(expression, 2)), plain(notation.FS(expression, 2)))
+   assert.throws(() => notation.FS(expression, -1), /non-negative safe integer/)
+   assert.throws(() => notation.FS(expression, 1.5), /non-negative safe integer/)
+   assert.throws(() => notation.FS(expression, Number.NaN), /non-negative safe integer/)
+   assert.throws(() => notation.FS([0, 1, 4], 1), /outside sequence length/)
 })
