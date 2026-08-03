@@ -528,6 +528,9 @@ ul {
   font-size: 13px;
   color: #333;
 }
+.pps-column-index {
+  color: #888;
+}
 .notation-expression.is-latex .katex {
   font-size: 1.08em;
 }
@@ -1016,6 +1019,9 @@ html.dark .analysis-inline-latex {
 }
 html.dark .shown-item > .notation-expression {
   color: #c0c0c0;
+}
+html.dark .pps-column-index {
+  color: #999;
 }
 html.dark .notation-expression__original,
 html.dark .notation-expression__separator {

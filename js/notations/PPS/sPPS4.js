@@ -116,9 +116,22 @@
       return seq.join(',')
    }
 
+   function displayHtml(expr) {
+      if (isInfinity(expr)) return 'Limit'
+      if (typeof expr === 'number') return pps_sequence_display_html([expr])
+      var seq = ensureArray(expr)
+      if (seq === null) return String(expr)
+      if (seq.length === 0) return '(empty)'
+      return pps_sequence_display_html(seq)
+   }
+
    function displayLatex(expr) {
-      var plain = displayPlain(expr)
-      return plain === '(empty)' ? '\\emptyset' : plain
+      if (isInfinity(expr)) return 'Limit'
+      if (typeof expr === 'number') return pps_sequence_display_latex([expr])
+      var seq = ensureArray(expr)
+      if (seq === null) return String(expr)
+      if (seq.length === 0) return '\\emptyset'
+      return pps_sequence_display_latex(seq)
    }
 
    function isLimit(expr) {
@@ -171,6 +184,7 @@
       name: 'Second PPS4',
       display: displayPlain,
       displayPlain: displayPlain,
+      displayHtml: displayHtml,
       latex: displayLatex,
       fromDisplay: parse,
       able: isLimit,

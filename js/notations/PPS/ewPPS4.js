@@ -87,6 +87,9 @@
       if ('' + expr === 'Infinity') return 'Limit';
       return '' + expr;
     },
+    displayPlain: sequence_display,
+    displayHtml: pps_sequence_display_html,
+    latex: pps_sequence_display_latex,
     fromDisplay: function (str) {
       str = str.trim();
       if (str === 'Limit') return [Infinity];
