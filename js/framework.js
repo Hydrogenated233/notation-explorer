@@ -123,6 +123,7 @@ const app = Vue.createApp({
       lastSaveTime: null,
       saveLabelTick: 0,
       saveTimerId: null,
+      analysisSaveTimerId: null,
       allNoteSheets: Object.create(null),
       toolsExpandCount: 1,
       toolsPPSInput: '0, 1, 0, 2, 0, 3',
@@ -996,7 +997,14 @@ Ctrl + E: expand analysis fundamental sequence
                if (expr === undefined) return null;
                var analysis = Object.prototype.hasOwnProperty.call(item, 'analysis')
                   ? item.analysis : undefined;
-               return [expr, analysis, item.hide ? true : undefined];
+               var shouldRestoreExpansion = item.expanded ||
+                  (!Object.prototype.hasOwnProperty.call(item, 'expanded') &&
+                   analysis !== undefined && typeof notation.able === 'function' && notation.able(expr));
+               var expansion = shouldRestoreExpansion ? {
+                  count: Number.isSafeInteger(item.expansionCount) && item.expansionCount > 0
+                     ? item.expansionCount : 1,
+               } : undefined;
+               return [expr, analysis, item.hide ? true : undefined, expansion];
             }).filter(function (item) { return item !== null; });
          } else {
             analysisList = archived.items.map(function (entry) {
@@ -1071,6 +1079,11 @@ Ctrl + E: expand analysis fundamental sequence
          if (!result) return;
          var ownerId = result.file.id;
          var change = result.change;
+         if (action === 'delete') {
+            ;(result.file.knownGeneratorIds || []).forEach((categoryId) => {
+               delete this.generatorState[categoryId]
+            })
+         }
          if (!change) {
             this.notationVersion++;
             if (action === 'delete') {
@@ -1156,11 +1169,17 @@ Ctrl + E: expand analysis fundamental sequence
             for (var i = node.subitems.length - 1; i >= 0; i--) walk(node.subitems[i]);
             var saveAnalysis = node.analysis !== undefined;
             var saveHidden = self.autoSaveHidden && node.hide_child;
-            if (saveAnalysis || saveHidden) {
+            var saveExpanded = node.subitems.length > 0;
+            if (saveAnalysis || saveHidden || saveExpanded) {
                var item = serializeArchivedExpression(notation, node.expr);
                if (item.expr === undefined && typeof item.display !== 'string') return;
                if (saveAnalysis) item.analysis = node.analysis;
                if (saveHidden) item.hide = true;
+               if (saveExpanded) {
+                  item.expanded = true;
+                  item.expansionCount = Number.isSafeInteger(node.fs_index) && node.fs_index > 0
+                     ? node.fs_index : 1;
+               }
                items.push(item);
             }
          };
@@ -1208,6 +1227,21 @@ Ctrl + E: expand analysis fundamental sequence
          } catch (e) {
             console.warn('Auto-save failed:', e);
          }
+      },
+      queueAnalysisSave() {
+         if (this.analysisSaveTimerId) clearTimeout(this.analysisSaveTimerId)
+         var self = this
+         this.analysisSaveTimerId = setTimeout(function () {
+            self.analysisSaveTimerId = null
+            self.saveAnalysis()
+         }, 250)
+      },
+      flushAnalysisSave() {
+         if (this.analysisSaveTimerId) {
+            clearTimeout(this.analysisSaveTimerId)
+            this.analysisSaveTimerId = null
+         }
+         this.saveAnalysis()
       },
       loadAnalysis() {
          var self = this;
@@ -1297,7 +1331,14 @@ Ctrl + E: expand analysis fundamental sequence
                       if (expr === undefined) return null;
                       var analysis = Object.prototype.hasOwnProperty.call(item, 'analysis')
                          ? item.analysis : undefined;
-                      return [expr, analysis, item.hide ? true : undefined];
+                      var shouldRestoreExpansion = item.expanded ||
+                         (!Object.prototype.hasOwnProperty.call(item, 'expanded') &&
+                          analysis !== undefined && typeof notation.able === 'function' && notation.able(expr));
+                      var expansion = shouldRestoreExpansion ? {
+                         count: Number.isSafeInteger(item.expansionCount) && item.expansionCount > 0
+                            ? item.expansionCount : 1,
+                      } : undefined;
+                      return [expr, analysis, item.hide ? true : undefined, expansion];
                    }).filter(function (x) { return x !== null; });
                } else {
                   analysisList = nd.items.map(function (entry) {
@@ -1611,8 +1652,11 @@ Ctrl + E: expand analysis fundamental sequence
                 Object.keys(self.generatorState).forEach(function(categoryId) {
                    var value = self.generatorState[categoryId]
                    var definition = generator_definition(categoryId)
-                   if (!definition || value < definition.start ||
-                       value > self.generatorMaximum(categoryId)) {
+                   // A disabled local notation file has not registered its
+                   // generator yet. Keep that coordinate so the registry can
+                   // apply it if the file is enabled later in this session.
+                   if (definition && (value < definition.start ||
+                       value > self.generatorMaximum(categoryId))) {
                       delete self.generatorState[categoryId]
                    }
                 })
@@ -2354,13 +2398,17 @@ Ctrl + E: expand analysis fundamental sequence
       this.startAutoSave()
       if (typeof window.addEventListener === 'function') {
          window.addEventListener('resize', this.clampDirectExpandNotes)
+         this._analysisBeforeUnload = () => this.flushAnalysisSave()
+         window.addEventListener('beforeunload', this._analysisBeforeUnload)
       }
       this.$nextTick(() => { this.isHydrating = false; });
    },
    beforeUnmount() {
       this.endDirectExpandPointer()
+      this.flushAnalysisSave()
       if (typeof window.removeEventListener === 'function') {
          window.removeEventListener('resize', this.clampDirectExpandNotes)
+         if (this._analysisBeforeUnload) window.removeEventListener('beforeunload', this._analysisBeforeUnload)
       }
    }
 })
@@ -2479,7 +2527,7 @@ function import_analysis(root_item, analysis_list, notation, use_short, auto_foc
    while (index < analysis_list.length) {
       if (++outerGuard > 50000) { console.warn('import_analysis: outer guard limit'); return; }
       let guard = 0;
-      while ((cmp = notation.compare(item.expr, analysis_list[index][0])) !== 0) {
+      while ((cmp = compare_expressions(notation, item.expr, analysis_list[index][0])) !== 0) {
          if (++guard > 50000) { console.warn('import_analysis: guard limit reached'); return; }
          if (cmp > 0) {
             if (item.mark > lengthLimit) return
@@ -2492,6 +2540,21 @@ function import_analysis(root_item, analysis_list, notation, use_short, auto_foc
 
       if (analysis_list[index][1] !== undefined) item.analysis = analysis_list[index][1]
       if (analysis_list[index][2] !== undefined) item.hide_child = !!analysis_list[index][2]
+
+      var expansion = analysis_list[index][3]
+      if (expansion && Number.isSafeInteger(expansion.count) && expansion.count > 0) {
+         var currentExpansionCount = Number.isSafeInteger(item.fs_index) && item.fs_index > 0
+            ? item.fs_index : (item.subitems.length > 0 ? 1 : 0)
+         var expansionGuard = 0
+         while (currentExpansionCount < expansion.count && expansionGuard++ < expansion.count + 1) {
+            var previousSubitemCount = item.subitems.length
+            var previousFSIndex = item.fs_index
+            expand_item(item, notation, use_short, 0)
+            currentExpansionCount = Number.isSafeInteger(item.fs_index) && item.fs_index > 0
+               ? item.fs_index : (item.subitems.length > 0 ? 1 : 0)
+            if (item.subitems.length === previousSubitemCount && item.fs_index === previousFSIndex) break
+         }
+      }
 
       if (index === 0 && auto_focus) {
          let node = node_map.get(item.path)
@@ -2513,7 +2576,7 @@ function expand_item(item, notation, use_short, max_tier, auto_focus) {
       let fs_index = 0, res
       while (true) {
          res = FS(item.expr, fs_index)
-         if (notation.compare(res, item.bound) > 0) {
+         if (compare_expressions(notation, res, item.bound) > 0) {
             item.fs_index = fs_index
             return res
          }
@@ -2527,7 +2590,7 @@ function expand_item(item, notation, use_short, max_tier, auto_focus) {
          result_expr = generateFS(item)
       } else {
          result_expr = FS(item.expr, 0)
-         if (notation.compare(result_expr, item.bound) <= 0) return;
+         if (compare_expressions(notation, result_expr, item.bound) <= 0) return;
       }
 
       let new_bound
@@ -2537,14 +2600,20 @@ function expand_item(item, notation, use_short, max_tier, auto_focus) {
          new_bound = item.bound
       } else {
          if (item.parent) {
-            new_bound = item.parent.subitems[item.parent.mark + item.index + 1].expr
+            const parentItems = Array.isArray(item.parent.subitems) ? item.parent.subitems : []
+            const siblingIndex = (item.parent.mark || 0) + item.index + 1
+            const sibling = parentItems[siblingIndex]
+            // Imported/deeply generated trees may not have a trailing sibling.
+            // The item's own bound is the correct lower insertion bound then.
+            new_bound = sibling ? sibling.expr : item.bound
          } else {
-            new_bound = root.currentDataset.subitems[item.index + 1].expr
+            const sibling = root.currentDataset.subitems[item.index + 1]
+            new_bound = sibling ? sibling.expr : item.bound
          }
       }
 
       // Children and generated siblings must stay strictly above their insertion bound.
-      if (notation.compare(result_expr, new_bound) <= 0) return
+      if (compare_expressions(notation, result_expr, new_bound) <= 0) return
 
       let new_index
       if (to_parent) {
@@ -2587,6 +2656,17 @@ function expand_item(item, notation, use_short, max_tier, auto_focus) {
    }
 
    expand_tier(max_tier, item, !item.parent.is_root && item.index + item.parent.mark === item.parent.subitems.length - 1, auto_focus)
+}
+
+// ne-rewritten notation files conventionally use Infinity for the atomic
+// Limit expression. A few external files expose an array-only comparator;
+// keep those files usable without changing their public API.
+function compare_expressions(notation, left, right) {
+   if (left === Infinity || right === Infinity) {
+      if (left === Infinity && right === Infinity) return 0
+      return left === Infinity ? 1 : -1
+   }
+   return notation.compare(left, right)
 }
 
 const get_FS = (notation, use_short) => {
@@ -2879,9 +2959,11 @@ app.component('notation-list-item', {
          onblur() {
             root.showCanvas = false
             root.hideAnalysisLatexPreview()
+            root.flushAnalysisSave()
          },
          onAnalysisInput(event) {
             this.updateAnalysisLatexPreview(event.target.value, event.target)
+            root.queueAnalysisSave()
          },
          updateAnalysisLatexPreview(value, input) {
             if (!root.analysisLatexPreview || !root.analysisInputVisible || !value || !input) {

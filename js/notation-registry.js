@@ -1332,6 +1332,16 @@
          if (categoryInput.parentId === undefined && spec.parentId !== undefined) categoryInput.parentId = spec.parentId
          if (!categoryInput.path && Array.isArray(spec.path)) categoryInput.path = spec.path.slice()
          var category = this._stageCategory(categoryInput)
+         var savedState = this._hub && this._hub.getGeneratorState
+            ? this._hub.getGeneratorState()[generator.id]
+            : undefined
+         var requestedCurrent = existingFamily && Number.isSafeInteger(existingFamily.currentIndex)
+            ? Math.max(existingFamily.currentIndex, generator.initial)
+            : savedState
+         var currentIndex = Number.isSafeInteger(requestedCurrent) &&
+            requestedCurrent >= generator.start && requestedCurrent <= generator.maximum
+            ? requestedCurrent
+            : generator.initial
          var family = {
             id: generator.id,
             categoryId: generator.id,
@@ -1346,10 +1356,10 @@
             resolveId: generator.resolveId,
             entries: Object.create(null),
             created: Object.create(null),
-            currentIndex: generator.initial,
+            currentIndex: currentIndex,
          }
          var self = this
-         for (var index = family.start; index <= family.initial; index++) {
+         for (var index = family.start; index <= family.currentIndex; index++) {
             var raw = this._hub._createGenerated(family, index)
             var decorated = this._hub._decorateGenerated(raw, family, index)
             var existingEntry = this.get(decorated.liveId)
@@ -2355,7 +2365,8 @@
          return this.prepareSource(owner, source, options).commit()
       }
 
-      removeOwner(owner) {
+      removeOwner(owner, options) {
+         options = options || {}
          assertOwner(owner)
          if (owner === BUILTIN_OWNER) {
             throw new NotationRegistryError(
@@ -2375,7 +2386,9 @@
          try {
             this.main._applyPlan(mainPlan)
             this.analysis._applyPlan(analysisPlan)
-            this._removeOwnerMetadata(owner)
+            this._removeOwnerMetadata(owner, {
+               preserveGeneratorState: options.preserveGeneratorState === true,
+            })
          } catch (error) {
             this.main._restorePairs(mainSnapshot)
             this.analysis._restorePairs(analysisSnapshot)
@@ -2453,12 +2466,13 @@
          this._generatorState = Object.assign(Object.create(null), snapshot.generatorState)
       }
 
-      _removeOwnerMetadata(owner) {
+      _removeOwnerMetadata(owner, options) {
+         options = options || {}
          var self = this
          this._generators.forEach(function (family, id) {
             if (family.owner !== owner) return
             self._generators.delete(id)
-            delete self._generatorState[id]
+            if (!options.preserveGeneratorState) delete self._generatorState[id]
             if (family.category && family.category.generator === family) {
                delete family.category.generator
             }
@@ -2545,7 +2559,7 @@
          try {
             this.main._applyPlan(plans.main)
             this.analysis._applyPlan(plans.analysis)
-            this._removeOwnerMetadata(transaction.owner)
+            this._removeOwnerMetadata(transaction.owner, { preserveGeneratorState: true })
             this._commitStagedFamilies(transaction, prepared)
          } catch (error) {
             this.main._restorePairs(mainSnapshot)

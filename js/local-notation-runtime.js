@@ -42,10 +42,14 @@
    function filePatchFromChange(file, change, extra) {
       var mainIds = change.main.added.map(function (entry) { return entry.id })
       var analysisIds = change.analysis.added.map(function (entry) { return entry.id })
+      var generatorIds = (change.generators || []).map(function (entry) {
+         return entry && (entry.id || entry.categoryId)
+      }).filter(Boolean)
       return Object.assign({
-         manifest: { main: mainIds, analysis: analysisIds },
+         manifest: { main: mainIds, analysis: analysisIds, generators: generatorIds },
          knownMainIds: unique((file.knownMainIds || []).concat(mainIds)),
          knownAnalysisIds: unique((file.knownAnalysisIds || []).concat(analysisIds)),
+         knownGeneratorIds: unique((file.knownGeneratorIds || []).concat(generatorIds)),
          lastError: null,
       }, extra || {})
    }
@@ -288,8 +292,15 @@
       var file = this.store.getFile(id)
       if (!file) throw new Error('Local notation file not found.')
       if (!file.enabled) return { file: file, change: null, enabled: false }
-      var persisted = this.store.updateFile(id, { enabled: false, lastError: null })
-      var change = this.hub.removeOwner(id)
+      var generatorIds = this.hub.generatorDefinitions().filter(function (family) {
+         return family.owner === id
+      }).map(function (family) { return family.id })
+      var persisted = this.store.updateFile(id, {
+         enabled: false,
+         lastError: null,
+         knownGeneratorIds: unique((file.knownGeneratorIds || []).concat(generatorIds)),
+      })
+      var change = this.hub.removeOwner(id, { preserveGeneratorState: true })
       this._forgetInitialData(change.main.removed)
       return { file: persisted, previous: file, change: change, enabled: false }
    }
@@ -300,6 +311,11 @@
       var removed = this.store.deleteFile(id)
       var change = file.enabled ? this.hub.removeOwner(id) : null
       if (change) this._forgetInitialData(change.main.removed)
+      var state = this.hub.getGeneratorState()
+      ;(file.knownGeneratorIds || []).forEach(function (generatorId) {
+         delete state[generatorId]
+      })
+      this.hub.setGeneratorState(state)
       this.hub.forgetOwner(id)
       return { file: removed, previous: file, change: change, deleted: true }
    }

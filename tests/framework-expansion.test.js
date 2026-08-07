@@ -127,3 +127,65 @@ test('Subsequential LPrSS inserts the nested third Limit term', () => {
       ['1,(1,2)', '1,2', '1']
    )
 })
+
+test('expansion tolerates a missing trailing sibling bound', () => {
+   const { context, root } = loadFramework()
+   const notation = {
+      id: 'sequence-test',
+      able: (expr) => Array.isArray(expr) && expr.length > 0 && expr[expr.length - 1] > 1,
+      compare: (left, right) => {
+         const length = Math.min(left.length, right.length)
+         for (let i = 0; i < length; i++) {
+            if (left[i] !== right[i]) return left[i] < right[i] ? -1 : 1
+         }
+         return left.length === right.length ? 0 : (left.length < right.length ? -1 : 1)
+      },
+      FS: () => [1],
+   }
+   const parent = { is_root: false, mark: 1, path: 'p', subitems: [] }
+   const item = treeItem([2], [], 0, parent, 'p,0')
+   parent.subitems.push(item)
+
+   assert.doesNotThrow(() => expand(context, item, notation))
+   assert.deepEqual(item.subitems.map((child) => child.expr), [[1]])
+})
+
+test('array-only rewritten comparators still order atomic Limit correctly', () => {
+   const { context, root } = loadFramework()
+   const notation = {
+      id: 'array-only-test',
+      able: (expr) => expr === Infinity || (Array.isArray(expr) && expr.length > 0 && expr[expr.length - 1] > 1),
+      compare: (left, right) => {
+         const length = Math.min(left.length, right.length)
+         for (let i = 0; i < length; i++) {
+            if (left[i] !== right[i]) return left[i] < right[i] ? -1 : 1
+         }
+         return left.length === right.length ? 0 : (left.length < right.length ? -1 : 1)
+      },
+      FS: (expr, index) => expr === Infinity ? (index === 0 ? [] : [index]) : expr.slice(0, -1),
+      init: () => [
+         { expr: Infinity, low: [[]] },
+         { expr: [], low: [[]] },
+      ],
+   }
+   root.currentDataset.subitems = notation.init().map((entry, index) => ({
+      expr: entry.expr,
+      bound: entry.low[0],
+      subitems: [],
+      mark: null,
+      index,
+      path: '' + index,
+      parent: root.currentDataset,
+   }))
+   const target = [1]
+   context.targetNotation = notation
+   context.targetExpression = target
+
+   vm.runInContext(
+      'import_analysis(root.currentDataset, [[targetExpression]], targetNotation, false, false, 20)',
+      context
+   )
+
+   assert.equal(root.currentDataset.subitems[0].analysis, undefined)
+   assert.equal(root.currentDataset.subitems[0].subitems[0].expr[0], 1)
+})

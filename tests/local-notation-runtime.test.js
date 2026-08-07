@@ -60,6 +60,31 @@ function sourceFor(id, label) {
    });`
 }
 
+function generatorSourceFor(id) {
+   return `register_category({
+      id: ${JSON.stringify(id)},
+      name: ${JSON.stringify(id)},
+      generator: {
+         start: 1,
+         initial: 2,
+         maximum: 4,
+         create: function (index) {
+            return {
+               id: ${JSON.stringify(id + '-') } + index,
+               name: ${JSON.stringify(id + ' ')} + index,
+               display: function () { return ''; },
+               able: function () { return false; },
+               compare: function () { return 0; },
+               FS: function () { return []; },
+               init: function () {
+                  return [{ expr: [index], low: [[]], subitems: [] }];
+               }
+            };
+         }
+      }
+   });`
+}
+
 function createHarness() {
    const storage = new MemoryStorage()
    const hub = new RegistryRuntime.NotationRegistryHub()
@@ -270,6 +295,29 @@ test('disable and re-enable report whether the retained source revision changed'
    assert.equal(store.getFile(uploaded.file.id).enabled, true)
    assert.equal(hub.main.get('revision-old'), undefined)
    assert.equal(hub.main.ownerOf('revision-new'), uploaded.file.id)
+})
+
+test('disable and re-enable preserve a local generator current variant', () => {
+   const { hub, runtime } = createHarness()
+   const uploaded = runtime.createUpload(
+      'Generated.js',
+      generatorSourceFor('local-generated-family'),
+      true
+   )
+   hub.main.generatorAdd('local-generated-family')
+
+   assert.equal(hub.main.generatorCurrent('local-generated-family'), 3)
+   runtime.disable(uploaded.file.id)
+   assert.equal(hub.main.generatorDefinition('local-generated-family'), undefined)
+
+   runtime.enable(uploaded.file.id)
+
+   assert.equal(hub.main.generatorCurrent('local-generated-family'), 3)
+   assert.ok(hub.main.get('local-generated-family-3'))
+
+   runtime.disable(uploaded.file.id)
+   runtime.deleteFile(uploaded.file.id)
+   assert.equal(hub.getGeneratorState()['local-generated-family'], undefined)
 })
 
 test('re-enabled files return to fixed creation order after built-ins', () => {

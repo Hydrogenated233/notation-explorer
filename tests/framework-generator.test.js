@@ -60,6 +60,12 @@ function loadHarness(config, initialAnalysis, options) {
    })
    context.window = context
    context.globalThis = context
+   if (options && options.localFiles) {
+      context.localNotationManager = {
+         getFile(id) { return options.localFiles[id] },
+         initialItemsFor() { return undefined },
+      }
+   }
    context.Vue = {
       createApp(options) {
          return {
@@ -112,6 +118,31 @@ function loadHarness(config, initialAnalysis, options) {
       { filename: 'js/framework.js' }
    )
    return { root, hub, storage, context, alerts }
+}
+
+function lateLocalGeneratorSource() {
+   return `register_category({
+      id: 'late-local-generator',
+      name: 'Late local generator',
+      generator: {
+         start: 1,
+         initial: 2,
+         maximum: 5,
+         create: function (index) {
+            return {
+               id: 'late-local-' + index,
+               name: 'Late local ' + index,
+               display: function (expr) { return String(expr); },
+               able: function () { return false; },
+               compare: function (left, right) { return left - right; },
+               FS: function () { return 0; },
+               init: function () {
+                  return [{ expr: 0, low: [0], subitems: [] }];
+               }
+            };
+         }
+      }
+   });`
 }
 
 test('saved generator state restores variants before restoring the selected notation', () => {
@@ -256,6 +287,83 @@ test('out-of-range persisted generator values fall back without mass restoration
    assert.equal(root.generatorCurrent('n-cps'), 2)
    assert.equal(hub.main.get('3-cps'), undefined)
    assert.equal(hub.main.length, 4)
+})
+
+test('a disabled local generator retains its state and restores analysis when enabled later', () => {
+   const owner = 'late-local-file'
+   const notationId = 'late-local-4'
+   const key = owner + '::' + notationId
+   const analysis = JSON.stringify({
+      version: 4,
+      savedAt: 1,
+      notations: {
+         [key]: {
+            ownerId: owner,
+            notationId,
+            sourceRevision: 7,
+            items: [{ expr: 0, exprFormat: 'json', analysis: 'retained local analysis' }],
+         },
+      },
+      noteSheets: {},
+   })
+   const file = { id: owner, loadedRevision: 7 }
+   const { root, hub } = loadHarness({
+      generatorState: { 'late-local-generator': 4 },
+   }, analysis, { localFiles: { [owner]: file } })
+
+   root.loadSettings()
+   root.loadAnalysis()
+
+   const change = hub.prepareSource(owner, lateLocalGeneratorSource()).commit()
+   root.applyLocalFileChange({ file, change, sourceChanged: false }, 'enable')
+
+   assert.equal(root.generatorState['late-local-generator'], 4)
+   assert.equal(hub.generatorCurrent('late-local-generator'), 4)
+   assert.ok(root.datasets[notationId])
+   assert.equal(root.datasets[notationId].subitems[0].analysis, 'retained local analysis')
+})
+
+test('analysis edits can be flushed to localStorage before the autosave interval', () => {
+   const { root, storage } = loadHarness({
+      generatorState: { [partialUpmsCategory]: 4 },
+   })
+   root.loadSettings()
+   root.loadAnalysis()
+
+   root.datasets['upms-partial-4'].subitems[1].analysis = 'saved immediately'
+   root.queueAnalysisSave()
+   root.flushAnalysisSave()
+
+   assert.match(storage.getItem('ne-analysis'), /saved immediately/)
+})
+
+test('analysis persistence restores the expanded Limit tree', () => {
+   const first = loadHarness({
+      generatorState: { [partialUpmsCategory]: 4 },
+   })
+   first.root.loadSettings()
+   first.root.loadAnalysis()
+   const notation = first.hub.main.get('upms-partial-4')
+   const limit = first.root.datasets['upms-partial-4'].subitems[0]
+   first.context.expansionItem = limit
+   first.context.expansionNotation = notation
+   for (let index = 0; index < 3; index++) {
+      vm.runInContext(
+         'expand_item(expansionItem, expansionNotation, false, 0)',
+         first.context
+      )
+   }
+   limit.analysis = 'Limit note'
+   first.root.saveAnalysis()
+
+   const persistedConfig = JSON.parse(first.storage.getItem('ne-config'))
+   const second = loadHarness(persistedConfig, first.storage.getItem('ne-analysis'))
+   second.root.loadSettings()
+   second.root.loadAnalysis()
+
+   const restored = second.root.datasets['upms-partial-4'].subitems[0]
+   assert.equal(restored.analysis, 'Limit note')
+   assert.equal(restored.subitems.length, 3)
 })
 
 test('n-CpS folder controls add and remove independent notation entries', () => {
