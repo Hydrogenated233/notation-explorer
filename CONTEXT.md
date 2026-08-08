@@ -113,6 +113,18 @@ User-authored free-form notes associated with a **Main notation** independently 
 **Direct-expansion note**:
 A disposable floating instance of the Direct Expansion tool with its own notation, equivalent representation, expression, fundamental-sequence range, and output.
 
+**Standalone notation application**:
+An exported single-file application that contains a fixed set of notation files and the normal exploration runtime.
+
+**Standalone export selection**:
+The set of whole notation files chosen to create one **Standalone notation application**.
+
+**Bundled notation file**:
+A selected notation file, shared helper, or automatic dependency embedded in a **Standalone notation application**.
+
+**Standalone data snapshot**:
+An optional initial copy of the selected notations' analysis text, expansion trees, note sheets, display settings, and generator state.
+
 ## Relationships
 
 - **Built-in notation files** are discovered recursively through at most four category-directory levels
@@ -186,6 +198,16 @@ A disposable floating instance of the Direct Expansion tool with its own notatio
 - The Direct Expansion button beside the Note button opens a new **Direct-expansion note** for the current **Main notation** and selected **Equivalent representation**
 - Multiple **Direct-expansion notes** may remain open with independent inputs, output, position, size, and stacking order
 - A **Direct-expansion note** is never persisted; closing it or reloading the application permanently discards that instance
+- A **Standalone export selection** selects whole notation files rather than individual **Registered notations**
+- Every **Registered notation**, **Analysis notation**, category, and **Generated notation family** contributed by a selected file is included together
+- Shared helpers and detected built-in dependencies become **Bundled notation files** automatically without becoming separate choices
+- Only enabled, trusted, successfully loaded **Local notation files** may enter a **Standalone export selection**
+- A **Standalone notation application** starts without user data unless the user explicitly includes a **Standalone data snapshot**
+- A **Standalone data snapshot** contains data only for included **Main notations**, **Analysis notations**, and **Generated notation families**
+- Each **Standalone notation application** persists later analysis, note, setting, and generator changes in a package-specific namespace
+- A **Standalone notation application** preserves generator `+/-`, expansion, analysis, note, LaTeX, direct-expansion, and xlsx behavior
+- A **Standalone notation application** has a fixed set of **Bundled notation files** and cannot upload, edit, enable, disable, delete, or export notation files
+- Opening a **Standalone notation application** from disk still requires network access to its fixed-version third-party libraries
 - Replacing a file preserves a current selection whose notation ID still exists
 - **Built-in notations** keep deterministic built-in file order ahead of enabled local entries; registrations from one file keep source order
 - **Local notation files** keep creation order, and their contributed entries keep registration order
@@ -228,6 +250,9 @@ A disposable floating instance of the Direct Expansion tool with its own notatio
 > **Dev:** "Should LaTeX mode change the expression text written to an analysis export?"
 > **Domain expert:** "No. Export keeps the **Active display string**; **LaTeX display** is presentation only."
 
+> **Dev:** "Can a user choose one notation from a file that registers three entries for a standalone export?"
+> **Domain expert:** "No. The **Standalone export selection** contains the whole file, so all three entries become part of the application."
+
 ## Flagged ambiguities
 
 - "Notation" was used for both a JavaScript file and a selectable entry; resolved by managing whole **Local notation files** and calling their selectable outputs **Registered notations**.
@@ -238,3 +263,4 @@ A disposable floating instance of the Direct Expansion tool with its own notatio
 - "Text" during file replacement was ambiguous; resolved: it means **Analysis text**, not **Note sheets** or editor source.
 - "LaTeX display" and **Analysis LaTeX rendering** were initially conflated; resolved: the former renders notation expressions and the latter renders user-authored **Analysis text**.
 - "No built-in newcommand" means the application supplies no default macro declarations; it does not remove KaTeX's native commands.
+- "Single-file" was initially ambiguous with "fully offline"; resolved: a **Standalone notation application** embeds application and notation code but loads fixed-version third-party libraries from the network.

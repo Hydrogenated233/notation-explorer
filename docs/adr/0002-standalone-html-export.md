@@ -1,0 +1,3 @@
+# Export standalone HTML with CDN libraries and a Blob worker
+
+Standalone exports are one downloadable HTML file that embeds the application CSS, runtime code, selected notation files, shared helpers, and detected notation dependencies; fixed versions of Vue, KaTeX, and XLSX load from jsDelivr to keep the artifact smaller. The diagram worker is embedded as source and started from a Blob URL so the application can open directly through `file://`, and every export receives a package ID that namespaces its persisted analysis and settings. This deliberately requires network access for third-party libraries, while excluding local-file management and repeat export from the generated application.

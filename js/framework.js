@@ -8,6 +8,7 @@ const N_CPS_GENERATOR_ID = 'n-cps'
 const BUILTIN_NOTATION_OWNER = '@notation-explorer/builtin'
 const MAX_GENERATOR_VALUE = 64
 const DIRECT_EXPAND_MAX_COUNT = 1000
+const notation_storage = () => window.NotationStorage || localStorage
 
 const generator_definition = (categoryId) => {
    if (typeof register !== 'undefined' && typeof register.generatorDefinition === 'function') {
@@ -1222,7 +1223,7 @@ Ctrl + E: expand analysis fundamental sequence
       saveAnalysis() {
          try {
             var data = this.serializeAnalysis();
-            localStorage.setItem('ne-analysis', JSON.stringify(data));
+            notation_storage().setItem('ne-analysis', JSON.stringify(data));
             this.lastSaveTime = Date.now();
          } catch (e) {
             console.warn('Auto-save failed:', e);
@@ -1247,7 +1248,7 @@ Ctrl + E: expand analysis fundamental sequence
          var self = this;
          var raw, data;
          try {
-            raw = localStorage.getItem('ne-analysis');
+            raw = notation_storage().getItem('ne-analysis');
             if (!raw) return;
             data = JSON.parse(raw);
          } catch (e) {
@@ -1582,7 +1583,7 @@ Ctrl + E: expand analysis fundamental sequence
 
       saveSettings() {
          try {
-            localStorage.setItem('ne-config', JSON.stringify({
+            notation_storage().setItem('ne-config', JSON.stringify({
                darkMode: this.darkMode,
                lang: this.lang,
                displayMode: this.displayMode,
@@ -1613,7 +1614,7 @@ Ctrl + E: expand analysis fundamental sequence
       },
       loadSettings() {
          try {
-            var raw = localStorage.getItem('ne-config')
+            var raw = notation_storage().getItem('ne-config')
             if (raw) {
                var s = JSON.parse(raw)
                var self = this
@@ -1760,14 +1761,14 @@ Ctrl + E: expand analysis fundamental sequence
          this.currentSheet = this.noteSheets.length - 1;
       },
       savePos() {
-         localStorage.setItem('ne-summary-pos', JSON.stringify({
+         notation_storage().setItem('ne-summary-pos', JSON.stringify({
             x: this.summaryX, y: this.summaryY,
             w: this.summaryW, h: this.summaryH
          }));
       },
       loadPos() {
          try {
-            var p = JSON.parse(localStorage.getItem('ne-summary-pos') || '{}');
+            var p = JSON.parse(notation_storage().getItem('ne-summary-pos') || '{}');
             if (p.x !== undefined) this.summaryX = p.x;
             if (p.y !== undefined) this.summaryY = p.y;
             if (p.w) this.summaryW = p.w;
@@ -2502,7 +2503,8 @@ function safeFromResolvedDisplay(displaySpec, str) {
 
 const workerAssetVersion = window.NotationLoader && window.NotationLoader.ASSET_VERSION
 const worker = new Worker(
-   "js/diagram/Diagram.js" + (workerAssetVersion ? "?v=" + encodeURIComponent(workerAssetVersion) : "")
+   window.NotationStandaloneWorkerURL ||
+   ("js/diagram/Diagram.js" + (workerAssetVersion ? "?v=" + encodeURIComponent(workerAssetVersion) : ""))
 )
 
 worker.onmessage = (e) => {
@@ -3119,7 +3121,12 @@ app.component('notation-tree', {
       :notation-id="notationId" :key="subitem.path"></notation-list-item></ul>`,
 })
 
-app.component('local-notation-manager', window.LocalNotationManagerComponent)
+if (window.LocalNotationManagerComponent) {
+   app.component('local-notation-manager', window.LocalNotationManagerComponent)
+}
+if (window.StandaloneExportComponent) {
+   app.component('standalone-export', window.StandaloneExportComponent)
+}
 
 app.component('fs-dialog', {
    template: `

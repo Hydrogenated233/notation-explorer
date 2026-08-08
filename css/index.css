@@ -1551,6 +1551,276 @@ html.dark .tools-row span {
   color: #999;
 }
 
+/* ---------- Standalone HTML Export ---------- */
+.ne-standalone-export,
+.ne-standalone-export * {
+  box-sizing: border-box;
+}
+.ne-standalone-export {
+  width: min(760px, calc(100vw - 40px));
+  margin-top: 24px;
+  padding-top: 22px;
+  border-top: 1px solid #d7dce3;
+  color: #1f2937;
+}
+.ne-standalone-export__header h3 {
+  margin: 0 0 4px;
+  color: #1e1e1e;
+  font-size: 15px;
+  font-weight: 600;
+}
+.ne-standalone-export__header p,
+.ne-standalone-export__cdn-note {
+  margin: 0;
+  color: #667085;
+  font-size: 12px;
+}
+.ne-standalone-export__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.ne-standalone-export__search {
+  flex: 1 1 260px;
+  min-width: 0;
+  height: 32px;
+}
+.ne-standalone-export__tree {
+  max-height: 340px;
+  margin-top: 10px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid #d7dce3;
+  border-radius: 6px;
+  background: #fff;
+}
+.ne-standalone-export__row {
+  display: flex;
+  min-height: 34px;
+  align-items: stretch;
+  border-bottom: 1px solid #edf0f3;
+}
+.ne-standalone-export__row:last-child {
+  border-bottom: 0;
+}
+.ne-standalone-export__row.is-folder {
+  background: #f8fafc;
+}
+.ne-standalone-export__folder.ne-standalone-export__folder,
+.ne-standalone-export__file {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 6px 10px 6px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #344054;
+  font-size: 13px;
+  text-align: left;
+}
+.ne-standalone-export__folder.ne-standalone-export__folder {
+  font-weight: 600;
+  cursor: pointer;
+}
+.ne-standalone-export__folder.ne-standalone-export__folder:hover,
+.ne-standalone-export__file:hover {
+  background: #f0f4ff;
+}
+.ne-standalone-export__folder .ns-tree-chevron.is-expanded {
+  transform: rotate(90deg);
+}
+.ne-standalone-export__file > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ne-standalone-export__file small {
+  margin-left: auto;
+  color: #98a2b3;
+  font-size: 11px;
+  font-weight: 400;
+}
+.ne-standalone-export__folder-check {
+  display: grid;
+  flex: 0 0 36px;
+  place-items: center;
+  margin: 0;
+  cursor: pointer;
+}
+.ne-standalone-export__empty {
+  margin: 0;
+  padding: 22px 12px;
+  color: #667085;
+  text-align: center;
+}
+.ne-standalone-export__summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 2px 0;
+  color: #667085;
+  font-size: 12px;
+}
+.ne-standalone-export__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin-top: 14px;
+}
+.ne-standalone-export__fields > label:not(.ne-standalone-export__snapshot) {
+  display: grid;
+  gap: 5px;
+  color: #344054;
+  font-size: 12px;
+}
+.ne-standalone-export__fields input[type="text"] {
+  width: 100%;
+  height: 32px;
+}
+.ne-standalone-export__snapshot {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: flex-start;
+  gap: 8px;
+  color: #344054;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ne-standalone-export__snapshot input {
+  margin-top: 2px;
+}
+.ne-standalone-export__cdn-note {
+  margin-top: 10px;
+}
+.ne-standalone-export__progress {
+  margin-top: 12px;
+}
+.ne-standalone-export__progress > div {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5e7eb;
+}
+.ne-standalone-export__progress > div > span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+  transition: width 0.16s ease;
+}
+.ne-standalone-export__progress p {
+  min-height: 18px;
+  margin: 6px 0 0;
+  color: #667085;
+  font-size: 12px;
+}
+.ne-standalone-export__error {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  border: 1px solid #fca5a5;
+  border-radius: 5px;
+  background: #fef2f2;
+  color: #991b1b;
+  font: 12px/1.45 "Consolas", "Courier New", monospace;
+}
+.ne-standalone-export__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  color: #667085;
+  font-size: 12px;
+}
+.ne-standalone-readonly {
+  width: min(760px, calc(100vw - 40px));
+  margin-top: 24px;
+  padding: 16px;
+  border: 1px solid #d7dce3;
+  border-radius: 6px;
+  background: #fff;
+  color: #344054;
+}
+.ne-standalone-readonly h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.ne-standalone-readonly p {
+  margin: 0 0 10px;
+  color: #667085;
+  font-size: 12px;
+}
+.ne-standalone-readonly summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+.ne-standalone-readonly ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  color: #667085;
+  font: 12px/1.55 "Consolas", "Courier New", monospace;
+}
+
+html.dark .ne-standalone-export {
+  border-top-color: #41444b;
+  color: #d1d5db;
+}
+html.dark .ne-standalone-export__header h3,
+html.dark .ne-standalone-export__fields > label,
+html.dark .ne-standalone-export__snapshot {
+  color: #e5e7eb;
+}
+html.dark .ne-standalone-export__header p,
+html.dark .ne-standalone-export__cdn-note,
+html.dark .ne-standalone-export__summary,
+html.dark .ne-standalone-export__actions,
+html.dark .ne-standalone-export__progress p {
+  color: #a7adb7;
+}
+html.dark .ne-standalone-export__tree,
+html.dark .ne-standalone-readonly {
+  border-color: #41444b;
+  background: #1d1f22;
+}
+html.dark .ne-standalone-export__row {
+  border-bottom-color: #383b40;
+}
+html.dark .ne-standalone-export__row.is-folder {
+  background: #222428;
+}
+html.dark .ne-standalone-export__folder.ne-standalone-export__folder,
+html.dark .ne-standalone-export__file,
+html.dark .ne-standalone-readonly {
+  color: #d1d5db;
+}
+html.dark .ne-standalone-export__folder.ne-standalone-export__folder:hover,
+html.dark .ne-standalone-export__file:hover {
+  background: #293348;
+}
+html.dark .ne-standalone-export__progress > div {
+  background: #3b3e44;
+}
+html.dark .ne-standalone-export__progress > div > span {
+  background: #6f91dd;
+}
+html.dark .ne-standalone-export__error {
+  border-color: #7f1d1d;
+  background: #3b171b;
+  color: #fecaca;
+}
+html.dark .ne-standalone-readonly p,
+html.dark .ne-standalone-readonly ul {
+  color: #a7adb7;
+}
+
 /* ---------- Local Notation Files ---------- */
 .ne-local-manager {
   width: min(1120px, calc(100vw - 40px));
@@ -2654,6 +2924,27 @@ html.dark .ne-local-guide__article th {
   .ns-tree-row.is-notation .ns-opt-id {
     grid-column: 2;
     justify-self: start;
+  }
+  .ne-standalone-export__toolbar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+  .ne-standalone-export__search {
+    flex-basis: 100%;
+  }
+  .ne-standalone-export__toolbar .ne-local-button {
+    flex: 1 1 auto;
+  }
+  .ne-standalone-export__fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ne-standalone-export__snapshot {
+    grid-column: 1;
+  }
+  .ne-standalone-export__summary,
+  .ne-standalone-export__actions {
+    align-items: flex-start;
+    flex-direction: column;
   }
   .ne-local-manager__header,
   .ne-local-editor__header {

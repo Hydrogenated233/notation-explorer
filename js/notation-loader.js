@@ -13,7 +13,7 @@
    'use strict'
 
    var NOTATION_ROOT = 'js/notations/'
-   var ASSET_VERSION = 'ne-rewritten-native-6'
+   var ASSET_VERSION = 'ne-rewritten-native-7'
    var APP_SCRIPTS = [
       'js/diagram/Diagram.js',
       'js/notation-display.js',
@@ -24,6 +24,8 @@
       'js/local-notation-runtime.js',
       'js/local-notation-ui.js',
       'js/notation-menu.js',
+      'js/standalone-export.js',
+      'js/standalone-export-ui.js',
       'js/framework.js',
    ]
    var started
