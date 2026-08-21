@@ -1764,9 +1764,49 @@ html.dark .tools-row span {
 }
 .ne-standalone-readonly ul {
   margin: 8px 0 0;
-  padding-left: 20px;
+  padding: 0;
+  list-style: none;
   color: #667085;
   font: 12px/1.55 "Consolas", "Courier New", monospace;
+}
+.ne-standalone-readonly__file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 5px 0;
+  border-bottom: 1px solid #eef0f3;
+}
+.ne-standalone-readonly__file:last-child {
+  border-bottom: 0;
+}
+.ne-standalone-readonly__file-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ne-standalone-readonly__download {
+  flex: 0 0 auto;
+  min-height: 27px;
+  padding: 3px 9px;
+  border: 1px solid #cfd4dc;
+  border-radius: 4px;
+  background: #fff;
+  color: #344054;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.ne-standalone-readonly__download:hover:not(:disabled) {
+  border-color: #98a2b3;
+  background: #f3f4f6;
+}
+.ne-standalone-readonly__download:disabled {
+  cursor: not-allowed;
+  opacity: .55;
 }
 
 html.dark .ne-standalone-export {
@@ -1819,6 +1859,18 @@ html.dark .ne-standalone-export__error {
 html.dark .ne-standalone-readonly p,
 html.dark .ne-standalone-readonly ul {
   color: #a7adb7;
+}
+html.dark .ne-standalone-readonly__file {
+  border-bottom-color: #383b40;
+}
+html.dark .ne-standalone-readonly__download {
+  border-color: #555b65;
+  background: #292d33;
+  color: #e5e7eb;
+}
+html.dark .ne-standalone-readonly__download:hover:not(:disabled) {
+  border-color: #737b88;
+  background: #343941;
 }
 
 /* ---------- Local Notation Files ---------- */

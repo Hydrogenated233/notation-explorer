@@ -226,6 +226,55 @@
       return labels.filter(Boolean).join(' ').toLowerCase()
    }
 
+   function recordFileLabel(record) {
+      if (!record) return ''
+      return record.kind === 'local' ? 'Local/' + record.fileName : String(record.path || record.fileName || '')
+   }
+
+   function downloadNameForLabel(label) {
+      var name = String(label || 'notation.js')
+         .replace(/[\\/]+/g, '__')
+         .replace(/[<>:"|?*\u0000-\u001f]/g, '-')
+         .trim()
+      return name || 'notation.js'
+   }
+
+   function downloadFileDescriptor(record, source) {
+      var label = recordFileLabel(record)
+      return {
+         label: label,
+         downloadName: downloadNameForLabel(label),
+         source: toBase64(source),
+      }
+   }
+
+   function uniqueDownloadName(name, used) {
+      name = String(name || 'notation.js')
+      if (!used[name]) {
+         used[name] = true
+         return name
+      }
+      var extensionIndex = name.lastIndexOf('.')
+      var stem = extensionIndex > 0 ? name.slice(0, extensionIndex) : name
+      var extension = extensionIndex > 0 ? name.slice(extensionIndex) : ''
+      var suffix = 2
+      var candidate
+      do {
+         candidate = stem + '__' + suffix++ + extension
+      } while (used[candidate])
+      used[candidate] = true
+      return candidate
+   }
+
+   function downloadFileDescriptors(records, sources) {
+      var used = Object.create(null)
+      return (records || []).map(function (record) {
+         var descriptor = downloadFileDescriptor(record, sources && sources[record.key])
+         descriptor.downloadName = uniqueDownloadName(descriptor.downloadName, used)
+         return descriptor
+      })
+   }
+
    function estimateSelectionBytes(records) {
       return Math.round(DEFAULT_BASE_ESTIMATE + (records || []).reduce(function (sum, record) {
          return sum + Math.ceil((record.estimatedBytes || 16000) * 4 / 3)
@@ -517,7 +566,7 @@
          ;(payload.localFiles || []).forEach(function (file, index) {
             var transaction = window.notationRegistryHub.prepareSource(
                file.ownerId,
-               decode(file.source),
+               decode(notationFileSource(file)),
                { sourceURL: file.fileName, ownerOrder: file.order === undefined ? index : file.order }
             )
             var change = transaction.commit()
@@ -549,14 +598,59 @@
          }
       }
 
+      function notationFileSource(file) {
+         if (file && typeof file.source === 'string') return file.source
+         var downloadIndex = file && file.downloadIndex
+         var downloadFile = typeof downloadIndex === 'number' && payload.downloadFiles
+            ? payload.downloadFiles[downloadIndex] : undefined
+         return downloadFile && downloadFile.source || ''
+      }
+
       function readonlyManagerComponent() {
+         function safeDownloadName(label) {
+            return String(label || 'notation.js')
+               .replace(/[\\/]+/g, '__')
+               .replace(/[<>:"|?*\u0000-\u001f]/g, '-')
+               .trim() || 'notation.js'
+         }
+
          return {
             name: 'StandaloneBundledFiles',
-            data: function () { return { files: payload.fileLabels || [] } },
+            data: function () {
+               var files = Array.isArray(payload.downloadFiles) ? payload.downloadFiles : []
+               if (!files.length) {
+                  files = (payload.fileLabels || []).map(function (label) {
+                     return { label: label, downloadName: safeDownloadName(label), source: '' }
+                  })
+               }
+               return { files: files }
+            },
             computed: {
                zh: function () { return this.$root && this.$root.lang === 'zh' },
             },
-            template: '<section class="ne-standalone-readonly"><h3>{{ zh ? "独立应用" : "Standalone application" }}</h3><p>{{ zh ? "此导出版本中的记号文件固定，不能上传、编辑或再次导出。" : "Notation files are fixed in this export and cannot be uploaded, edited, or exported again." }}</p><details><summary>{{ zh ? "包含的记号文件" : "Bundled notation files" }} ({{ files.length }})</summary><ul><li v-for="file in files" :key="file">{{ file }}</li></ul></details></section>',
+            methods: {
+               downloadLabel: function (file) {
+                  return (this.zh ? '下载 ' : 'Download ') + (file && file.label || '')
+               },
+               downloadFile: function (file) {
+                  if (!file || !file.source || typeof Blob !== 'function') return
+                  var urlApi = window.URL || window.webkitURL
+                  if (!urlApi || typeof urlApi.createObjectURL !== 'function') return
+                  var source = decode(file.source)
+                  var blob = new Blob([source], { type: 'text/javascript;charset=utf-8' })
+                  var url = urlApi.createObjectURL(blob)
+                  var anchor = document.createElement('a')
+                  anchor.href = url
+                  anchor.download = file.downloadName || safeDownloadName(file.label)
+                  document.body.appendChild(anchor)
+                  anchor.click()
+                  anchor.remove()
+                  setTimeout(function () {
+                     if (typeof urlApi.revokeObjectURL === 'function') urlApi.revokeObjectURL(url)
+                  }, 1000)
+               },
+            },
+            template: '<section class="ne-standalone-readonly"><h3>{{ zh ? "独立应用" : "Standalone application" }}</h3><p>{{ zh ? "此导出版本中的记号文件固定，不能上传、编辑或再次导出独立 HTML；可下载导出时嵌入的源码副本。" : "Notation files are fixed in this export and cannot be uploaded, edited, or used to export another standalone HTML; the embedded source copies can be downloaded." }}</p><details><summary>{{ zh ? "包含的记号文件" : "Bundled notation files" }} ({{ files.length }})</summary><ul class="ne-standalone-readonly__files"><li v-for="file in files" :key="file.downloadName || file.label" class="ne-standalone-readonly__file"><span class="ne-standalone-readonly__file-label">{{ file.label }}</span><button type="button" class="ne-standalone-readonly__download" :disabled="!file.source" :aria-label="downloadLabel(file)" @click="downloadFile(file)">{{ zh ? "下载" : "Download" }}</button></li></ul></details></section>',
          }
       }
 
@@ -613,6 +707,7 @@
             window.NotationStandalone = Object.freeze({
                bundleId: payload.bundleId,
                files: (payload.fileLabels || []).slice(),
+               downloadFiles: (payload.downloadFiles || []).slice(),
             })
             window.LocalNotationManagerComponent = readonlyManagerComponent()
 
@@ -758,6 +853,9 @@
       var rawSnapshot = options.includeData ? (options.snapshot || {}) : {}
       var snapshot = options.includeData
          ? filterSnapshot(rawSnapshot, included, fallbackMainId) : {}
+      var downloadFiles = downloadFileDescriptors(included, sources)
+      var downloadIndexByKey = Object.create(null)
+      included.forEach(function (record, index) { downloadIndexByKey[record.key] = index })
       var payload = {
          version: 1,
          bundleId: bundleId,
@@ -780,7 +878,7 @@
                path: record.path,
                directories: record.directories,
                fileName: record.fileName,
-               source: toBase64(sources[record.key]),
+               downloadIndex: downloadIndexByKey[record.key],
             }
          }),
          localFiles: local.map(function (record) {
@@ -790,16 +888,15 @@
                sourceRevision: record.sourceRevision,
                loadedRevision: record.loadedRevision,
                order: record.order,
-               source: toBase64(sources[record.key]),
+               downloadIndex: downloadIndexByKey[record.key],
             }
          }),
          snapshot: Object.keys(snapshot).reduce(function (result, key) {
             result[key] = toBase64(snapshot[key])
             return result
          }, {}),
-         fileLabels: included.map(function (record) {
-            return record.kind === 'local' ? 'Local/' + record.fileName : record.path
-         }),
+         fileLabels: included.map(recordFileLabel),
+         downloadFiles: downloadFiles,
       }
       var html = htmlDocument({
          title: title,
@@ -829,6 +926,10 @@
       prepareAppTemplate: prepareAppTemplate,
       collectSelectionRecords: collectSelectionRecords,
       recordSearchText: recordSearchText,
+      recordFileLabel: recordFileLabel,
+      downloadNameForLabel: downloadNameForLabel,
+      downloadFileDescriptor: downloadFileDescriptor,
+      downloadFileDescriptors: downloadFileDescriptors,
       estimateSelectionBytes: estimateSelectionBytes,
       containsQuotedIdentifier: containsQuotedIdentifier,
       resolveDependencies: resolveDependencies,

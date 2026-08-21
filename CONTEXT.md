@@ -206,7 +206,7 @@ An optional initial copy of the selected notations' analysis text, expansion tre
 - A **Standalone data snapshot** contains data only for included **Main notations**, **Analysis notations**, and **Generated notation families**
 - Each **Standalone notation application** persists later analysis, note, setting, and generator changes in a package-specific namespace
 - A **Standalone notation application** preserves generator `+/-`, expansion, analysis, note, LaTeX, direct-expansion, and xlsx behavior
-- A **Standalone notation application** has a fixed set of **Bundled notation files** and cannot upload, edit, enable, disable, delete, or export notation files
+- A **Standalone notation application** has a fixed set of **Bundled notation files**; it may download the embedded source copy of each file, but cannot upload, edit, enable, disable, delete, or export another standalone HTML application
 - Opening a **Standalone notation application** from disk still requires network access to its fixed-version third-party libraries
 - Replacing a file preserves a current selection whose notation ID still exists
 - **Built-in notations** keep deterministic built-in file order ahead of enabled local entries; registrations from one file keep source order

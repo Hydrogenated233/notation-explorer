@@ -124,6 +124,31 @@ test('dependency resolution follows quoted notation IDs transitively', async () 
    assert.equal(sources['builtin:C.js'], sourceByPath['C.js'])
 })
 
+test('download descriptors preserve embedded source and make safe flat filenames', () => {
+   const record = builtinRecord({
+      path: 'BM-like/Family/BM.js',
+      fileName: 'BM.js',
+   })
+   const descriptor = Exporter.downloadFileDescriptor(record, 'register.push({ id: "bm" })')
+
+   assert.equal(descriptor.label, 'BM-like/Family/BM.js')
+   assert.equal(descriptor.downloadName, 'BM-like__Family__BM.js')
+   assert.equal(
+      Buffer.from(descriptor.source, 'base64').toString('utf8'),
+      'register.push({ id: "bm" })'
+   )
+
+   const local = Exporter.downloadFileDescriptor({ kind: 'local', fileName: 'my:file.js' }, 'x')
+   assert.equal(local.label, 'Local/my:file.js')
+   assert.equal(local.downloadName, 'Local__my-file.js')
+
+   const descriptors = Exporter.downloadFileDescriptors([
+      { kind: 'builtin', key: 'a', path: 'A.js', fileName: 'A.js' },
+      { kind: 'builtin', key: 'b', path: 'A.js', fileName: 'A.js' },
+   ], { a: 'a', b: 'b' })
+   assert.deepEqual(descriptors.map((file) => file.downloadName), ['A.js', 'A__2.js'])
+})
+
 test('snapshot filtering keeps only selected notation and generator state', () => {
    const analysis = {
       version: 4,
@@ -171,6 +196,7 @@ test('snapshot filtering keeps only selected notation and generator state', () =
 
 test('single-file build embeds the app, Blob worker, namespace, and retry loader safely', async () => {
    const indexHtml = fs.readFileSync(path.join(projectRoot, 'index.html'), 'utf8')
+   const notationSource = fs.readFileSync(path.join(projectRoot, 'js/notations/PPS/PPS.js'), 'utf8')
    const record = builtinRecord({
       key: 'builtin:PPS/PPS.js',
       path: 'PPS/PPS.js',
@@ -200,6 +226,13 @@ test('single-file build embeds the app, Blob worker, namespace, and retry loader
    assert.match(result.html, /ne-standalone:/)
    assert.match(result.html, /vue@3\.2\.31/)
    assert.match(result.html, /class="ne-sl-retry"/)
+   assert.match(result.html, /downloadFiles/)
+   assert.match(result.html, /downloadFile/)
+   assert.match(result.html, /downloadIndex/)
+   assert.equal(
+      result.html.split(Buffer.from(notationSource, 'utf8').toString('base64')).length - 1,
+      1
+   )
    assert.match(result.html, /<title>&lt;Standalone&gt;<\/title>/)
    assert.doesNotThrow(() => new vm.Script(scriptMatches[0][1]))
    assert.ok(result.estimatedBytes > 500000)
@@ -214,6 +247,14 @@ test('settings component exposes file-tree selection and no upload control', () 
    assert.match(component.template, /@click="exportHtml"/)
    assert.doesNotMatch(component.template, /type="file"/)
    assert.doesNotMatch(component.template, /upload/i)
+})
+
+test('standalone file list exposes source downloads without mutation controls', () => {
+   const source = fs.readFileSync(path.join(projectRoot, 'js/standalone-export.js'), 'utf8')
+   assert.match(source, /ne-standalone-readonly__download/)
+   assert.match(source, /new Blob\(\[source\]/)
+   assert.match(source, /anchor\.download = file\.downloadName/)
+   assert.doesNotMatch(source, /<input[^>]+type=["']file["']/i)
 })
 
 test('framework uses the standalone storage adapter and Blob worker URL when provided', () => {
