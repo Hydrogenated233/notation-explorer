@@ -1,7 +1,9 @@
 {
   "private": true,
   "scripts": {
-    "build:ne-rewritten-notations": "node scripts/build-ne-rewritten-bundle.js"
+    "test": "node --test",
+    "build:ne-rewritten-notations": "node scripts/build-ne-rewritten-bundle.js",
+    "build:pages": "node scripts/build-pages.js"
   },
   "devDependencies": {
     "esbuild": "0.25.5"
