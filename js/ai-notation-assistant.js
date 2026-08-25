@@ -17,6 +17,9 @@
    })
    var MAX_TOOL_ROUNDS = 8
    var MAX_OUTPUT_LENGTH = 120000
+   var MAX_HISTORY_MESSAGES = 24
+   var MAX_HISTORY_MESSAGE_LENGTH = 20000
+   var MAX_HISTORY_LENGTH = 120000
    var DEFAULT_MODEL = 'gpt-4o-mini'
    var DEFAULT_BASE_URL = 'https://api.openai.com'
    var FALLBACK_CONTEXT = [
@@ -100,6 +103,35 @@
       if (typeof error === 'string') return error
       if (error.message) return String(error.message)
       return String(error)
+   }
+
+   function sanitizeHistory(history) {
+      if (!Array.isArray(history)) return []
+      var messages = []
+      var totalLength = 0
+
+      // Keep the newest useful turns when a persisted conversation has grown
+      // beyond the request budget. Tool protocol messages are deliberately not
+      // replayed: each generation gets its own bounded tool loop.
+      for (var index = history.length - 1; index >= 0; index--) {
+         var item = history[index]
+         if (!item || (item.role !== 'user' && item.role !== 'assistant')) continue
+         var content = typeof item.content === 'string' ? item.content : String(item.content == null ? '' : item.content)
+         if (!content.trim()) continue
+         if (content.length > MAX_HISTORY_MESSAGE_LENGTH) {
+            content = content.slice(0, MAX_HISTORY_MESSAGE_LENGTH) + '\n...[truncated]'
+         }
+         if (totalLength + content.length > MAX_HISTORY_LENGTH) {
+            var remaining = MAX_HISTORY_LENGTH - totalLength
+            if (remaining <= 0) break
+            content = content.slice(Math.max(0, content.length - remaining))
+            if (!content.trim()) break
+         }
+         messages.unshift({ role: item.role, content: content })
+         totalLength += content.length
+         if (messages.length >= MAX_HISTORY_MESSAGES || totalLength >= MAX_HISTORY_LENGTH) break
+      }
+      return messages
    }
 
    function extractText(response) {
@@ -602,28 +634,41 @@
       var context = options.context || await fetchContext()
       var endpoint = normalizeEndpoint(options.baseUrl)
       var headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey }
-      var messages = [
-         { role: 'system', content: buildSystemPrompt(context, true) },
-         { role: 'user', content: prompt },
-      ]
-      var tools = toolDefinitions()
+      var history = sanitizeHistory(options.history)
+      function requestMessages(toolsEnabled) {
+         return [
+            { role: 'system', content: buildSystemPrompt(context, toolsEnabled) },
+         ].concat(history, [
+            { role: 'user', content: prompt },
+         ])
+      }
+      var toolMode = options.toolMode === 'plain' ? 'plain' : 'auto'
+      var messages = requestMessages(toolMode !== 'plain')
+      var tools = toolMode === 'plain' ? [] : toolDefinitions()
       var usedTools = false
       var rounds = 0
       var response
       var pendingToolCalls = false
 
+      function chatBody(requestMessages, includeTools) {
+         var body = {
+            model: model,
+            messages: requestMessages,
+            temperature: options.temperature === undefined ? 0.2 : options.temperature,
+         }
+         if (includeTools) {
+            body.tools = tools
+            body.tool_choice = 'auto'
+         }
+         return body
+      }
+
       try {
          while (rounds++ < MAX_TOOL_ROUNDS) {
-            response = await request(endpoint, {
-               model: model,
-               messages: messages,
-               temperature: options.temperature === undefined ? 0.2 : options.temperature,
-               tools: tools,
-               tool_choice: 'auto',
-            }, headers)
+            response = await request(endpoint, chatBody(messages, tools.length > 0), headers)
             var choice = response.choices && response.choices[0]
             var message = choice && choice.message
-            var calls = toolCallParts(message)
+            var calls = tools.length ? toolCallParts(message) : []
             if (!calls.length) {
                pendingToolCalls = false
                break
@@ -654,15 +699,9 @@
          if (!tools.length || usedTools || !toolsUnsupported(error)) throw error
          // Some compatible endpoints reject the tools field. Retry once in
          // ordinary chat mode while preserving the same user request/context.
-         response = await request(endpoint, {
-            model: model,
-            messages: [
-               { role: 'system', content: buildSystemPrompt(context, false) },
-               { role: 'user', content: prompt },
-            ],
-            temperature: options.temperature === undefined ? 0.2 : options.temperature,
-         }, headers)
+         response = await request(endpoint, chatBody(requestMessages(false), false), headers)
          usedTools = false
+         toolMode = 'plain'
       }
 
       var text = extractText(response)
@@ -680,6 +719,7 @@
          model: model,
          endpoint: endpoint,
          usedTools: usedTools,
+         toolMode: toolMode,
          validation: validation,
       }
    }
@@ -697,6 +737,7 @@
       DEFAULT_MODEL: DEFAULT_MODEL,
       DEFAULT_BASE_URL: DEFAULT_BASE_URL,
       SESSION_KEYS: SESSION_KEYS,
+      sanitizeHistory: sanitizeHistory,
       toolDefinitions: toolDefinitions,
       normalizeEndpoint: normalizeEndpoint,
       readSessionSettings: readSessionSettings,

@@ -44,6 +44,7 @@ test('Pages build collapses startup assets without changing application sources'
       assert.match(html, /data-ne-xlsx-action/)
       assert.doesNotMatch(html, /lib\/xlsx\.full\.min\.js\?v=/)
       assert.match(runtimeBundle, /NotationStandaloneWorkerURL/)
+      assert.match(runtimeBundle, /AINotationPageComponent/)
       assert.match(runtimeBundle, /bm4/)
       assert.match(runtimeBundle, /function loadXlsx|xlsx\.full\.min\.js/)
       assert.doesNotThrow(() => new vm.Script(runtimeBundle))

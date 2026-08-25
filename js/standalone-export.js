@@ -97,11 +97,27 @@
          ''
       )
       template = template.replace(/<standalone-export\b[^>]*\/\s*>/gi, '')
+      template = template.replace(
+         /<button\b[^>]*page===['"]ai-notation['"][^>]*>[\s\S]*?<\/button\s*>/gi,
+         ''
+      )
+      template = template.replace(
+         /<ai-notation-page\b[^>]*>[\s\S]*?<\/ai-notation-page\s*>/gi,
+         ''
+      )
+      template = template.replace(/<ai-notation-page\b[^>]*\/\s*>/gi, '')
       template = template.replace(/<div\b([^>]*\bid=["']app["'][^>]*)>/i, function (_, attrs) {
          if (/\bhidden\b/i.test(attrs)) return '<div' + attrs + '>'
          return '<div' + attrs + ' hidden data-ne-standalone="true">'
       })
       return template
+   }
+
+   function prepareStandaloneCss(css) {
+      return String(css || '').replace(
+         /\/\* ---------- AI Notation ---------- \*\/[\s\S]*?(?=\/\* ---------- Local Notation Files ---------- \*\/)/,
+         ''
+      )
    }
 
    function currentResourceSize(path) {
@@ -900,7 +916,7 @@
       }
       var html = htmlDocument({
          title: title,
-         css: core.css,
+         css: prepareStandaloneCss(core.css),
          payload: payload,
          appTemplate: prepareAppTemplate(appTemplate),
       })
@@ -924,6 +940,7 @@
       captureAppTemplate: captureAppTemplate,
       extractAppTemplate: extractAppTemplate,
       prepareAppTemplate: prepareAppTemplate,
+      prepareStandaloneCss: prepareStandaloneCss,
       collectSelectionRecords: collectSelectionRecords,
       recordSearchText: recordSearchText,
       recordFileLabel: recordFileLabel,

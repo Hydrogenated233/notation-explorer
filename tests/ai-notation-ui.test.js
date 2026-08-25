@@ -1,0 +1,438 @@
+'use strict'
+
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+const component = require('../js/ai-notation-ui.js')
+const Loader = require('../js/notation-loader.js')
+
+function memoryStorage() {
+   const values = new Map()
+   return {
+      values,
+      setItem(key, value) { values.set(key, String(value)) },
+      getItem(key) { return values.has(key) ? values.get(key) : null },
+      removeItem(key) { values.delete(key) },
+   }
+}
+
+function createVm(overrides) {
+   const vm = Object.assign(component.data(), {
+      $root: { lang: 'en' },
+   }, overrides || {})
+
+   Object.keys(component.methods).forEach((name) => {
+      if (typeof vm[name] !== 'function') vm[name] = component.methods[name].bind(vm)
+   })
+   Object.keys(component.computed).forEach((name) => {
+      Object.defineProperty(vm, name, {
+         configurable: true,
+         get() { return component.computed[name].call(vm) },
+      })
+   })
+   return vm
+}
+
+test('AI notation is a separate navigation page and is absent from the local-file component', () => {
+   const projectRoot = path.join(__dirname, '..')
+   const index = fs.readFileSync(path.join(projectRoot, 'index.html'), 'utf8')
+   const framework = fs.readFileSync(path.join(projectRoot, 'js', 'framework.js'), 'utf8')
+   const localTemplate = require('../js/local-notation-ui.js').template
+
+   assert.match(index, /page==='ai-notation'/)
+   assert.match(index, /<ai-notation-page v-show="page==='ai-notation'">/)
+   assert.match(framework, /app\.component\('ai-notation-page'/)
+   assert.doesNotMatch(localTemplate, /AI create|AI notation assistant|AINotationAssistant|ne-local-ai/)
+   assert.equal(Loader.APP_SCRIPTS.includes('js/ai-notation-ui.js'), true)
+   assert.ok(
+      Loader.APP_SCRIPTS.indexOf('js/ai-notation-assistant.js') <
+      Loader.APP_SCRIPTS.indexOf('js/ai-notation-ui.js')
+   )
+   assert.ok(
+      Loader.APP_SCRIPTS.indexOf('js/ai-notation-ui.js') <
+      Loader.APP_SCRIPTS.indexOf('js/framework.js')
+   )
+})
+
+test('conversation tabs persist in session storage without the API key', () => {
+   const originalSessionStorage = globalThis.sessionStorage
+   const store = memoryStorage()
+   globalThis.sessionStorage = store
+
+   try {
+      const vm = createVm()
+      vm.loadConversations()
+      const first = vm.activeConversation
+      vm.updateDraft('First notation request')
+      const second = vm.createConversation()
+      assert.equal(vm.conversations.length, 2)
+      assert.equal(vm.activeConversationId, second.id)
+      vm.updateDraft('Second notation request')
+      vm.selectConversation(first.id)
+      assert.equal(vm.activeDraft, 'First notation request')
+      assert.equal(vm.closeConversation(first.id), true)
+      assert.equal(vm.activeConversationId, second.id)
+      assert.equal(vm.closeConversation(second.id), false)
+
+      vm.apiKey = 'must-not-be-in-conversations'
+      vm.persistConversations()
+      const serialized = store.values.get('ne-ai-conversations-v1')
+      assert.doesNotMatch(serialized, /must-not-be-in-conversations/)
+
+      const restored = createVm()
+      restored.loadConversations()
+      assert.equal(restored.conversations.length, 1)
+      assert.equal(restored.activeDraft, 'Second notation request')
+      assert.equal(restored.activeConversationId, second.id)
+   } finally {
+      globalThis.sessionStorage = originalSessionStorage
+   }
+})
+
+test('generation keeps histories isolated and writes disabled untrusted local files', async () => {
+   const originalAssistant = globalThis.AINotationAssistant
+   const originalRuntime = globalThis.localNotationManager
+   const calls = []
+   const files = new Map()
+   const drafts = new Map()
+
+   globalThis.localNotationManager = {
+      listFiles() { return Array.from(files.values()) },
+      getFile(id) { return files.get(id) || null },
+      getDraft(id) { return drafts.get(id) || null },
+      setDraft(id, draft) {
+         calls.push({ setDraft: { id, name: draft.name, source: draft.source } })
+         drafts.set(id, draft)
+      },
+      createUpload(name, source, trusted) {
+         calls.push({ createUpload: { name, source, trusted } })
+         const file = {
+            id: 'ai-file-' + (files.size + 1),
+            name,
+            source,
+            sourceRevision: 1,
+            enabled: false,
+            trusted: !!trusted,
+         }
+         files.set(file.id, file)
+         return { file, enabled: false, change: null }
+      },
+   }
+   globalThis.AINotationAssistant = {
+      writeSessionSettings() {},
+      async generate(options) {
+         calls.push({ generate: options })
+         const number = calls.filter((entry) => entry.generate).length
+         return {
+            source: 'register.push({ id: "generated-' + number + '" });',
+            raw: 'assistant response ' + number,
+            toolMode: number === 1 ? 'plain' : 'auto',
+            validation: { valid: true },
+         }
+      },
+   }
+
+   const vm = createVm({ apiKey: 'session-key' })
+   const first = {
+      id: 'first', title: '', draft: 'Create one', messages: [], toolMode: 'auto',
+      fileId: '', fileName: '', busy: false, error: '', notice: '', createdAt: 1, updatedAt: 1,
+   }
+   const second = {
+      id: 'second', title: '', draft: '', messages: [], toolMode: 'auto',
+      fileId: '', fileName: '', busy: false, error: '', notice: '', createdAt: 2, updatedAt: 2,
+   }
+   vm.conversations = [first, second]
+   vm.activeConversationId = first.id
+
+   try {
+      assert.equal(await vm.generate(), true)
+      assert.equal(first.fileId, 'ai-file-1')
+      assert.equal(first.toolMode, 'plain')
+      assert.deepEqual(first.messages.map((message) => message.role), ['user', 'assistant'])
+
+      vm.updateDraft('Refine the same notation')
+      assert.equal(await vm.generate(), true)
+      assert.equal(calls.filter((entry) => entry.createUpload).length, 1)
+      assert.deepEqual(calls.find((entry) => entry.setDraft), {
+         setDraft: {
+            id: 'ai-file-1',
+            name: 'AI-Notation.js',
+            source: 'register.push({ id: "generated-2" });',
+         },
+      })
+
+      vm.selectConversation(second.id)
+      vm.updateDraft('Create an unrelated notation')
+      assert.equal(await vm.generate(), true)
+   } finally {
+      globalThis.AINotationAssistant = originalAssistant
+      globalThis.localNotationManager = originalRuntime
+   }
+
+   const requests = calls.filter((entry) => entry.generate).map((entry) => entry.generate)
+   assert.deepEqual(requests[0].history, [])
+   assert.deepEqual(requests[1].history.map((message) => message.role), ['user', 'assistant'])
+   assert.equal(requests[1].toolMode, 'plain')
+   assert.deepEqual(requests[2].history, [])
+   calls.filter((entry) => entry.createUpload).forEach((entry) => {
+      assert.equal(entry.createUpload.trusted, false)
+   })
+})
+
+test('another conversation can be opened while a request is running', async () => {
+   const originalAssistant = globalThis.AINotationAssistant
+   const originalRuntime = globalThis.localNotationManager
+   let resolveGeneration
+   const pending = new Promise((resolve) => { resolveGeneration = resolve })
+
+   globalThis.localNotationManager = {
+      listFiles() { return [] },
+      createUpload(name, source, trusted) {
+         return { file: { id: 'background-file', name, source, enabled: false, trusted: !!trusted } }
+      },
+   }
+   globalThis.AINotationAssistant = {
+      writeSessionSettings() {},
+      generate() { return pending },
+   }
+
+   const vm = createVm({ apiKey: 'session-key' })
+   const first = {
+      id: 'first', title: '', draft: 'Create one', messages: [], toolMode: 'auto',
+      fileId: '', fileName: '', busy: false, error: '', notice: '', createdAt: 1, updatedAt: 1,
+   }
+   vm.conversations = [first]
+   vm.activeConversationId = first.id
+
+   try {
+      const generation = vm.generate()
+      await Promise.resolve()
+      assert.equal(first.busy, true)
+      const second = vm.createConversation()
+      assert.ok(second)
+      assert.equal(vm.activeConversationId, second.id)
+      resolveGeneration({
+         source: 'register.push({ id: "background" });',
+         raw: 'background result',
+         validation: { valid: true },
+      })
+      assert.equal(await generation, true)
+      assert.equal(first.busy, false)
+      assert.equal(vm.activeConversationId, second.id)
+   } finally {
+      globalThis.AINotationAssistant = originalAssistant
+      globalThis.localNotationManager = originalRuntime
+   }
+})
+
+test('generation rechecks linked-file trust after the API request', async () => {
+   const originalAssistant = globalThis.AINotationAssistant
+   const originalRuntime = globalThis.localNotationManager
+   let resolveGeneration
+   const linked = {
+      id: 'linked', name: 'AI-Notation.js', source: 'old', sourceRevision: 1,
+      enabled: false, trusted: false,
+   }
+   const created = []
+   let draftWrites = 0
+
+   globalThis.localNotationManager = {
+      listFiles() { return [linked].concat(created) },
+      getFile(id) { return id === linked.id ? linked : created.find((file) => file.id === id) || null },
+      getDraft() { return null },
+      setDraft() { draftWrites++ },
+      createUpload(name, source, trusted) {
+         const file = {
+            id: 'replacement', name, source, sourceRevision: 1,
+            enabled: false, trusted: !!trusted,
+         }
+         created.push(file)
+         return { file }
+      },
+   }
+   globalThis.AINotationAssistant = {
+      writeSessionSettings() {},
+      generate() {
+         return new Promise((resolve) => { resolveGeneration = resolve })
+      },
+   }
+
+   const vm = createVm({ apiKey: 'session-key' })
+   const conversation = {
+      id: 'trust-race', title: '', draft: 'Refine it', messages: [], toolMode: 'auto',
+      fileId: linked.id, fileName: linked.name, busy: false, error: '', notice: '', createdAt: 1, updatedAt: 1,
+   }
+   vm.conversations = [conversation]
+   vm.activeConversationId = conversation.id
+
+   try {
+      const generation = vm.generate()
+      await Promise.resolve()
+      linked.enabled = true
+      linked.trusted = true
+      resolveGeneration({
+         source: 'register.push({ id: "replacement" });',
+         raw: 'replacement result',
+         validation: { valid: true },
+      })
+      assert.equal(await generation, true)
+   } finally {
+      globalThis.AINotationAssistant = originalAssistant
+      globalThis.localNotationManager = originalRuntime
+   }
+
+   assert.equal(draftWrites, 0)
+   assert.equal(created.length, 1)
+   assert.equal(created[0].enabled, false)
+   assert.equal(created[0].trusted, false)
+   assert.equal(conversation.fileId, 'replacement')
+})
+
+test('an API response that echoes the key is discarded before persistence', async () => {
+   const originalAssistant = globalThis.AINotationAssistant
+   const originalRuntime = globalThis.localNotationManager
+   let createCalls = 0
+   globalThis.localNotationManager = {
+      listFiles() { return [] },
+      createUpload() { createCalls++ },
+   }
+   globalThis.AINotationAssistant = {
+      writeSessionSettings() {},
+      async generate() {
+         return {
+            source: 'register.push({ id: "leaked", key: "secret-key" });',
+            raw: 'The credential was secret-key',
+            validation: { valid: true },
+         }
+      },
+   }
+   const vm = createVm({ apiKey: 'secret-key' })
+   const conversation = {
+      id: 'leak', title: '', draft: 'Create one', messages: [], toolMode: 'auto',
+      fileId: '', fileName: '', busy: false, error: '', notice: '', createdAt: 1, updatedAt: 1,
+   }
+   vm.conversations = [conversation]
+   vm.activeConversationId = conversation.id
+
+   try {
+      assert.equal(await vm.generate(), false)
+   } finally {
+      globalThis.AINotationAssistant = originalAssistant
+      globalThis.localNotationManager = originalRuntime
+   }
+
+   assert.equal(createCalls, 0)
+   assert.match(conversation.error, /API key/i)
+   assert.deepEqual(conversation.messages, [])
+   assert.equal(conversation.draft, 'Create one')
+})
+
+test('short compatibility placeholder keys do not reject ordinary source words', async () => {
+   const originalAssistant = globalThis.AINotationAssistant
+   const originalRuntime = globalThis.localNotationManager
+   let created
+   globalThis.localNotationManager = {
+      listFiles() { return [] },
+      createUpload(name, source, trusted) {
+         created = { name, source, trusted }
+         return { file: { id: 'short-key-file', name, source, enabled: false, trusted: !!trusted } }
+      },
+   }
+   globalThis.AINotationAssistant = {
+      writeSessionSettings() {},
+      async generate() {
+         return {
+            source: 'register.push({ id: "key-sequence" });',
+            raw: 'Generated a key-sequence notation.',
+            validation: { valid: true },
+         }
+      },
+   }
+   const vm = createVm({ apiKey: 'key' })
+   const conversation = {
+      id: 'short-key', title: '', draft: 'Create one', messages: [], toolMode: 'auto',
+      fileId: '', fileName: '', busy: false, error: '', notice: '', createdAt: 1, updatedAt: 1,
+   }
+   vm.conversations = [conversation]
+   vm.activeConversationId = conversation.id
+
+   try {
+      assert.equal(await vm.generate(), true)
+   } finally {
+      globalThis.AINotationAssistant = originalAssistant
+      globalThis.localNotationManager = originalRuntime
+   }
+
+   assert.equal(created.trusted, false)
+   assert.match(created.source, /key-sequence/)
+})
+
+test('API failures preserve the draft and do not create a local file', async () => {
+   const originalAssistant = globalThis.AINotationAssistant
+   const originalRuntime = globalThis.localNotationManager
+   let createCalls = 0
+   globalThis.localNotationManager = {
+      listFiles() { return [] },
+      createUpload() { createCalls++ },
+   }
+   globalThis.AINotationAssistant = {
+      writeSessionSettings() {},
+      async generate() { throw new Error('CORS request failed') },
+   }
+
+   const vm = createVm({ apiKey: 'session-key' })
+   const conversation = {
+      id: 'failed', title: '', draft: 'Create one', messages: [], toolMode: 'auto',
+      fileId: '', fileName: '', busy: false, error: '', notice: '', createdAt: 1, updatedAt: 1,
+   }
+   vm.conversations = [conversation]
+   vm.activeConversationId = conversation.id
+
+   try {
+      assert.equal(await vm.generate(), false)
+   } finally {
+      globalThis.AINotationAssistant = originalAssistant
+      globalThis.localNotationManager = originalRuntime
+   }
+
+   assert.equal(createCalls, 0)
+   assert.equal(conversation.error, 'CORS request failed')
+   assert.equal(conversation.draft, 'Create one')
+   assert.deepEqual(conversation.messages, [])
+   assert.equal(conversation.busy, false)
+})
+
+test('generated files can be opened in the existing local editor', async () => {
+   const originalRuntime = globalThis.localNotationManager
+   const selected = []
+   globalThis.localNotationManager = {
+      getFile(id) { return id === 'generated-file' ? { id, name: 'AI-Notation.js' } : null },
+   }
+   const app = {
+      lang: 'en',
+      $refs: {
+         localNotationManagerComponent: {
+            refreshFiles(id, reload) { selected.push({ id, reload }) },
+         },
+      },
+      async navigateToPage(page) { selected.push({ page }) },
+      $nextTick(callback) { callback() },
+   }
+   const vm = createVm({ $root: app })
+   const conversation = {
+      id: 'open', fileId: 'generated-file', fileName: 'AI-Notation.js',
+      busy: false, error: '', notice: '', messages: [], draft: '', toolMode: 'auto', createdAt: 1, updatedAt: 1,
+   }
+
+   try {
+      assert.equal(await vm.openInEditor(conversation), true)
+   } finally {
+      globalThis.localNotationManager = originalRuntime
+   }
+
+   assert.deepEqual(selected, [
+      { page: 'settings' },
+      { id: 'generated-file', reload: true },
+   ])
+})

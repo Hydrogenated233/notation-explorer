@@ -13,7 +13,7 @@
    'use strict'
 
    var NOTATION_ROOT = 'js/notations/'
-   var ASSET_VERSION = 'ne-rewritten-native-7'
+   var ASSET_VERSION = 'ne-rewritten-native-8'
    var APP_SCRIPTS = [
       'js/diagram/Diagram.js',
       'js/notation-display.js',
@@ -23,6 +23,7 @@
       'js/markdown-renderer.js',
       'js/local-notation-runtime.js',
       'js/ai-notation-assistant.js',
+      'js/ai-notation-ui.js',
       'js/local-notation-ui.js',
       'js/notation-menu.js',
       'js/standalone-export.js',

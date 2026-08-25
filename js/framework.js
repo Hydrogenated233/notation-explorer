@@ -196,6 +196,7 @@ const app = Vue.createApp({
                 analysis_latex_inline: 'Show LaTeX in analysis fields when not editing',
                 analysis_input_visible: 'Show analysis input',
                 analysis_input_width: 'Analysis input width',
+                ai_notation: 'AI Notation',
                 tools: 'Tools',
                tools_title: 'Tools',
                tools_notation_select: 'Notation',
@@ -290,6 +291,7 @@ const app = Vue.createApp({
                 analysis_latex_inline: '非编辑时在分析框中显示 LaTeX',
                 analysis_input_visible: '显示分析输入框',
                 analysis_input_width: '分析输入框宽度',
+                ai_notation: 'AI 记号',
                 tools: '工具',
                tools_title: '工具',
                tools_notation_select: '记号',
@@ -3123,6 +3125,9 @@ app.component('notation-tree', {
 
 if (window.LocalNotationManagerComponent) {
    app.component('local-notation-manager', window.LocalNotationManagerComponent)
+}
+if (window.AINotationPageComponent) {
+   app.component('ai-notation-page', window.AINotationPageComponent)
 }
 if (window.StandaloneExportComponent) {
    app.component('standalone-export', window.StandaloneExportComponent)

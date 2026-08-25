@@ -219,6 +219,8 @@ test('single-file build embeds the app, Blob worker, namespace, and retry loader
    assert.equal(scriptMatches.length, 1)
    assert.doesNotMatch(result.html, /<script\s+src=/i)
    assert.doesNotMatch(result.html, /<standalone-export\b/i)
+   assert.doesNotMatch(result.html, /ai-notation-page|page===['"]ai-notation['"]/i)
+   assert.doesNotMatch(result.html, /AINotationAssistant|ne-ai-conversations-v1|\.ne-ai-page/)
    assert.match(result.html, /<local-notation-manager\b/i)
    assert.match(result.html, /<div\b[^>]*id="app"[^>]*hidden[^>]*data-ne-standalone="true"/i)
    assert.match(result.html, /NotationStandaloneWorkerURL/)

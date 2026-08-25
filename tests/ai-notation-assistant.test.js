@@ -199,6 +199,48 @@ test('generated source is returned without executing it', async () => {
    })
 })
 
+test('generation sends only the current conversation text history before the new request', async () => {
+   const requests = []
+   const response = {
+      ok: true,
+      async text() {
+         return JSON.stringify({ choices: [{ message: {
+            content: '```js\nregister.push({ id: "continued" });\n```',
+         } }] })
+      },
+   }
+   await withGlobalsAsync({
+      fetch: async (_endpoint, options) => {
+         requests.push(JSON.parse(options.body))
+         return response
+      },
+      sessionStorage: { setItem() {}, removeItem() {}, getItem() { return null } },
+   }, async () => {
+      await assistant.generate({
+         apiKey: 'session-only-key',
+         baseUrl: 'https://example.test',
+         model: 'fixture-model',
+         prompt: 'Refine the prior notation.',
+         context: 'fixture context',
+         history: [
+            { role: 'system', content: 'do not replay this' },
+            { role: 'user', content: 'Create a sequence notation.' },
+            { role: 'assistant', content: '```js\nregister.push({ id: "first" });\n```' },
+            { role: 'tool', content: 'do not replay this either' },
+         ],
+      })
+   })
+
+   assert.equal(requests.length, 1)
+   assert.deepEqual(
+      requests[0].messages.map((message) => message.role),
+      ['system', 'user', 'assistant', 'user']
+   )
+   assert.equal(requests[0].messages[1].content, 'Create a sequence notation.')
+   assert.match(requests[0].messages[2].content, /id: "first"/)
+   assert.equal(requests[0].messages[3].content, 'Refine the prior notation.')
+})
+
 test('tool incompatibility retries once without tools, but tool-loop errors do not downgrade', async () => {
    const calls = []
    const responses = [
@@ -223,6 +265,7 @@ test('tool incompatibility retries once without tools, but tool-loop errors do n
    }, async () => {
       const result = await assistant.generate({ apiKey: 'key', baseUrl: 'https://example.test', prompt: 'fallback', context: 'ctx' })
       assert.equal(result.usedTools, false)
+      assert.equal(result.toolMode, 'plain')
       assert.equal(calls.length, 2)
       assert.equal(Object.prototype.hasOwnProperty.call(calls[0], 'tools'), true)
       assert.equal(Object.prototype.hasOwnProperty.call(calls[1], 'tools'), false)

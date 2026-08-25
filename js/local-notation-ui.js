@@ -24,25 +24,8 @@
          guideLoadFailed: 'The development guide could not be loaded.',
          guideUnavailable: 'The documentation renderer is unavailable.',
          retry: 'Retry',
-          closeGuide: 'Close guide',
-          aiCreate: 'AI create',
-          aiTitle: 'AI notation assistant',
-          aiBaseUrl: 'Base URL',
-          aiApiKey: 'API key',
-          aiModel: 'Model',
-          aiPrompt: 'Notation request',
-          aiPromptPlaceholder: 'Describe the notation to create...',
-          aiGenerate: 'Generate',
-          aiClearKey: 'Clear key',
-          aiClose: 'Close AI assistant',
-          aiWarning: 'The Base URL service will receive your API key and must allow browser CORS. The key is kept only in memory and this tab\'s session storage; it is never written to localStorage, exported files, source code, or Git.',
-          aiGenerated: 'Generated source opened as a disabled, untrusted file. Review it before trusting and running it.',
-          aiGeneratedInvalid: 'Generated source opened as a disabled, untrusted file, but validation reported: {error}',
-          aiUnavailable: 'The AI notation assistant is unavailable.',
-          aiEmptySource: 'The AI response did not contain source code.',
-          aiCreateFailed: 'The generated notation file could not be created.',
-          aiBusy: 'Generating...',
-          upload: 'Upload .js',
+         closeGuide: 'Close guide',
+         upload: 'Upload .js',
          newPrss: 'New PrSS',
          empty: 'No local notation files',
          enabled: 'Enabled',
@@ -103,25 +86,8 @@
          guideLoadFailed: '\u65e0\u6cd5\u52a0\u8f7d\u5f00\u53d1\u6307\u5357\u3002',
          guideUnavailable: '\u6587\u6863\u6e32\u67d3\u5668\u4e0d\u53ef\u7528\u3002',
          retry: '\u91cd\u8bd5',
-          closeGuide: '\u5173\u95ed\u5f00\u53d1\u6307\u5357',
-          aiCreate: '\u7528 AI \u521b\u5efa',
-          aiTitle: 'AI \u8bb0\u53f7\u52a9\u624b',
-          aiBaseUrl: 'Base URL',
-          aiApiKey: 'API Key',
-          aiModel: '\u6a21\u578b',
-          aiPrompt: '\u8bb0\u53f7\u9700\u6c42',
-          aiPromptPlaceholder: '\u63cf\u8ff0\u8981\u521b\u5efa\u7684\u8bb0\u53f7...',
-          aiGenerate: '\u751f\u6210',
-          aiClearKey: '\u6e05\u9664 Key',
-          aiClose: '\u5173\u95ed AI \u52a9\u624b',
-          aiWarning: 'Base URL \u670d\u52a1\u4f1a\u6536\u5230\u4f60\u7684 API Key\uff0c\u5e76\u4e14\u5fc5\u987b\u5141\u8bb8\u6d4f\u89c8\u5668 CORS\u3002Key \u4ec5\u4fdd\u5b58\u5728\u5185\u5b58\u548c\u5f53\u524d\u6807\u7b7e\u9875\u7684 sessionStorage\uff0c\u4e0d\u4f1a\u5199\u5165 localStorage\u3001\u5bfc\u51fa\u6587\u4ef6\u3001\u6e90\u7801\u6216 Git\u3002',
-          aiGenerated: '\u751f\u6210\u7684\u6e90\u7801\u5df2\u6253\u5f00\u4e3a\u5df2\u7981\u7528\u3001\u672a\u4fe1\u4efb\u7684\u6587\u4ef6\u3002\u8bf7\u5ba1\u9605\u540e\u518d\u4fe1\u4efb\u5e76\u8fd0\u884c\u3002',
-          aiGeneratedInvalid: '\u751f\u6210\u7684\u6e90\u7801\u5df2\u6253\u5f00\u4e3a\u5df2\u7981\u7528\u3001\u672a\u4fe1\u4efb\u7684\u6587\u4ef6\uff0c\u4f46\u9a8c\u8bc1\u62a5\u544a\uff1a{error}',
-          aiUnavailable: 'AI \u8bb0\u53f7\u52a9\u624b\u4e0d\u53ef\u7528\u3002',
-          aiEmptySource: 'AI \u54cd\u5e94\u4e2d\u6ca1\u6709\u6e90\u7801\u3002',
-          aiCreateFailed: '\u65e0\u6cd5\u521b\u5efa\u751f\u6210\u7684\u8bb0\u53f7\u6587\u4ef6\u3002',
-          aiBusy: '\u6b63\u5728\u751f\u6210...',
-          upload: '\u4e0a\u4f20 .js',
+         closeGuide: '\u5173\u95ed\u5f00\u53d1\u6307\u5357',
+         upload: '\u4e0a\u4f20 .js',
          newPrss: '\u65b0\u5efa PrSS',
          empty: '\u6682\u65e0\u672c\u5730\u8bb0\u53f7\u6587\u4ef6',
          enabled: '\u5df2\u542f\u7528',
@@ -259,11 +225,7 @@
                <div class="ne-local-toolbar">
                   <button ref="guideButton" type="button" class="ne-local-button ne-local-button--secondary"
                      @click="openGuide">
-                      <span aria-hidden="true">&#128214;</span><span>{{ copy.guide }}</span>
-                  </button>
-                  <button type="button" class="ne-local-button ne-local-button--secondary"
-                     :disabled="busy" :aria-expanded="String(aiOpen)" @click="toggleAiPanel">
-                     <span aria-hidden="true">&#10024;</span><span>{{ copy.aiCreate }}</span>
+                     <span aria-hidden="true">&#128214;</span><span>{{ copy.guide }}</span>
                   </button>
                   <input ref="uploadInput" type="file" accept=".js,text/javascript,application/javascript"
                      class="ne-local-toolbar__file-input" @change="onUploadChange">
@@ -282,47 +244,6 @@
                {{ topErrorText }}
             </div>
             <div v-else-if="notice" class="ne-local-manager__notice" role="status">{{ notice }}</div>
-
-            <section v-if="aiOpen" class="ne-local-ai" :aria-label="copy.aiTitle">
-               <header class="ne-local-ai__header">
-                  <h4 class="ne-local-ai__title">{{ copy.aiTitle }}</h4>
-                  <button type="button" class="ne-local-ai__close" :title="copy.aiClose"
-                     :aria-label="copy.aiClose" @click="closeAiPanel">&times;</button>
-               </header>
-               <p class="ne-local-ai__warning" role="note">{{ copy.aiWarning }}</p>
-               <div v-if="aiError" class="ne-local-ai__error" role="alert">{{ aiError }}</div>
-               <div class="ne-local-ai__fields">
-                  <label class="ne-local-ai__field">
-                     <span>{{ copy.aiBaseUrl }}</span>
-                     <input v-model="aiBaseUrl" type="url" autocomplete="url" spellcheck="false"
-                        :disabled="busy || aiBusy" @input="saveAiSettings">
-                  </label>
-                  <label class="ne-local-ai__field">
-                     <span>{{ copy.aiApiKey }}</span>
-                     <input v-model="aiApiKey" type="password" name="ne-ai-api-key" autocomplete="off"
-                        spellcheck="false" :disabled="busy || aiBusy" @input="saveAiSettings">
-                  </label>
-                  <label class="ne-local-ai__field">
-                     <span>{{ copy.aiModel }}</span>
-                     <input v-model="aiModel" type="text" autocomplete="off" spellcheck="false"
-                        :disabled="busy || aiBusy" @input="saveAiSettings">
-                  </label>
-                  <label class="ne-local-ai__field ne-local-ai__field--prompt">
-                     <span>{{ copy.aiPrompt }}</span>
-                     <textarea v-model="aiPrompt" rows="5" maxlength="20000"
-                        :placeholder="copy.aiPromptPlaceholder" :disabled="busy || aiBusy"
-                        spellcheck="true"></textarea>
-                  </label>
-               </div>
-               <div class="ne-local-ai__actions">
-                  <button type="button" class="ne-local-button ne-local-button--primary"
-                     :disabled="busy || aiBusy || !aiApiKey.trim() || !aiPrompt.trim()" @click="generateWithAi">
-                     <span aria-hidden="true">&#10024;</span><span>{{ aiBusy ? copy.aiBusy : copy.aiGenerate }}</span>
-                  </button>
-                  <button type="button" class="ne-local-button ne-local-button--secondary"
-                     :disabled="busy || aiBusy || !aiApiKey" @click="clearAiKey">{{ copy.aiClearKey }}</button>
-               </div>
-            </section>
 
             <div class="ne-local-workspace">
                <aside class="ne-local-workspace__sidebar">
@@ -476,13 +397,6 @@
             operationError: null,
             draftError: null,
             draftTimer: null,
-            aiOpen: false,
-            aiBusy: false,
-            aiBaseUrl: '',
-            aiApiKey: '',
-            aiModel: '',
-            aiPrompt: '',
-            aiError: '',
             guideOpen: false,
             guideLoading: false,
             guideError: '',
@@ -552,7 +466,6 @@
       },
 
       created: function() {
-         this.loadAiSettings()
          this.refreshFiles('', true)
       },
 
@@ -581,115 +494,6 @@
             var runtime = root && root.localNotationManager
             if (!runtime) throw new Error(this.copy.managerUnavailable)
             return runtime
-         },
-
-         aiAssistant: function() {
-            return root && root.AINotationAssistant
-         },
-
-         loadAiSettings: function() {
-            var assistant = this.aiAssistant()
-            if (!assistant || typeof assistant.readSessionSettings !== 'function') return
-            var settings
-            try {
-               settings = assistant.readSessionSettings() || {}
-            } catch (error) {
-               settings = {}
-            }
-            this.aiBaseUrl = settings.baseUrl || assistant.DEFAULT_BASE_URL || ''
-            this.aiApiKey = settings.apiKey || ''
-            this.aiModel = settings.model || assistant.DEFAULT_MODEL || ''
-         },
-
-         saveAiSettings: function() {
-            var assistant = this.aiAssistant()
-            if (!assistant || typeof assistant.writeSessionSettings !== 'function') return
-            try {
-               assistant.writeSessionSettings({
-                  baseUrl: this.aiBaseUrl,
-                  apiKey: this.aiApiKey,
-                  model: this.aiModel,
-               })
-            } catch (error) {
-               // Session storage can be unavailable in privacy-restricted contexts.
-            }
-         },
-
-         clearAiKey: function() {
-            this.aiApiKey = ''
-            this.saveAiSettings()
-         },
-
-         toggleAiPanel: function() {
-            if (this.busy) return
-            this.aiOpen = !this.aiOpen
-            if (this.aiOpen) this.loadAiSettings()
-         },
-
-         closeAiPanel: function() {
-            if (this.aiBusy) return
-            this.aiOpen = false
-         },
-
-         nextAiFileName: function() {
-            var files = this.runtime().listFiles()
-            var used = new Set(files.map(function(file) { return String(file.name || '').toLowerCase() }))
-            var index = 1
-            var candidate
-            do {
-               candidate = index === 1 ? 'AI-Notation.js' : 'AI-Notation-' + index + '.js'
-               index++
-            } while (used.has(candidate.toLowerCase()))
-            return candidate
-         },
-
-         generateWithAi: async function() {
-            if (this.busy || this.aiBusy) return false
-            var assistant = this.aiAssistant()
-            if (!assistant || typeof assistant.generate !== 'function') {
-               this.aiError = this.copy.aiUnavailable
-               return false
-            }
-            if (!this.aiApiKey.trim() || !this.aiPrompt.trim()) return false
-            if (this.dirty && !this.persistDraftNow()) return false
-
-            this.aiBusy = true
-            this.busy = true
-            this.aiError = ''
-            this.notice = ''
-            try {
-               var fileName = this.nextAiFileName()
-               this.saveAiSettings()
-               var result = await Promise.resolve(assistant.generate({
-                  baseUrl: this.aiBaseUrl,
-                  apiKey: this.aiApiKey,
-                  model: this.aiModel,
-                  prompt: this.aiPrompt,
-                  fileName: fileName,
-               }))
-               var source = result && typeof result.source === 'string' ? result.source.trim() : ''
-               if (!source) throw new Error(this.copy.aiEmptySource)
-
-               // createUpload(..., false) persists the source without trusting or executing it.
-               var created = await Promise.resolve(this.runtime().createUpload(fileName, source, false))
-               if (!created || !created.file || created.file.enabled || created.file.trusted) {
-                  throw new Error(this.copy.aiCreateFailed)
-               }
-               this.refreshFiles(created.file.id, true)
-               var validation = result && result.validation
-               if (validation && validation.valid === false && validation.error) {
-                  this.notice = this.copy.aiGeneratedInvalid.replace('{error}', String(validation.error))
-               } else {
-                  this.notice = this.copy.aiGenerated
-               }
-               return true
-            } catch (error) {
-               this.aiError = error && error.message || String(error || this.copy.aiCreateFailed)
-               return false
-            } finally {
-               this.aiBusy = false
-               this.busy = false
-            }
          },
 
          guideDocumentUrl: function() {
