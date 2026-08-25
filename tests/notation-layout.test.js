@@ -102,8 +102,13 @@ test('index delegates notation and application startup to the generated loader',
    assert.equal(Loader.APP_SCRIPTS.includes('js/notation-display.js'), true)
    assert.equal(Loader.APP_SCRIPTS.includes('js/notation-credits.js'), true)
    assert.equal(Loader.APP_SCRIPTS.includes('js/markdown-renderer.js'), true)
+   assert.equal(Loader.APP_SCRIPTS.includes('js/ai-notation-assistant.js'), true)
    assert.ok(
       Loader.APP_SCRIPTS.indexOf('js/markdown-renderer.js') <
+      Loader.APP_SCRIPTS.indexOf('js/local-notation-ui.js')
+   )
+   assert.ok(
+      Loader.APP_SCRIPTS.indexOf('js/ai-notation-assistant.js') <
       Loader.APP_SCRIPTS.indexOf('js/local-notation-ui.js')
    )
 })

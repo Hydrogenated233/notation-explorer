@@ -3191,6 +3191,9 @@ app.component('fs-dialog', {
 })
 
 const root = app.mount('#app')
+// Expose the mounted app's existing expansion implementation to integrations
+// such as the AI notation assistant without duplicating tree parsing logic.
+window.notationExplorerApp = root
 
 // ===== Debug Tools =====
 window.debugTools = (function () {

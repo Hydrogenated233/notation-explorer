@@ -240,3 +240,130 @@ test('downloadSource downloads the selected JavaScript source and revokes its UR
    assert.equal(createdLink.style.display, 'none')
    assert.deepEqual(events, ['create-url', 'append', 'click', 'remove', 'revoke:blob:test'])
 })
+
+test('AI settings use the assistant session API and expose the CORS/key warning', () => {
+   const originalAssistant = globalThis.AINotationAssistant
+   const writes = []
+   globalThis.AINotationAssistant = {
+      DEFAULT_BASE_URL: 'https://api.example.test',
+      DEFAULT_MODEL: 'fixture-model',
+      readSessionSettings() {
+         return { baseUrl: 'https://proxy.example.test', apiKey: 'session-key', model: 'stored-model' }
+      },
+      writeSessionSettings(settings) {
+         writes.push(settings)
+      },
+   }
+
+   const vm = Object.assign(component.data(), {
+      aiAssistant: component.methods.aiAssistant,
+   })
+   try {
+      component.methods.loadAiSettings.call(vm)
+      assert.equal(vm.aiBaseUrl, 'https://proxy.example.test')
+      assert.equal(vm.aiApiKey, 'session-key')
+      assert.equal(vm.aiModel, 'stored-model')
+      vm.aiApiKey = 'new-session-key'
+      component.methods.saveAiSettings.call(vm)
+   } finally {
+      globalThis.AINotationAssistant = originalAssistant
+   }
+
+   assert.equal(writes.length, 1)
+   assert.equal(writes[0].apiKey, 'new-session-key')
+   assert.match(component.computed.copy.call({ $root: { lang: 'en' } }).aiWarning, /CORS/)
+})
+
+test('AI generation creates a disabled untrusted file without running it', async () => {
+   const originalAssistant = globalThis.AINotationAssistant
+   const originalRuntime = globalThis.localNotationManager
+   const calls = []
+   const runtime = {
+      listFiles() { return [] },
+      createUpload(name, source, trusted) {
+         calls.push({ name, source, trusted })
+         assert.equal(trusted, false)
+         return {
+            file: { id: 'ai-file', name, source, enabled: false, trusted: false },
+            enabled: false,
+            change: null,
+         }
+      },
+   }
+   globalThis.localNotationManager = runtime
+   globalThis.AINotationAssistant = {
+      writeSessionSettings() {},
+      async generate(options) {
+         calls.push({ generate: options })
+         return { source: 'register.push({ id: "generated" });', validation: { valid: true } }
+      },
+   }
+
+   const refreshed = []
+   const vm = Object.assign(component.data(), {
+      aiAssistant: component.methods.aiAssistant,
+      runtime: component.methods.runtime,
+      nextAiFileName: component.methods.nextAiFileName,
+      copy: component.computed.copy.call({ $root: { lang: 'en' } }),
+      aiApiKey: 'session-key',
+      aiPrompt: 'Create a notation',
+      saveAiSettings() {},
+      persistDraftNow() { return true },
+      refreshFiles(id, reload) { refreshed.push({ id, reload }) },
+      dirty: false,
+   })
+
+   try {
+      assert.equal(await component.methods.generateWithAi.call(vm), true)
+   } finally {
+      globalThis.AINotationAssistant = originalAssistant
+      globalThis.localNotationManager = originalRuntime
+   }
+
+   assert.equal(calls.find((entry) => entry.generate).generate.fileName, 'AI-Notation.js')
+   assert.deepEqual(calls.find((entry) => entry.name), {
+      name: 'AI-Notation.js',
+      source: 'register.push({ id: "generated" });',
+      trusted: false,
+   })
+   assert.deepEqual(refreshed, [{ id: 'ai-file', reload: true }])
+   assert.match(vm.notice, /disabled, untrusted/)
+})
+
+test('AI generation reports API errors and never creates a file on failure', async () => {
+   const originalAssistant = globalThis.AINotationAssistant
+   const originalRuntime = globalThis.localNotationManager
+   let createCalls = 0
+   globalThis.localNotationManager = {
+      listFiles() { return [] },
+      createUpload() { createCalls++ },
+   }
+   globalThis.AINotationAssistant = {
+      writeSessionSettings() {},
+      async generate() { throw new Error('CORS request failed') },
+   }
+
+   const vm = Object.assign(component.data(), {
+      aiAssistant: component.methods.aiAssistant,
+      runtime: component.methods.runtime,
+      nextAiFileName: component.methods.nextAiFileName,
+      copy: component.computed.copy.call({ $root: { lang: 'en' } }),
+      aiApiKey: 'session-key',
+      aiPrompt: 'Create a notation',
+      saveAiSettings() {},
+      persistDraftNow() { return true },
+      dirty: false,
+   })
+
+   try {
+      assert.equal(await component.methods.generateWithAi.call(vm), false)
+   } finally {
+      globalThis.AINotationAssistant = originalAssistant
+      globalThis.localNotationManager = originalRuntime
+   }
+
+   assert.equal(createCalls, 0)
+   assert.equal(vm.aiError, 'CORS request failed')
+   assert.equal(vm.aiBusy, false)
+   assert.equal(vm.busy, false)
+})

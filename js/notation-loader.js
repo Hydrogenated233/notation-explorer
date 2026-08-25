@@ -22,6 +22,7 @@
       'js/notation-editor.js',
       'js/markdown-renderer.js',
       'js/local-notation-runtime.js',
+      'js/ai-notation-assistant.js',
       'js/local-notation-ui.js',
       'js/notation-menu.js',
       'js/standalone-export.js',

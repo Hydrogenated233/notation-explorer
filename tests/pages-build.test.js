@@ -82,7 +82,10 @@ test('Pages build collapses startup assets without changing application sources'
       )
       assert.equal(metadata.inlinedScripts, 0)
       assert.equal(metadata.optimizedDefaultInitialRequests, 2)
-      assert.equal(metadata.sourceInitialRequests, 96)
+      assert.equal(
+         metadata.sourceInitialRequests,
+         1 + 2 + 9 + manifest.length + Loader.APP_SCRIPTS.length
+      )
       assert.equal(metadata.sourceScriptRequests, 9 + manifest.length + Loader.APP_SCRIPTS.length)
       assert.equal(metadata.runtimeBundlePath, runtimeBundlePath)
       assert.deepEqual(metadata.deferredScripts, ['lib/xlsx.full.min.js'])

@@ -2,7 +2,9 @@
   "private": true,
   "scripts": {
     "test": "node --test",
+    "build:ai-context": "node scripts/build-ai-context.js",
     "build:ne-rewritten-notations": "node scripts/build-ne-rewritten-bundle.js",
+    "prebuild:pages": "node scripts/build-ai-context.js",
     "build:pages": "node scripts/build-pages.js"
   },
   "devDependencies": {
