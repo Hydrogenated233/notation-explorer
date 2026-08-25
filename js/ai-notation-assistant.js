@@ -15,7 +15,6 @@
       apiKey: 'ne-ai-api-key',
       model: 'ne-ai-model',
    })
-   var MAX_TOOL_ROUNDS = 8
    var MAX_OUTPUT_LENGTH = 120000
    var MAX_HISTORY_MESSAGES = 24
    var MAX_HISTORY_MESSAGE_LENGTH = 20000
@@ -119,6 +118,16 @@
       return String(error)
    }
 
+   function abortError() {
+      var error = new Error('AI generation was stopped.')
+      error.name = 'AbortError'
+      return error
+   }
+
+   function throwIfAborted(signal) {
+      if (signal && signal.aborted) throw abortError()
+   }
+
    function emitProgress(options, event) {
       if (!options || typeof options.onProgress !== 'function') return
       try {
@@ -219,6 +228,23 @@
       if (fenced) return fenced[1].trim()
       var marker = text.match(/(?:^|\n)\s*(?:source|code)\s*:\s*([\s\S]+)$/i)
       return marker ? marker[1].trim() : text
+   }
+
+   function sanitizeFileName(value, fallback) {
+      var name = String(value || '').trim().replace(/^[`'\"]+|[`'\"]+$/g, '')
+      name = name.split(/[\\/]/).pop().replace(/[<>:"|?*\x00-\x1F]/g, '-').replace(/\s+/g, '-')
+      name = name.replace(/-+/g, '-').replace(/^[.\-]+|[.\-]+$/g, '')
+      if (!name) name = String(fallback || 'AI-Notation.js').trim()
+      if (!/\.js$/i.test(name)) name += '.js'
+      if (/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])\.js$/i.test(name)) name = 'AI-' + name
+      if (name.length > 96) name = name.slice(0, 93).replace(/[.\-]+$/g, '') + '.js'
+      return name || 'AI-Notation.js'
+   }
+
+   function extractFileName(text, fallback) {
+      var prefix = String(text || '').split(/```/)[0]
+      var match = prefix.match(/(?:^|\n)\s*filename\s*:\s*`?([^\r\n`]+)`?\s*(?:\n|$)/i)
+      return sanitizeFileName(match && match[1], fallback)
    }
 
    function toolDefinitions() {
@@ -717,25 +743,36 @@
       return contextCache
    }
 
-   function buildSystemPrompt(context, toolsEnabled) {
+   function buildSystemPrompt(context, toolsEnabled, fileName, existingFileName) {
+      var fileInstruction = existingFileName
+         ? 'Keep the existing filename. Begin the final response with exactly `Filename: ' +
+            sanitizeFileName(existingFileName, fileName) + '`.'
+         : 'Choose a concise descriptive filename for the notation. Begin the final response with exactly `Filename: <name>.js`.'
       return [
          'You are an expert assistant for the Notation Explorer local notation editor.',
          'Produce one complete JavaScript local notation file, not a patch or explanation.',
          'Use the supplied context and inspect/expand existing notations before inventing conventions.',
          'When tools are available, validate the source before finalizing. Never claim that generated code was executed.',
+         fileInstruction,
          'Return source in a single ```js fenced block. The editor will not trust or execute it automatically.',
          toolsEnabled ? 'You may use the provided tools to inspect the current runtime.' : 'Tool calling is unavailable; reason from the supplied context only.',
          '\n' + context,
       ].join('\n\n')
    }
 
-   async function request(endpoint, body, headers) {
+   async function request(endpoint, body, headers, signal) {
       if (!root || typeof root.fetch !== 'function') throw new Error('Fetch is unavailable.')
-      return responseJson(await root.fetch(endpoint, {
+      throwIfAborted(signal)
+      var response = await root.fetch(endpoint, {
          method: 'POST',
          headers: headers,
          body: JSON.stringify(body),
-      }))
+         signal: signal,
+      })
+      throwIfAborted(signal)
+      var result = await responseJson(response)
+      throwIfAborted(signal)
+      return result
    }
 
    function parseSseEvent(block) {
@@ -762,20 +799,31 @@
 
    async function requestChatStream(endpoint, body, headers, options, round) {
       if (!root || typeof root.fetch !== 'function') throw new Error('Fetch is unavailable.')
+      throwIfAborted(options && options.signal)
       var response = await root.fetch(endpoint, {
          method: 'POST',
          headers: headers,
          body: JSON.stringify(Object.assign({}, body, { stream: true })),
+         signal: options && options.signal,
       })
+      throwIfAborted(options && options.signal)
       if (response && (response.ok === false || Number(response.status) >= 400)) {
-         return responseJson(response)
+         var errorResponse = await responseJson(response)
+         throwIfAborted(options && options.signal)
+         return errorResponse
       }
       if (!response || !response.body || typeof response.body.getReader !== 'function') {
-         return responseJson(response)
+         var plainResponse = await responseJson(response)
+         throwIfAborted(options && options.signal)
+         return plainResponse
       }
 
       var Decoder = root && root.TextDecoder
-      if (typeof Decoder !== 'function') return responseJson(response)
+      if (typeof Decoder !== 'function') {
+         var decodedResponse = await responseJson(response)
+         throwIfAborted(options && options.signal)
+         return decodedResponse
+      }
       var reader = response.body.getReader()
       var decoder = new Decoder()
       var buffer = ''
@@ -807,6 +855,7 @@
                   round: round,
                   chars: state.reasoning.length,
                })
+               throwIfAborted(options && options.signal)
             }
          }
          if (typeof delta.content === 'string' && delta.content) {
@@ -819,6 +868,7 @@
                   chars: state.content.length,
                   text: truncateStreamText(state.content),
                })
+               throwIfAborted(options && options.signal)
             }
          }
          if (Array.isArray(delta.tool_calls)) {
@@ -847,16 +897,20 @@
                      argumentsText: call.function.arguments,
                      chars: call.function.arguments.length,
                   })
+                  throwIfAborted(options && options.signal)
                }
             })
          }
          if (choice.finish_reason !== undefined && choice.finish_reason !== null) {
             state.finishReason = choice.finish_reason
          }
+         throwIfAborted(options && options.signal)
       }
 
       while (true) {
+         throwIfAborted(options && options.signal)
          var chunk = await reader.read()
+         throwIfAborted(options && options.signal)
          buffer += decoder.decode(chunk.value || new Uint8Array(0), { stream: !chunk.done })
          var boundary
          while ((boundary = buffer.search(/\r?\n\r?\n/)) !== -1) {
@@ -883,6 +937,7 @@
             round: round,
             chars: state.reasoning.length,
          })
+         throwIfAborted(options && options.signal)
       }
       if (state.content && shouldEmitStreamProgress(state, 'output', state.content.length, true, 128)) {
          emitProgress(options, {
@@ -892,6 +947,7 @@
             chars: state.content.length,
             text: truncateStreamText(state.content),
          })
+         throwIfAborted(options && options.signal)
       }
       state.toolCalls.forEach(function(call, toolIndex) {
          if (!call) return
@@ -905,6 +961,7 @@
             argumentsText: call.function.arguments,
             chars: call.function.arguments.length,
          })
+         throwIfAborted(options && options.signal)
       })
 
       var message = { role: 'assistant', content: state.content }
@@ -914,15 +971,18 @@
       if (!state.content && !state.reasoning && !calls.length && !sawEvent) {
          throw new Error('Chat Completions stream ended without a response.')
       }
+      throwIfAborted(options && options.signal)
       return { choices: [{ message: message, finish_reason: state.finishReason }] }
    }
 
    async function requestChatRound(endpoint, body, headers, options, round) {
       if (!options || typeof options.onProgress !== 'function') {
-         return request(endpoint, body, headers)
+         return request(endpoint, body, headers, options && options.signal)
       }
       try {
-         return await requestChatStream(endpoint, body, headers, options, round)
+         var streamedResponse = await requestChatStream(endpoint, body, headers, options, round)
+         throwIfAborted(options && options.signal)
+         return streamedResponse
       } catch (error) {
          if (!streamingUnsupported(error)) throw error
          emitProgress(options, {
@@ -931,27 +991,39 @@
             round: round,
             reason: errorMessage(error),
          })
-         return request(endpoint, body, headers)
+         throwIfAborted(options && options.signal)
+         return request(endpoint, body, headers, options.signal)
       }
    }
 
-   async function requestResponsesStream(endpoint, body, headers, onEvent) {
+   async function requestResponsesStream(endpoint, body, headers, onEvent, signal) {
       if (!root || typeof root.fetch !== 'function') throw new Error('Fetch is unavailable.')
+      throwIfAborted(signal)
       var streamingBody = Object.assign({}, body, { stream: true })
       var response = await root.fetch(endpoint, {
          method: 'POST',
          headers: headers,
          body: JSON.stringify(streamingBody),
+         signal: signal,
       })
+      throwIfAborted(signal)
       if (response && (response.ok === false || Number(response.status) >= 400)) {
-         return responseJson(response)
+         var errorResponse = await responseJson(response)
+         throwIfAborted(signal)
+         return errorResponse
       }
       if (!response || !response.body || typeof response.body.getReader !== 'function') {
-         return responseJson(response)
+         var plainResponse = await responseJson(response)
+         throwIfAborted(signal)
+         return plainResponse
       }
 
       var Decoder = root && root.TextDecoder
-      if (typeof Decoder !== 'function') return responseJson(response)
+      if (typeof Decoder !== 'function') {
+         var decodedResponse = await responseJson(response)
+         throwIfAborted(signal)
+         return decodedResponse
+      }
       var reader = response.body.getReader()
       var decoder = new Decoder()
       var buffer = ''
@@ -963,6 +1035,7 @@
          if (!event) return
          sawEvent = true
          if (typeof onEvent === 'function') onEvent(event)
+         throwIfAborted(signal)
          if (event.type === 'response.completed' && event.response) finalResponse = event.response
          if (event.type === 'response.incomplete') {
             var incomplete = event.response || {}
@@ -977,7 +1050,9 @@
       }
 
       while (true) {
+         throwIfAborted(signal)
          var chunk = await reader.read()
+         throwIfAborted(signal)
          buffer += decoder.decode(chunk.value || new Uint8Array(0), { stream: !chunk.done })
          var boundary
          while ((boundary = buffer.search(/\r?\n\r?\n/)) !== -1) {
@@ -993,6 +1068,7 @@
          else if (!sawEvent) finalResponse = safeJson(buffer)
       }
       if (!finalResponse) throw new Error('Responses API stream ended without a completed response.')
+      throwIfAborted(signal)
       return finalResponse
    }
 
@@ -1004,8 +1080,10 @@
             endpoint,
             body,
             headers,
-            function(event) { emitResponsesStreamProgress(options, event, round, streamState) }
+            function(event) { emitResponsesStreamProgress(options, event, round, streamState) },
+            options && options.signal
          )
+         throwIfAborted(options && options.signal)
       } catch (error) {
          if (!streamingUnsupported(error)) throw error
          emitProgress(options, {
@@ -1014,8 +1092,10 @@
             round: round,
             reason: errorMessage(error),
          })
-         response = await request(endpoint, body, headers)
+         throwIfAborted(options && options.signal)
+         response = await request(endpoint, body, headers, options && options.signal)
       }
+      throwIfAborted(options && options.signal)
       return validateResponsesResult(response)
    }
 
@@ -1122,14 +1202,12 @@
       var tools = toolMode === 'plain' ? [] : responsesToolDefinitions()
       var usedTools = false
       var response
-      var pendingToolCalls = false
       var rounds = Number(startingRound) || 0
-      var protocolRounds = 0
 
       function responsesBody(currentInput, includeTools) {
          var body = {
             model: model,
-            instructions: buildSystemPrompt(context, includeTools),
+            instructions: buildSystemPrompt(context, includeTools, options.fileName, options.existingFileName),
             input: currentInput,
             temperature: options.temperature === undefined ? 0.2 : options.temperature,
          }
@@ -1141,8 +1219,8 @@
       }
 
       try {
-         while (protocolRounds < MAX_TOOL_ROUNDS) {
-            protocolRounds++
+         while (true) {
+            throwIfAborted(options.signal)
             rounds++
             var requestStartedAt = Date.now()
             emitProgress(options, {
@@ -1151,9 +1229,11 @@
                round: rounds,
                toolsEnabled: tools.length > 0,
             })
+            throwIfAborted(options.signal)
             response = await requestResponsesRound(
                endpoint, responsesBody(input, tools.length > 0), headers, options, rounds
             )
+            throwIfAborted(options.signal)
             var calls = tools.length ? responsesToolCallParts(response) : []
             emitProgress(options, {
                type: 'model_response_received',
@@ -1163,15 +1243,15 @@
                text: truncateStreamText(extractResponsesText(response)),
                elapsedMs: Date.now() - requestStartedAt,
             })
+            throwIfAborted(options.signal)
             if (!calls.length) {
-               pendingToolCalls = false
                break
             }
 
-            pendingToolCalls = true
             usedTools = true
             if (Array.isArray(response.output)) input = input.concat(response.output)
             for (var index = 0; index < calls.length; index++) {
+               throwIfAborted(options.signal)
                var call = calls[index]
                var args = typeof call.arguments === 'string' ? safeJson(call.arguments) : call.arguments
                if (!args || typeof args !== 'object') args = {}
@@ -1184,7 +1264,9 @@
                   name: call.name,
                   arguments: args,
                })
+               throwIfAborted(options.signal)
                await yieldForProgress(options)
+               throwIfAborted(options.signal)
                var result
                try {
                   result = { ok: true, result: runTool(call.name, args) }
@@ -1202,6 +1284,7 @@
                   error: result.error,
                   elapsedMs: Date.now() - toolStartedAt,
                })
+               throwIfAborted(options.signal)
                input.push({
                   type: 'function_call_output',
                   call_id: call.id,
@@ -1209,7 +1292,6 @@
                })
             }
          }
-         if (pendingToolCalls) throw new Error('The AI tool loop exceeded its safety limit.')
       } catch (error) {
          if (!tools.length || usedTools || !toolsUnsupported(error)) throw error
          emitProgress(options, {
@@ -1218,6 +1300,7 @@
             round: rounds,
             reason: errorMessage(error),
          })
+         throwIfAborted(options.signal)
          toolMode = 'plain'
          tools = []
          rounds++
@@ -1229,9 +1312,11 @@
             toolsEnabled: false,
             fallback: true,
          })
+         throwIfAborted(options.signal)
          response = await requestResponsesRound(
             endpoint, responsesBody(initialInput, false), headers, options, rounds
          )
+         throwIfAborted(options.signal)
          emitProgress(options, {
             type: 'model_response_received',
             protocol: 'responses',
@@ -1241,9 +1326,11 @@
             elapsedMs: Date.now() - fallbackStartedAt,
             fallback: true,
          })
+         throwIfAborted(options.signal)
          usedTools = false
       }
 
+      throwIfAborted(options.signal)
       return {
          text: extractResponsesText(response),
          endpoint: endpoint,
@@ -1260,15 +1347,17 @@
       var prompt = String(options.prompt || '').trim()
       if (!apiKey) throw new Error('An API key is required.')
       if (!prompt) throw new Error('A notation request is required.')
+      throwIfAborted(options.signal)
 
       writeSessionSettings({ baseUrl: options.baseUrl, apiKey: apiKey, model: model })
       var context = options.context || await fetchContext()
+      throwIfAborted(options.signal)
       var endpoint = normalizeEndpoint(options.baseUrl)
       var headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey }
       var history = sanitizeHistory(options.history)
       function requestMessages(toolsEnabled) {
          return [
-            { role: 'system', content: buildSystemPrompt(context, toolsEnabled) },
+            { role: 'system', content: buildSystemPrompt(context, toolsEnabled, options.fileName, options.existingFileName) },
          ].concat(history, [
             { role: 'user', content: prompt },
          ])
@@ -1279,7 +1368,6 @@
       var usedTools = false
       var rounds = 0
       var response
-      var pendingToolCalls = false
       var protocol = 'chat_completions'
       var generatedText = ''
 
@@ -1297,7 +1385,8 @@
       }
 
       try {
-         while (rounds < MAX_TOOL_ROUNDS) {
+         while (true) {
+            throwIfAborted(options.signal)
             rounds++
             var requestStartedAt = Date.now()
             emitProgress(options, {
@@ -1306,9 +1395,11 @@
                round: rounds,
                toolsEnabled: tools.length > 0,
             })
+            throwIfAborted(options.signal)
             response = await requestChatRound(
                endpoint, chatBody(messages, tools.length > 0), headers, options, rounds
             )
+            throwIfAborted(options.signal)
             var choice = response.choices && response.choices[0]
             var message = choice && choice.message
             var calls = tools.length ? toolCallParts(message) : []
@@ -1320,14 +1411,14 @@
                text: truncateStreamText(extractText(response)),
                elapsedMs: Date.now() - requestStartedAt,
             })
+            throwIfAborted(options.signal)
             if (!calls.length) {
-               pendingToolCalls = false
                break
             }
-            pendingToolCalls = true
             usedTools = true
             messages.push(message)
             for (var index = 0; index < calls.length; index++) {
+               throwIfAborted(options.signal)
                var call = calls[index]
                var args = typeof call.arguments === 'string' ? safeJson(call.arguments) : call.arguments
                if (!args || typeof args !== 'object') args = {}
@@ -1341,7 +1432,9 @@
                   name: call.name,
                   arguments: args,
                })
+               throwIfAborted(options.signal)
                await yieldForProgress(options)
+               throwIfAborted(options.signal)
                try {
                   result = { ok: true, result: runTool(call.name, args) }
                } catch (error) {
@@ -1358,6 +1451,7 @@
                   error: result.error,
                   elapsedMs: Date.now() - toolStartedAt,
                })
+               throwIfAborted(options.signal)
                messages.push({
                   role: 'tool',
                   tool_call_id: call.id,
@@ -1366,7 +1460,6 @@
                })
             }
          }
-         if (pendingToolCalls) throw new Error('The AI tool loop exceeded its safety limit.')
       } catch (error) {
          if (!usedTools && chatCompletionsUnsupported(error)) {
             emitProgress(options, {
@@ -1376,6 +1469,7 @@
                round: rounds,
                reason: errorMessage(error),
             })
+            throwIfAborted(options.signal)
             var responsesResult = await runResponsesProtocol(
                options, context, model, prompt, history, headers, rounds
             )
@@ -1385,7 +1479,6 @@
             usedTools = responsesResult.usedTools
             toolMode = responsesResult.toolMode
             rounds = responsesResult.rounds
-            pendingToolCalls = false
          } else {
             if (!tools.length || usedTools || !toolsUnsupported(error)) throw error
             // Some compatible endpoints reject the tools field. Retry once in
@@ -1396,6 +1489,7 @@
                round: rounds,
                reason: errorMessage(error),
             })
+            throwIfAborted(options.signal)
             rounds++
             var fallbackStartedAt = Date.now()
             emitProgress(options, {
@@ -1405,9 +1499,11 @@
                toolsEnabled: false,
                fallback: true,
             })
+            throwIfAborted(options.signal)
             response = await requestChatRound(
                endpoint, chatBody(requestMessages(false), false), headers, options, rounds
             )
+            throwIfAborted(options.signal)
             emitProgress(options, {
                type: 'model_response_received',
                protocol: protocol,
@@ -1417,19 +1513,22 @@
                elapsedMs: Date.now() - fallbackStartedAt,
                fallback: true,
             })
+            throwIfAborted(options.signal)
             usedTools = false
             toolMode = 'plain'
          }
       }
 
+      throwIfAborted(options.signal)
       var text = generatedText || extractText(response)
       if (!text) throw new Error('AI API returned no assistant content.')
       var source = extractSource(text)
+      var fileName = extractFileName(text, options.existingFileName || options.fileName || 'AI-Notation.js')
       if (source.length > MAX_OUTPUT_LENGTH) throw new Error('Generated source is too large.')
 
       var validation = runTool('validate_source', {
          source: source,
-         file_name: options.fileName || 'ai-generated.js',
+         file_name: fileName,
       })
       emitProgress(options, {
          type: 'generation_completed',
@@ -1442,6 +1541,7 @@
       return {
          source: source,
          raw: text,
+         fileName: fileName,
          model: model,
          endpoint: endpoint,
          usedTools: usedTools,
@@ -1475,6 +1575,8 @@
       runTool: runTool,
       validateSource: validateSource,
       extractSource: extractSource,
+      extractFileName: extractFileName,
+      sanitizeFileName: sanitizeFileName,
       generate: generate,
    })
 })

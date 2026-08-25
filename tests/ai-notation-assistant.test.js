@@ -221,6 +221,34 @@ test('generated source is returned without executing it', async () => {
    })
 })
 
+test('generation keeps a safe filename selected by the model', async () => {
+   const response = {
+      ok: true,
+      async text() {
+         return JSON.stringify({ choices: [{ message: {
+            content: [
+               'Filename: ../../Cantor Normal Form.js',
+               '```js',
+               'register.push({ id: "cantor-normal-form" });',
+               '```',
+            ].join('\n'),
+         } }] })
+      },
+   }
+   await withGlobalsAsync({
+      fetch: async () => response,
+      sessionStorage: { setItem() {}, removeItem() {}, getItem() { return null } },
+   }, async () => {
+      const result = await assistant.generate({
+         apiKey: 'key', baseUrl: 'https://example.test', prompt: 'Create CNF', context: 'ctx',
+      })
+      assert.equal(result.fileName, 'Cantor-Normal-Form.js')
+      assert.equal(result.validation.fileName, 'Cantor-Normal-Form.js')
+      assert.match(result.source, /cantor-normal-form/)
+   })
+   assert.equal(assistant.extractFileName('Filename: CON\n```js\n1\n```', 'AI-Notation.js'), 'AI-CON.js')
+})
+
 test('generation sends only the current conversation text history before the new request', async () => {
    const requests = []
    const response = {
@@ -746,24 +774,288 @@ test('stream and tool capability errors stay on Chat Completions fallbacks', asy
    assert.equal(Object.prototype.hasOwnProperty.call(toolRequests[1].body, 'tools'), false)
 })
 
-test('tool loop stops with a safety error after the configured round limit', async () => {
-   const toolCallResponse = {
-      ok: true,
-      async text() {
-         return JSON.stringify({ choices: [{ message: {
-            tool_calls: [{ id: 'call-1', function: { name: 'list_notations', arguments: '{}' } }],
-         } }] })
+test('Chat tool loops continue beyond eight rounds until the model finalizes', async () => {
+   let requestCount = 0
+   const events = []
+   await withGlobalsAsync({
+      register: [],
+      analysis_register: [],
+      fetch: async () => {
+         requestCount++
+         return {
+            ok: true,
+            async text() {
+               if (requestCount <= 9) {
+                  return JSON.stringify({ choices: [{ message: {
+                     tool_calls: [{
+                        id: 'call-' + requestCount,
+                        function: { name: 'list_notations', arguments: '{}' },
+                     }],
+                  } }] })
+               }
+               return JSON.stringify({ choices: [{ message: {
+                  content: '```js\nregister.push({ id: "long-chat-loop" });\n```',
+               } }] })
+            },
+         }
       },
-   }
+      sessionStorage: { setItem() {}, removeItem() {}, getItem() { return null } },
+   }, async () => {
+      const result = await assistant.generate({
+         apiKey: 'key', baseUrl: 'https://example.test', prompt: 'keep exploring', context: 'ctx',
+         onProgress(event) { events.push(event) },
+      })
+      assert.match(result.source, /long-chat-loop/)
+   })
+
+   assert.equal(requestCount, 10)
+   assert.equal(events.filter((event) => event.type === 'model_request_started').length, 10)
+   assert.equal(events.find((event) => event.type === 'generation_completed').rounds, 10)
+})
+
+test('Responses tool loops continue beyond eight rounds until the model finalizes', async () => {
+   const requests = []
+   let responseRound = 0
+   await withGlobalsAsync({
+      register: [],
+      analysis_register: [],
+      fetch: async (endpoint, options) => {
+         requests.push({ endpoint, body: JSON.parse(options.body) })
+         if (/chat\/completions$/.test(endpoint)) {
+            return {
+               ok: false,
+               status: 502,
+               async text() { return JSON.stringify({ message: 'Chat Completions not enabled' }) },
+            }
+         }
+         responseRound++
+         return {
+            ok: true,
+            async text() {
+               if (responseRound <= 9) {
+                  return JSON.stringify({
+                     status: 'completed',
+                     output: [{
+                        type: 'function_call', id: 'item-' + responseRound,
+                        call_id: 'call-' + responseRound, name: 'list_notations', arguments: '{}',
+                     }],
+                  })
+               }
+               return JSON.stringify({
+                  status: 'completed',
+                  output: [{
+                     type: 'message', role: 'assistant', content: [{
+                        type: 'output_text',
+                        text: 'Filename: Long Responses Loop.js\n```js\nregister.push({ id: "long-responses-loop" });\n```',
+                     }],
+                  }],
+               })
+            },
+         }
+      },
+      sessionStorage: { setItem() {}, removeItem() {}, getItem() { return null } },
+   }, async () => {
+      const result = await assistant.generate({
+         apiKey: 'key', baseUrl: 'https://example.test/v1', prompt: 'keep exploring', context: 'ctx',
+         onProgress() {},
+      })
+      assert.equal(result.protocol, 'responses')
+      assert.equal(result.fileName, 'Long-Responses-Loop.js')
+      assert.match(result.source, /long-responses-loop/)
+   })
+
+   assert.equal(responseRound, 10)
+   assert.equal(requests.length, 11)
+   const finalInput = requests.at(-1).body.input
+   assert.deepEqual(finalInput.slice(-2).map((item) => item.type), [
+      'function_call', 'function_call_output',
+   ])
+   assert.equal(finalInput.at(-1).call_id, 'call-9')
+})
+
+test('an AbortSignal stops a continuing tool loop', async () => {
+   const controller = new AbortController()
+   let requestCount = 0
+
    await assert.rejects(
       () => withGlobalsAsync({
          register: [],
          analysis_register: [],
-         fetch: async () => toolCallResponse,
+         fetch: async (_endpoint, options) => {
+            assert.ok(options.signal)
+            requestCount++
+            return {
+               ok: true,
+               async text() {
+                  return JSON.stringify({ choices: [{ message: {
+                     tool_calls: [{
+                        id: 'call-' + requestCount,
+                        function: { name: 'list_notations', arguments: '{}' },
+                     }],
+                  } }] })
+               },
+            }
+         },
          sessionStorage: { setItem() {}, removeItem() {}, getItem() { return null } },
-      }, () => assistant.generate({ apiKey: 'key', baseUrl: 'https://example.test', prompt: 'loop', context: 'ctx' })),
-      /safety limit/
+      }, () => assistant.generate({
+         apiKey: 'key', baseUrl: 'https://example.test', prompt: 'loop', context: 'ctx',
+         signal: controller.signal,
+         onProgress(event) {
+            if (event.type === 'model_request_started' && event.round === 3) controller.abort()
+         },
+      })),
+      (error) => error && error.name === 'AbortError'
    )
+
+   assert.equal(requestCount, 2)
+})
+
+test('aborting after a Chat Completions model response never resolves source', async () => {
+   const controller = new AbortController()
+   const events = []
+
+   await assert.rejects(
+      () => withGlobalsAsync({
+         fetch: async () => ({
+            ok: true,
+            async text() {
+               return JSON.stringify({ choices: [{ message: {
+                  content: '```js\nregister.push({ id: "cancelled-chat-result" });\n```',
+               } }] })
+            },
+         }),
+         sessionStorage: { setItem() {}, removeItem() {}, getItem() { return null } },
+      }, () => assistant.generate({
+         apiKey: 'key', baseUrl: 'https://example.test', prompt: 'stop after result', context: 'ctx',
+         signal: controller.signal,
+         onProgress(event) {
+            events.push(event)
+            if (event.type === 'model_response_received' && event.protocol === 'chat_completions') {
+               controller.abort()
+            }
+         },
+      })),
+      (error) => error && error.name === 'AbortError'
+   )
+
+   assert.equal(events.some((event) => event.type === 'generation_completed'), false)
+})
+
+test('aborting during a Chat Completions tool handoff skips the tool execution', async () => {
+   const controller = new AbortController()
+   let inspectCalls = 0
+
+   await assert.rejects(
+      () => withGlobalsAsync({
+         register: [{
+            id: 'abort-fixture',
+            name: 'Abort fixture',
+            init() {
+               inspectCalls++
+               return []
+            },
+            display(value) { return String(value) },
+         }],
+         analysis_register: [],
+         fetch: async () => ({
+            ok: true,
+            async text() {
+               return JSON.stringify({ choices: [{ message: {
+                  tool_calls: [{
+                     id: 'inspect-call',
+                     function: { name: 'inspect_notation', arguments: '{"notation_id":"abort-fixture"}' },
+                  }],
+               } }] })
+            },
+         }),
+         sessionStorage: { setItem() {}, removeItem() {}, getItem() { return null } },
+      }, () => assistant.generate({
+         apiKey: 'key', baseUrl: 'https://example.test', prompt: 'inspect then stop', context: 'ctx',
+         signal: controller.signal,
+         onProgress(event) {
+            if (event.type === 'tool_call_started' && event.protocol === 'chat_completions') {
+               setTimeout(() => controller.abort(), 0)
+            }
+         },
+      })),
+      (error) => error && error.name === 'AbortError'
+   )
+
+   assert.equal(inspectCalls, 0)
+})
+
+test('Responses API cancellation stops before tool execution and final source resolution', async () => {
+   async function runCase(mode) {
+      const controller = new AbortController()
+      let inspectCalls = 0
+      const events = []
+      await assert.rejects(
+         () => withGlobalsAsync({
+            register: [{
+               id: 'responses-abort-fixture',
+               name: 'Responses abort fixture',
+               init() {
+                  inspectCalls++
+                  return []
+               },
+               display(value) { return String(value) },
+            }],
+            analysis_register: [],
+            fetch: async (endpoint) => {
+               if (/chat\/completions$/.test(endpoint)) {
+                  return {
+                     ok: false,
+                     status: 502,
+                     async text() { return JSON.stringify({ message: 'Chat Completions not enabled' }) },
+                  }
+               }
+               return {
+                  ok: true,
+                  async text() {
+                     if (mode === 'tool') {
+                        return JSON.stringify({
+                           status: 'completed',
+                           output: [{
+                              type: 'function_call', id: 'responses-inspect-item', call_id: 'responses-inspect-call',
+                              name: 'inspect_notation', arguments: '{"notation_id":"responses-abort-fixture"}',
+                           }],
+                        })
+                     }
+                     return JSON.stringify({
+                        status: 'completed',
+                        output: [{
+                           type: 'message', role: 'assistant', content: [{
+                              type: 'output_text',
+                              text: '```js\nregister.push({ id: "cancelled-responses-result" });\n```',
+                           }],
+                        }],
+                     })
+                  },
+               }
+            },
+            sessionStorage: { setItem() {}, removeItem() {}, getItem() { return null } },
+         }, () => assistant.generate({
+            apiKey: 'key', baseUrl: 'https://example.test/v1', prompt: 'stop in Responses', context: 'ctx',
+            signal: controller.signal,
+            onProgress(event) {
+               events.push(event)
+               if (mode === 'tool' && event.type === 'tool_call_started' && event.protocol === 'responses') {
+                  setTimeout(() => controller.abort(), 0)
+               }
+               if (mode === 'result' && event.type === 'model_response_received' && event.protocol === 'responses') {
+                  controller.abort()
+               }
+            },
+         })),
+         (error) => error && error.name === 'AbortError'
+      )
+      return { inspectCalls, events }
+   }
+
+   const toolCase = await runCase('tool')
+   assert.equal(toolCase.inspectCalls, 0)
+   const resultCase = await runCase('result')
+   assert.equal(resultCase.events.some((event) => event.type === 'generation_completed'), false)
 })
 
 test('authoring context is bundled and generation does not fetch the guide', async () => {

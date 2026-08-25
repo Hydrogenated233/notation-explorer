@@ -1888,6 +1888,8 @@ html.dark .ne-standalone-readonly__download:hover:not(:disabled) {
   display: flex;
   min-height: 42px;
   align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   border-bottom: 1px solid #d7dce3;
 }
 .ne-ai-page__header h3 {
@@ -1896,6 +1898,28 @@ html.dark .ne-standalone-readonly__download:hover:not(:disabled) {
   font-size: 18px;
   font-weight: 650;
   letter-spacing: 0;
+}
+.ne-ai-page__view-switch {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid #cfd4dc;
+  border-radius: 4px;
+  background: #f8fafc;
+}
+.ne-ai-page__view-switch button {
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: #475467;
+  font: inherit;
+  font-size: 12px;
+}
+.ne-ai-page__view-switch button.active {
+  background: #fff;
+  color: #1d4ed8;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12);
 }
 .ne-ai-page__tabs {
   display: flex;
@@ -2138,6 +2162,10 @@ html.dark .ne-standalone-readonly__download:hover:not(:disabled) {
   border-color: #dc2626;
   background: #dc2626;
 }
+.ne-ai-page__activity-entry.is-cancelled .ne-ai-page__activity-marker {
+  border-color: #64748b;
+  background: #64748b;
+}
 .ne-ai-page__activity-body {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -2243,6 +2271,60 @@ html.dark .ne-standalone-readonly__download:hover:not(:disabled) {
   border-color: #1d4ed8;
   background: #1d4ed8;
 }
+.ne-ai-page__button.is-danger {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #fff;
+}
+.ne-ai-page__button.is-danger:hover:not(:disabled) {
+  border-color: #b91c1c;
+  background: #b91c1c;
+}
+.ne-ai-page__archive {
+  padding: 14px 0 24px;
+}
+.ne-ai-page__archive-empty {
+  margin: 0;
+  padding: 16px 0;
+  color: #667085;
+  font-size: 13px;
+}
+.ne-ai-page__archive-list {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid #e4e7ec;
+  list-style: none;
+}
+.ne-ai-page__archive-entry {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 0;
+  border-bottom: 1px solid #e4e7ec;
+}
+.ne-ai-page__archive-summary {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.ne-ai-page__archive-summary strong {
+  overflow: hidden;
+  color: #1f2937;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ne-ai-page__archive-summary span {
+  color: #667085;
+  font-size: 11px;
+}
+.ne-ai-page__archive-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
 
 html.dark .ne-ai-page {
   color: #d1d5db;
@@ -2253,6 +2335,17 @@ html.dark .ne-ai-page__tabs {
 }
 html.dark .ne-ai-page__header h3 {
   color: #e5e7eb;
+}
+html.dark .ne-ai-page__view-switch {
+  border-color: #4b4f57;
+  background: #24262a;
+}
+html.dark .ne-ai-page__view-switch button {
+  color: #aeb3bc;
+}
+html.dark .ne-ai-page__view-switch button.active {
+  background: #34373c;
+  color: #a8c7ff;
 }
 html.dark .ne-ai-page__tab-group {
   border-color: #4b4f57;
@@ -2350,6 +2443,17 @@ html.dark .ne-ai-page__message.is-user header {
 html.dark .ne-ai-page__message pre {
   color: #e5e7eb;
 }
+html.dark .ne-ai-page__archive-list,
+html.dark .ne-ai-page__archive-entry {
+  border-color: #41444b;
+}
+html.dark .ne-ai-page__archive-summary strong {
+  color: #e5e7eb;
+}
+html.dark .ne-ai-page__archive-summary span,
+html.dark .ne-ai-page__archive-empty {
+  color: #9ca3af;
+}
 html.dark .ne-ai-page__button {
   border-color: #4b5563;
   background: #2b2d31;
@@ -2375,6 +2479,19 @@ html.dark .ne-ai-page__button.is-primary:hover:not(:disabled) {
   }
   .ne-ai-page__settings {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .ne-ai-page__header,
+  .ne-ai-page__archive-entry {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .ne-ai-page__view-switch,
+  .ne-ai-page__archive-actions {
+    width: 100%;
+  }
+  .ne-ai-page__view-switch button,
+  .ne-ai-page__archive-actions .ne-ai-page__button {
+    flex: 1 1 0;
   }
   .ne-ai-page__messages {
     min-height: 180px;

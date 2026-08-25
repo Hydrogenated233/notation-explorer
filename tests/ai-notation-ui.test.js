@@ -55,40 +55,131 @@ test('AI notation is a separate navigation page and is absent from the local-fil
    )
 })
 
-test('conversation tabs persist in session storage without the API key', () => {
+test('active and archived conversations persist in local storage without the API key', () => {
    const originalSessionStorage = globalThis.sessionStorage
-   const store = memoryStorage()
-   globalThis.sessionStorage = store
+   const originalLocalStorage = globalThis.localStorage
+   const originalConfirm = globalThis.confirm
+   const sessionStore = memoryStorage()
+   const localStore = memoryStorage()
+   globalThis.sessionStorage = sessionStore
+   globalThis.localStorage = localStore
+   globalThis.confirm = () => true
 
    try {
+      sessionStore.setItem('ne-ai-conversations-v1', JSON.stringify({
+         activeId: 'legacy-first',
+         conversations: [{
+            id: 'legacy-first', title: '', draft: 'First notation request', messages: [],
+            toolMode: 'auto', fileId: '', fileName: '', createdAt: 1, updatedAt: 1,
+         }],
+      }))
       const vm = createVm()
       vm.loadConversations()
       const first = vm.activeConversation
-      vm.updateDraft('First notation request')
       const second = vm.createConversation()
       assert.equal(vm.conversations.length, 2)
       assert.equal(vm.activeConversationId, second.id)
       vm.updateDraft('Second notation request')
       vm.selectConversation(first.id)
       assert.equal(vm.activeDraft, 'First notation request')
-      assert.equal(vm.closeConversation(first.id), true)
+      assert.equal(vm.archiveConversation(first.id), true)
       assert.equal(vm.activeConversationId, second.id)
-      assert.equal(vm.closeConversation(second.id), false)
+      assert.equal(vm.archivedConversations[0].id, first.id)
 
       vm.apiKey = 'must-not-be-in-conversations'
       second.activity = [{ id: 'activity-secret', type: 'tool_call_finished', detail: 'ephemeral-output' }]
       vm.persistConversations()
-      const serialized = store.values.get('ne-ai-conversations-v1')
+      const serialized = localStore.values.get('ne-ai-conversations-v2')
       assert.doesNotMatch(serialized, /must-not-be-in-conversations/)
       assert.doesNotMatch(serialized, /ephemeral-output|activity-secret/)
+      assert.match(serialized, /archivedConversations/)
+      assert.equal(sessionStore.getItem('ne-ai-conversations-v1'), null)
 
       const restored = createVm()
       restored.loadConversations()
       assert.equal(restored.conversations.length, 1)
       assert.equal(restored.activeDraft, 'Second notation request')
       assert.equal(restored.activeConversationId, second.id)
+      assert.equal(restored.archivedConversations[0].id, first.id)
+      assert.equal(restored.restoreConversation(first.id), true)
+      assert.equal(restored.activeConversationId, first.id)
+      assert.equal(restored.activeDraft, 'First notation request')
    } finally {
       globalThis.sessionStorage = originalSessionStorage
+      globalThis.localStorage = originalLocalStorage
+      globalThis.confirm = originalConfirm
+   }
+})
+
+test('archive and permanent delete each require confirmation', () => {
+   const originalLocalStorage = globalThis.localStorage
+   const originalConfirm = globalThis.confirm
+   globalThis.localStorage = memoryStorage()
+   const confirmations = []
+   let allow = false
+   globalThis.confirm = (message) => {
+      confirmations.push(message)
+      return allow
+   }
+
+   try {
+      const vm = createVm()
+      vm.loadConversations()
+      const first = vm.activeConversation
+      first.title = 'Cantor notation'
+
+      assert.equal(vm.archiveConversation(first.id), false)
+      assert.equal(vm.archivedConversations.length, 0)
+      allow = true
+      assert.equal(vm.archiveConversation(first.id), true)
+      assert.equal(vm.conversations.length, 1)
+      assert.notEqual(vm.activeConversationId, first.id)
+      assert.equal(vm.archivedConversations[0].id, first.id)
+
+      allow = false
+      assert.equal(vm.deleteArchivedConversation(first.id), false)
+      assert.equal(vm.archivedConversations.length, 1)
+      allow = true
+      assert.equal(vm.deleteArchivedConversation(first.id), true)
+      assert.equal(vm.archivedConversations.length, 0)
+      assert.equal(confirmations.length, 4)
+      assert.match(component.template, /@click\.stop="archiveConversation\(conversation\.id\)"/)
+      assert.match(component.template, /deleteArchivedConversation\(conversation\.id\)/)
+   } finally {
+      globalThis.localStorage = originalLocalStorage
+      globalThis.confirm = originalConfirm
+   }
+})
+
+test('archiving respects running state and restoring respects the active-tab limit', () => {
+   const originalLocalStorage = globalThis.localStorage
+   const originalConfirm = globalThis.confirm
+   globalThis.localStorage = memoryStorage()
+   let confirmCalls = 0
+   globalThis.confirm = () => {
+      confirmCalls++
+      return true
+   }
+
+   try {
+      const vm = createVm()
+      vm.loadConversations()
+      const running = vm.activeConversation
+      running.busy = true
+      assert.equal(vm.archiveConversation(running.id), false)
+      assert.equal(confirmCalls, 0)
+      running.busy = false
+      assert.equal(vm.archiveConversation(running.id), true)
+      const archivedId = vm.archivedConversations[0].id
+
+      while (vm.canCreateConversation) vm.createConversation()
+      assert.equal(vm.conversations.length, 8)
+      assert.equal(vm.restoreConversation(archivedId), false)
+      assert.equal(vm.archivedConversations[0].id, archivedId)
+      assert.equal(vm.deleteArchivedConversation(vm.activeConversationId), false)
+   } finally {
+      globalThis.localStorage = originalLocalStorage
+      globalThis.confirm = originalConfirm
    }
 })
 
@@ -182,6 +273,55 @@ test('generation keeps histories isolated and writes disabled untrusted local fi
    })
 })
 
+test('new AI local files use a safe model-selected filename and resolve duplicates', async () => {
+   const originalAssistant = globalThis.AINotationAssistant
+   const originalRuntime = globalThis.localNotationManager
+   const created = []
+   const files = [{ id: 'existing', name: 'Cantor-Normal-Form.js' }]
+   let run = 0
+   globalThis.localNotationManager = {
+      listFiles() { return files.concat(created.map((entry, index) => ({ id: 'created-' + index, name: entry.name }))) },
+      createUpload(name, source, trusted) {
+         const file = { id: 'created-' + created.length, name, source, enabled: false, trusted: !!trusted }
+         created.push(file)
+         return { file }
+      },
+   }
+   globalThis.AINotationAssistant = {
+      writeSessionSettings() {},
+      async generate() {
+         run++
+         return {
+            source: 'register.push({ id: "generated-' + run + '" });',
+            raw: 'result ' + run,
+            fileName: run === 1 ? '../../Cantor Normal Form.js' : 'Cantor-Normal-Form.js',
+            validation: { valid: true },
+         }
+      },
+   }
+   const vm = createVm({ apiKey: 'session-key' })
+   const conversation = {
+      id: 'filename', title: '', draft: 'Create one', messages: [], toolMode: 'auto',
+      fileId: '', fileName: '', busy: false, error: '', notice: '', activity: [],
+      startedAt: 0, finishedAt: 0, createdAt: 1, updatedAt: 1,
+   }
+   vm.conversations = [conversation]
+   vm.activeConversationId = conversation.id
+
+   try {
+      assert.equal(await vm.generate(), true)
+      assert.equal(created[0].name, 'Cantor-Normal-Form-2.js')
+      conversation.fileId = ''
+      conversation.fileName = ''
+      conversation.draft = 'Create another'
+      assert.equal(await vm.generate(), true)
+      assert.equal(created[1].name, 'Cantor-Normal-Form-3.js')
+   } finally {
+      globalThis.AINotationAssistant = originalAssistant
+      globalThis.localNotationManager = originalRuntime
+   }
+})
+
 test('another conversation can be opened while a request is running', async () => {
    const originalAssistant = globalThis.AINotationAssistant
    const originalRuntime = globalThis.localNotationManager
@@ -222,6 +362,73 @@ test('another conversation can be opened while a request is running', async () =
       assert.equal(await generation, true)
       assert.equal(first.busy, false)
       assert.equal(vm.activeConversationId, second.id)
+   } finally {
+      globalThis.AINotationAssistant = originalAssistant
+      globalThis.localNotationManager = originalRuntime
+   }
+})
+
+test('a running conversation can be stopped without reporting generation failure', async () => {
+   const originalAssistant = globalThis.AINotationAssistant
+   const originalRuntime = globalThis.localNotationManager
+   let createCalls = 0
+
+   globalThis.localNotationManager = {
+      listFiles() { return [] },
+      createUpload(name, source, trusted) {
+         createCalls++
+         return { file: { id: 'background-file', name, source, enabled: false, trusted: !!trusted } }
+      },
+   }
+   globalThis.AINotationAssistant = {
+      writeSessionSettings() {},
+      generate(options) {
+         return new Promise((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => {
+               const error = new Error('The operation was aborted.')
+               error.name = 'AbortError'
+               reject(error)
+            }, { once: true })
+         })
+      },
+   }
+
+   const vm = createVm({ apiKey: 'session-key' })
+   const conversation = {
+      id: 'stoppable', title: '', draft: 'Create one', messages: [], toolMode: 'auto',
+      fileId: '', fileName: '', busy: false, error: '', notice: '', activity: [],
+      startedAt: 0, finishedAt: 0, createdAt: 1, updatedAt: 1,
+   }
+   vm.conversations = [conversation]
+   vm.activeConversationId = conversation.id
+
+   try {
+      const generation = vm.generate()
+      await Promise.resolve()
+      assert.equal(vm.stopGeneration(conversation), true)
+      assert.equal(await generation, false)
+      assert.equal(createCalls, 0)
+      assert.equal(conversation.error, '')
+      assert.match(conversation.notice, /stopped|cancelled/i)
+      assert.equal(conversation.activity.at(-1).type, 'generation_cancelled')
+      assert.match(component.template, /@click="stopGeneration\(activeConversation\)"/)
+
+      globalThis.AINotationAssistant = {
+         writeSessionSettings() {},
+         async generate(options) {
+            assert.equal(options.prompt, 'Create one')
+            return {
+               source: 'register.push({ id: "restarted" });',
+               raw: 'restart result',
+               validation: { valid: true },
+            }
+         },
+      }
+      assert.equal(await vm.restartGeneration(conversation), true)
+      assert.equal(conversation.cancelled, false)
+      assert.equal(conversation.fileId, 'background-file')
+      assert.equal(createCalls, 1)
+      assert.match(component.template, /@click="restartGeneration\(activeConversation\)"/)
    } finally {
       globalThis.AINotationAssistant = originalAssistant
       globalThis.localNotationManager = originalRuntime
@@ -402,6 +609,22 @@ test('fallback and completion events settle prior running activity', () => {
    assert.match(conversation.activity[3].detail, /final response preview/)
    assert.match(component.template, /activity-live[^>]*role="status"/)
    assert.doesNotMatch(component.template, /ne-ai-page__activity" aria-live/)
+})
+
+test('activity retains all rounds during a long run', () => {
+   const vm = createVm()
+   const conversation = { id: 'long-activity', activity: [], activityAnnouncement: '' }
+   for (let round = 1; round <= 130; round++) {
+      vm.recordActivity(conversation, {
+         type: 'model_request_started', protocol: 'chat_completions', round, timestamp: round,
+      }, 'secret-key')
+      vm.recordActivity(conversation, {
+         type: 'model_response_received', protocol: 'chat_completions', round, timestamp: round,
+      }, 'secret-key')
+   }
+   assert.equal(conversation.activity.length, 260)
+   assert.equal(conversation.activity[0].round, 1)
+   assert.equal(conversation.activity.at(-1).round, 130)
 })
 
 test('generation rechecks linked-file trust after the API request', async () => {

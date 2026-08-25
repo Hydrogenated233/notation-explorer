@@ -6,25 +6,36 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function(root) {
    'use strict'
 
-   var SESSION_KEY = 'ne-ai-conversations-v1'
+   var CONVERSATION_KEY = 'ne-ai-conversations-v2'
+   var LEGACY_SESSION_KEY = 'ne-ai-conversations-v1'
    var MAX_CONVERSATIONS = 8
    var MAX_MESSAGES = 12
    var MAX_MESSAGE_LENGTH = 12000
    var MAX_DRAFT_LENGTH = 20000
    var MAX_TITLE_LENGTH = 72
-   var MAX_ACTIVITY_ENTRIES = 120
    var MAX_ACTIVITY_DETAIL_LENGTH = 4000
    var conversationSequence = 0
    var messageSequence = 0
    var activitySequence = 0
+   var generationControllers = Object.create(null)
 
    var STRINGS = {
       en: {
          title: 'AI Notation',
          conversations: 'Conversations',
+         activeConversations: 'Active',
+         archivedConversations: 'Archived',
+         archiveConversation: 'Archive conversation',
+         archiveConfirm: 'Archive "{title}"? You can restore it from Archived conversations.',
+         restoreConversation: 'Restore',
+         deleteConversation: 'Delete permanently',
+         deleteConfirm: 'Permanently delete "{title}"? This cannot be undone.',
+         noArchivedConversations: 'No archived conversations.',
+         persistenceFailed: 'Conversations could not be saved to browser storage.',
          newConversation: 'New conversation',
-         closeConversation: 'Close conversation',
-         conversationLimit: 'Close a conversation before opening another.',
+         closeConversation: 'Archive conversation',
+         conversationLimit: 'Archive a conversation before opening another.',
+         restoreLimit: 'Archive an active conversation before restoring another.',
          untitledConversation: 'Conversation {number}',
          baseUrl: 'Base URL',
          apiKey: 'API key',
@@ -33,6 +44,10 @@
          promptPlaceholder: 'Describe the notation to create or refine...',
          generate: 'Generate',
          generating: 'Generating...',
+         stop: 'Stop',
+         restart: 'Restart',
+         stopping: 'Stopping generation...',
+         stopped: 'Generation stopped. The request was preserved and can be restarted.',
          clearKey: 'Clear key',
          openEditor: 'Open in local editor',
          noMessages: 'No messages yet.',
@@ -65,14 +80,26 @@
          activityWriting: 'Writing generated source to the local editor',
          activityWritten: 'Generated source written to {file}',
          activityFailed: 'Generation failed',
+         activityStopping: 'Stopping generation',
+         activityCancelled: 'Generation stopped',
          activitySeconds: '{seconds}s',
       },
       zh: {
          title: 'AI \u8bb0\u53f7',
          conversations: '\u4f1a\u8bdd',
+         activeConversations: '\u5f53\u524d\u4f1a\u8bdd',
+         archivedConversations: '\u5df2\u5f52\u6863',
+         archiveConversation: '\u5f52\u6863\u4f1a\u8bdd',
+         archiveConfirm: '\u5f52\u6863\u201c{title}\u201d\uff1f\u4e4b\u540e\u53ef\u4ee5\u5728\u5df2\u5f52\u6863\u4f1a\u8bdd\u4e2d\u6062\u590d\u3002',
+         restoreConversation: '\u6062\u590d',
+         deleteConversation: '\u6c38\u4e45\u5220\u9664',
+         deleteConfirm: '\u6c38\u4e45\u5220\u9664\u201c{title}\u201d\uff1f\u6b64\u64cd\u4f5c\u65e0\u6cd5\u64a4\u9500\u3002',
+         noArchivedConversations: '\u6682\u65e0\u5df2\u5f52\u6863\u4f1a\u8bdd\u3002',
+         persistenceFailed: '\u65e0\u6cd5\u5c06\u4f1a\u8bdd\u4fdd\u5b58\u5230\u6d4f\u89c8\u5668\u5b58\u50a8\u3002',
          newConversation: '\u65b0\u5efa\u4f1a\u8bdd',
-         closeConversation: '\u5173\u95ed\u4f1a\u8bdd',
-         conversationLimit: '\u8bf7\u5148\u5173\u95ed\u4e00\u4e2a\u4f1a\u8bdd\u3002',
+         closeConversation: '\u5f52\u6863\u4f1a\u8bdd',
+         conversationLimit: '\u8bf7\u5148\u5f52\u6863\u4e00\u4e2a\u4f1a\u8bdd\u540e\u518d\u65b0\u5efa\u3002',
+         restoreLimit: '\u8bf7\u5148\u5f52\u6863\u4e00\u4e2a\u5f53\u524d\u4f1a\u8bdd\u540e\u518d\u6062\u590d\u3002',
          untitledConversation: '\u4f1a\u8bdd {number}',
          baseUrl: 'Base URL',
          apiKey: 'API Key',
@@ -81,6 +108,10 @@
          promptPlaceholder: '\u63cf\u8ff0\u8981\u521b\u5efa\u6216\u7ee7\u7eed\u4fee\u6539\u7684\u8bb0\u53f7...',
          generate: '\u751f\u6210',
          generating: '\u6b63\u5728\u751f\u6210...',
+         stop: '\u505c\u6b62',
+         restart: '\u91cd\u65b0\u5f00\u59cb',
+         stopping: '\u6b63\u5728\u505c\u6b62\u751f\u6210...',
+         stopped: '\u751f\u6210\u5df2\u505c\u6b62\u3002\u9700\u6c42\u5df2\u4fdd\u7559\uff0c\u53ef\u4ee5\u91cd\u65b0\u5f00\u59cb\u3002',
          clearKey: '\u6e05\u9664 Key',
          openEditor: '\u5728\u672c\u5730\u7f16\u8f91\u5668\u4e2d\u6253\u5f00',
          noMessages: '\u6682\u65e0\u6d88\u606f\u3002',
@@ -113,6 +144,8 @@
          activityWriting: '\u6b63\u5728\u5c06\u751f\u6210\u6e90\u7801\u5199\u5165\u672c\u5730\u7f16\u8f91\u5668',
          activityWritten: '\u751f\u6210\u6e90\u7801\u5df2\u5199\u5165 {file}',
          activityFailed: '\u751f\u6210\u5931\u8d25',
+         activityStopping: '\u6b63\u5728\u505c\u6b62\u751f\u6210',
+         activityCancelled: '\u751f\u6210\u5df2\u505c\u6b62',
          activitySeconds: '{seconds} \u79d2',
       },
    }
@@ -120,6 +153,14 @@
    function sessionStorage() {
       try {
          return root && root.sessionStorage || null
+      } catch (error) {
+         return null
+      }
+   }
+
+   function persistentStorage() {
+      try {
+         return root && root.localStorage || null
       } catch (error) {
          return null
       }
@@ -149,6 +190,17 @@
          patterns.push(escapeRegExp(secret.slice(0, length)))
       }
       return text.replace(new RegExp(patterns.join('|'), 'g'), '[REDACTED]')
+   }
+
+   function sanitizeGeneratedFileName(value, fallback) {
+      var name = String(value || '').trim().replace(/^[`'\"]+|[`'\"]+$/g, '')
+      name = name.split(/[\\/]/).pop().replace(/[<>:"|?*\x00-\x1F]/g, '-').replace(/\s+/g, '-')
+      name = name.replace(/-+/g, '-').replace(/^[.\-]+|[.\-]+$/g, '')
+      if (!name) name = String(fallback || 'AI-Notation.js').trim()
+      if (!/\.js$/i.test(name)) name += '.js'
+      if (/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])\.js$/i.test(name)) name = 'AI-' + name
+      if (name.length > 96) name = name.slice(0, 93).replace(/[.\-]+$/g, '') + '.js'
+      return name || 'AI-Notation.js'
    }
 
    function randomId(prefix, sequence) {
@@ -233,6 +285,8 @@
          fileId: '',
          fileName: '',
          busy: false,
+         cancelled: false,
+         archivedAt: 0,
          error: '',
          notice: '',
          activity: [],
@@ -256,7 +310,7 @@
       }
    }
 
-   function sanitizeConversation(value, seenIds) {
+   function sanitizeConversation(value, seenIds, archived) {
       if (!value || typeof value !== 'object') return null
       var id = typeof value.id === 'string' ? value.id.slice(0, 128) : ''
       if (!id || seenIds.has(id)) return null
@@ -275,12 +329,14 @@
          fileId: typeof value.fileId === 'string' ? value.fileId.slice(0, 128) : '',
          fileName: typeof value.fileName === 'string' ? value.fileName.slice(0, 255) : '',
          busy: false,
+         cancelled: value.cancelled === true,
          error: '',
          notice: '',
          activity: [],
          activityAnnouncement: '',
          startedAt: 0,
          finishedAt: 0,
+         archivedAt: archived ? Math.max(0, Number(value.archivedAt) || Number(value.updatedAt) || createdAt) : 0,
          createdAt: createdAt,
          updatedAt: Number(value.updatedAt) || createdAt,
       }
@@ -295,6 +351,8 @@
          toolMode: conversation.toolMode === 'plain' ? 'plain' : 'auto',
          fileId: typeof conversation.fileId === 'string' ? conversation.fileId.slice(0, 128) : '',
          fileName: typeof conversation.fileName === 'string' ? conversation.fileName.slice(0, 255) : '',
+         cancelled: conversation.cancelled === true,
+         archivedAt: Math.max(0, Number(conversation.archivedAt) || 0),
          createdAt: Number(conversation.createdAt) || Date.now(),
          updatedAt: Number(conversation.updatedAt) || Date.now(),
       }
@@ -307,8 +365,20 @@
          <section class="ne-ai-page" :aria-label="copy.title">
             <header class="ne-ai-page__header">
                <h3>{{ copy.title }}</h3>
+               <div class="ne-ai-page__view-switch" role="group" :aria-label="copy.conversations">
+                  <button type="button" :aria-pressed="String(conversationView === 'active')"
+                     :class="{ active: conversationView === 'active' }"
+                     @click="showConversationView('active')">{{ copy.activeConversations }}</button>
+                  <button type="button" :aria-pressed="String(conversationView === 'archived')"
+                     :class="{ active: conversationView === 'archived' }"
+                     @click="showConversationView('archived')">
+                     {{ copy.archivedConversations }} ({{ archivedConversationCount }})
+                  </button>
+               </div>
             </header>
+            <div v-if="persistenceError" class="ne-ai-page__error" role="alert">{{ persistenceError }}</div>
 
+            <template v-if="conversationView === 'active'">
             <div class="ne-ai-page__tabs" role="tablist" :aria-label="copy.conversations">
                <div v-for="conversation in conversations" :key="conversation.id"
                   class="ne-ai-page__tab-group" :class="{ 'is-active': conversation.id === activeConversationId }"
@@ -320,10 +390,10 @@
                      <span class="ne-ai-page__tab-label">{{ conversationLabel(conversation) }}</span>
                      <span v-if="conversation.busy" class="ne-ai-page__tab-busy" aria-hidden="true"></span>
                   </button>
-                  <button type="button" class="ne-ai-page__tab-close" :title="copy.closeConversation"
-                     :aria-label="copy.closeConversation + ': ' + conversationLabel(conversation)"
-                     :disabled="conversation.busy || conversations.length <= 1"
-                     @click="closeConversation(conversation.id)">&times;</button>
+                  <button type="button" class="ne-ai-page__tab-close" :title="copy.archiveConversation"
+                     :aria-label="copy.archiveConversation + ': ' + conversationLabel(conversation)"
+                     :disabled="conversation.busy"
+                     @click.stop="archiveConversation(conversation.id)">&times;</button>
                </div>
                <button type="button" class="ne-ai-page__tab-add"
                   :title="canCreateConversation ? copy.newConversation : copy.conversationLimit"
@@ -405,9 +475,15 @@
                         spellcheck="true" @input="updateDraft($event.target.value)"></textarea>
                   </label>
                   <div class="ne-ai-page__actions">
-                     <button type="submit" class="ne-ai-page__button is-primary"
-                        :disabled="activeBusy || !apiKey.trim() || !activeDraft.trim()">
-                        <span>{{ activeBusy ? copy.generating : copy.generate }}</span>
+                     <button v-if="activeBusy" type="button" class="ne-ai-page__button is-danger"
+                        @click="stopGeneration(activeConversation)">{{ copy.stop }}</button>
+                     <button v-else-if="activeConversation.cancelled" type="button"
+                        class="ne-ai-page__button is-primary"
+                        :disabled="!apiKey.trim() || !activeDraft.trim()"
+                        @click="restartGeneration(activeConversation)">{{ copy.restart }}</button>
+                     <button v-else type="submit" class="ne-ai-page__button is-primary"
+                        :disabled="!apiKey.trim() || !activeDraft.trim()">
+                        <span>{{ copy.generate }}</span>
                      </button>
                      <button type="button" class="ne-ai-page__button"
                         :disabled="activeBusy || !apiKey" @click="clearKey">{{ copy.clearKey }}</button>
@@ -416,6 +492,30 @@
                         @click="openInEditor(activeConversation)">{{ copy.openEditor }}</button>
                   </div>
                </form>
+            </section>
+            </template>
+
+            <section v-else class="ne-ai-page__archive" :aria-label="copy.archivedConversations">
+               <p v-if="!archivedConversations.length" class="ne-ai-page__archive-empty">
+                  {{ copy.noArchivedConversations }}
+               </p>
+               <ol v-else class="ne-ai-page__archive-list">
+                  <li v-for="conversation in archivedConversations" :key="conversation.id"
+                     class="ne-ai-page__archive-entry">
+                     <div class="ne-ai-page__archive-summary">
+                        <strong>{{ conversationLabel(conversation) }}</strong>
+                        <span>{{ conversationTimestamp(conversation) }}</span>
+                     </div>
+                     <div class="ne-ai-page__archive-actions">
+                        <button type="button" class="ne-ai-page__button"
+                           :title="canCreateConversation ? copy.restoreConversation : copy.restoreLimit"
+                           :disabled="!canCreateConversation"
+                           @click="restoreConversation(conversation.id)">{{ copy.restoreConversation }}</button>
+                        <button type="button" class="ne-ai-page__button is-danger"
+                           @click="deleteArchivedConversation(conversation.id)">{{ copy.deleteConversation }}</button>
+                     </div>
+                  </li>
+               </ol>
             </section>
          </section>
       `,
@@ -426,7 +526,10 @@
             apiKey: '',
             model: '',
             conversations: [],
+            archivedConversations: [],
             activeConversationId: '',
+            conversationView: 'active',
+            persistenceError: '',
             clockNow: Date.now(),
          }
       },
@@ -449,6 +552,9 @@
          },
          canCreateConversation: function() {
             return this.conversations.length < MAX_CONVERSATIONS
+         },
+         archivedConversationCount: function() {
+            return this.archivedConversations.length
          },
       },
 
@@ -508,41 +614,84 @@
             this.apiKey = ''
             this.saveSettings()
          },
+         stopGeneration: function(conversation) {
+            if (!conversation || !conversation.busy) return false
+            var running = generationControllers[conversation.id]
+            if (!running || !running.controller || running.controller.signal.aborted) return false
+            conversation.notice = this.copy.stopping
+            this.recordActivity(conversation, {
+               type: 'generation_cancel_requested',
+               timestamp: Date.now(),
+            }, running.apiKey)
+            running.controller.abort()
+            return true
+         },
+         restartGeneration: function(conversation) {
+            if (!conversation || conversation.busy || !conversation.cancelled) return false
+            this.activeConversationId = conversation.id
+            return this.generate()
+         },
          loadConversations: function() {
             var conversations = []
+            var archivedConversations = []
             var activeId = ''
-            var store = sessionStorage()
-            if (store && typeof store.getItem === 'function') {
-               try {
-                  var saved = JSON.parse(store.getItem(SESSION_KEY) || 'null')
-                  var seenIds = new Set()
-                  if (saved && Array.isArray(saved.conversations)) {
-                     conversations = saved.conversations.map(function(value) {
-                        return sanitizeConversation(value, seenIds)
-                     }).filter(function(value) { return !!value }).slice(0, MAX_CONVERSATIONS)
-                  }
-                  activeId = saved && typeof saved.activeId === 'string' ? saved.activeId : ''
-               } catch (error) {
-                  conversations = []
+            var saved = null
+            var migrated = false
+            var store = persistentStorage()
+            var legacyStore = sessionStorage()
+            try {
+               var raw = store && typeof store.getItem === 'function'
+                  ? store.getItem(CONVERSATION_KEY) : null
+               if (!raw && legacyStore && typeof legacyStore.getItem === 'function') {
+                  raw = legacyStore.getItem(LEGACY_SESSION_KEY)
+                  migrated = !!raw
                }
+               saved = JSON.parse(raw || 'null')
+            } catch (error) {
+               saved = null
             }
+            var seenIds = new Set()
+            if (saved && Array.isArray(saved.conversations)) {
+               conversations = saved.conversations.map(function(value) {
+                  return sanitizeConversation(value, seenIds, false)
+               }).filter(function(value) { return !!value }).slice(0, MAX_CONVERSATIONS)
+            }
+            if (saved && Array.isArray(saved.archivedConversations)) {
+               archivedConversations = saved.archivedConversations.map(function(value) {
+                  return sanitizeConversation(value, seenIds, true)
+               }).filter(function(value) { return !!value }).sort(function(left, right) {
+                  return right.archivedAt - left.archivedAt
+               })
+            }
+            activeId = saved && typeof saved.activeId === 'string' ? saved.activeId : ''
             if (!conversations.length) conversations.push(newConversation())
             this.conversations = conversations
+            this.archivedConversations = archivedConversations
             this.activeConversationId = conversations.some(function(conversation) {
                return conversation.id === activeId
             }) ? activeId : conversations[0].id
-            this.persistConversations()
+            if (this.persistConversations() && migrated && legacyStore && typeof legacyStore.removeItem === 'function') {
+               try { legacyStore.removeItem(LEGACY_SESSION_KEY) } catch (error) {}
+            }
          },
          persistConversations: function() {
-            var store = sessionStorage()
-            if (!store || typeof store.setItem !== 'function') return
+            var store = persistentStorage()
+            if (!store || typeof store.setItem !== 'function') {
+               this.persistenceError = this.copy.persistenceFailed
+               return false
+            }
             try {
-               store.setItem(SESSION_KEY, JSON.stringify({
+               store.setItem(CONVERSATION_KEY, JSON.stringify({
+                  version: 2,
                   activeId: this.activeConversationId,
                   conversations: this.conversations.map(conversationSnapshot).slice(0, MAX_CONVERSATIONS),
+                  archivedConversations: this.archivedConversations.map(conversationSnapshot),
                }))
+               this.persistenceError = ''
+               return true
             } catch (error) {
-               // Conversations remain available in memory if storage is full or blocked.
+               this.persistenceError = this.copy.persistenceFailed
+               return false
             }
          },
          tabId: function(id) {
@@ -555,7 +704,23 @@
             if (!conversation) return ''
             if (conversation.title) return conversation.title
             var index = this.conversations.indexOf(conversation)
+            if (index < 0) index = this.archivedConversations.indexOf(conversation)
             return this.copy.untitledConversation.replace('{number}', String(index < 0 ? 1 : index + 1))
+         },
+         conversationTimestamp: function(conversation) {
+            var value = Number(conversation && (conversation.archivedAt || conversation.updatedAt)) || 0
+            if (!value) return ''
+            try { return new Date(value).toLocaleString() } catch (error) { return '' }
+         },
+         showConversationView: function(view) {
+            if (view !== 'active' && view !== 'archived') return false
+            this.conversationView = view
+            return true
+         },
+         confirmAction: function(message) {
+            var confirm = root && root.confirm
+            if (typeof confirm !== 'function') return false
+            try { return !!confirm(message) } catch (error) { return false }
          },
          selectConversation: function(id) {
             if (!this.conversations.some(function(conversation) { return conversation.id === id })) return
@@ -570,15 +735,52 @@
             this.persistConversations()
             return conversation
          },
-         closeConversation: function(id) {
-            if (this.conversations.length <= 1) return false
+         archiveConversation: function(id) {
             var index = this.conversations.findIndex(function(conversation) { return conversation.id === id })
-            if (index < 0 || this.conversations[index].busy) return false
+            if (index < 0 || this.conversations[index].busy || generationControllers[id]) return false
+            var candidate = this.conversations[index]
+            var confirmation = this.copy.archiveConfirm.replace('{title}', this.conversationLabel(candidate))
+            if (!this.confirmAction(confirmation)) return false
+            index = this.conversations.findIndex(function(conversation) { return conversation.id === id })
+            if (index < 0 || this.conversations[index].busy || generationControllers[id]) return false
+            var archived = this.conversations[index]
             var conversations = this.conversations.slice(0, index).concat(this.conversations.slice(index + 1))
+            archived.archivedAt = Date.now()
+            this.archivedConversations = [archived].concat(this.archivedConversations)
+            if (!conversations.length) conversations = [newConversation()]
             this.conversations = conversations
             if (this.activeConversationId === id) {
                this.activeConversationId = (conversations[index] || conversations[index - 1] || conversations[0]).id
             }
+            this.persistConversations()
+            return true
+         },
+         restoreConversation: function(id) {
+            if (!this.canCreateConversation) return false
+            var index = this.archivedConversations.findIndex(function(conversation) { return conversation.id === id })
+            if (index < 0) return false
+            var conversation = this.archivedConversations[index]
+            if (conversation.busy || generationControllers[id]) return false
+            this.archivedConversations = this.archivedConversations.slice(0, index)
+               .concat(this.archivedConversations.slice(index + 1))
+            conversation.archivedAt = 0
+            this.conversations = this.conversations.concat([conversation])
+            this.activeConversationId = conversation.id
+            this.conversationView = 'active'
+            this.persistConversations()
+            return true
+         },
+         deleteArchivedConversation: function(id) {
+            var index = this.archivedConversations.findIndex(function(conversation) { return conversation.id === id })
+            if (index < 0) return false
+            var conversation = this.archivedConversations[index]
+            if (conversation.busy || generationControllers[id]) return false
+            var confirmation = this.copy.deleteConfirm.replace('{title}', this.conversationLabel(conversation))
+            if (!this.confirmAction(confirmation)) return false
+            index = this.archivedConversations.findIndex(function(candidate) { return candidate.id === id })
+            if (index < 0 || this.archivedConversations[index].busy || generationControllers[id]) return false
+            this.archivedConversations = this.archivedConversations.slice(0, index)
+               .concat(this.archivedConversations.slice(index + 1))
             this.persistConversations()
             return true
          },
@@ -656,6 +858,10 @@
                conversation.activity.forEach(function(activity) {
                   if (activity.state === 'running') activity.state = 'done'
                })
+            } else if (event.type === 'generation_cancelled') {
+               conversation.activity.forEach(function(activity) {
+                  if (activity.state === 'running') activity.state = 'cancelled'
+               })
             } else if (event.type === 'generation_failed') {
                conversation.activity.forEach(function(activity) {
                   if (activity.state === 'running') activity.state = 'error'
@@ -675,11 +881,14 @@
                state: event.type === 'tool_call_started' || event.type === 'model_request_started' ||
                   event.type === 'model_reasoning_stream' || event.type === 'model_output_stream' ||
                   event.type === 'tool_call_preparing'
-                  ? 'running' : event.ok === false || event.type === 'generation_failed' ? 'error' : 'done',
+                  ? 'running' : event.type === 'generation_cancelled' ? 'cancelled' :
+                  event.ok === false || event.type === 'generation_failed' ? 'error' : 'done',
                detail: activityDetail(event, secret),
                timestamp: Number(event.timestamp) || Date.now(),
             }
-            conversation.activity = conversation.activity.concat([entry]).slice(-MAX_ACTIVITY_ENTRIES)
+            // A run is cleared only when the user starts or restarts it. Keeping
+            // every round here makes an intentionally long tool loop auditable.
+            conversation.activity = conversation.activity.concat([entry])
             conversation.activityAnnouncement = this.activityLabel(entry)
             var component = this
             if (this.$nextTick) {
@@ -737,6 +946,10 @@
                label = copy.activityWritten.replace('{file}', entry.name)
             } else if (entry.type === 'generation_failed') {
                label = copy.activityFailed
+            } else if (entry.type === 'generation_cancel_requested') {
+               label = copy.activityStopping
+            } else if (entry.type === 'generation_cancelled') {
+               label = copy.activityCancelled
             } else {
                label = entry.type
             }
@@ -757,6 +970,20 @@
             do {
                candidate = index === 1 ? 'AI-Notation.js' : 'AI-Notation-' + index + '.js'
                index++
+            } while (used.has(candidate.toLowerCase()))
+            return candidate
+         },
+         availableFileName: function(preferred) {
+            var safeName = sanitizeGeneratedFileName(preferred, this.nextFileName())
+            var files = this.localRuntime().listFiles()
+            var used = new Set(files.map(function(file) { return String(file.name || '').trim().toLowerCase() }))
+            if (!used.has(safeName.toLowerCase())) return safeName
+            var base = safeName.replace(/\.js$/i, '')
+            var number = 2
+            var candidate
+            do {
+               candidate = base + '-' + number + '.js'
+               number++
             } while (used.has(candidate.toLowerCase()))
             return candidate
          },
@@ -818,7 +1045,12 @@
             if (!apiKey || !prompt) return false
 
             var history = conversation.messages.slice()
+            var Controller = root && root.AbortController
+            var controller = typeof Controller === 'function' ? new Controller() : null
+            var controllerEntry = { controller: controller, apiKey: apiKey }
+            generationControllers[conversation.id] = controllerEntry
             conversation.busy = true
+            conversation.cancelled = false
             conversation.error = ''
             conversation.notice = ''
             conversation.activity = []
@@ -840,6 +1072,8 @@
                   history: history,
                   toolMode: conversation.toolMode,
                   fileName: requestFileName,
+                  existingFileName: linkedFile ? linkedFile.name : '',
+                  signal: controller && controller.signal,
                   onProgress: function(event) {
                      component.recordActivity(conversation, event, apiKey)
                   },
@@ -865,7 +1099,7 @@
                   runtime.setDraft(currentLinkedFile.id, { name: currentLinkedFile.name, source: source })
                   targetFile = currentLinkedFile
                } else {
-                  var fileName = this.nextFileName()
+                  var fileName = this.availableFileName(result && result.fileName)
                   var created = await Promise.resolve(this.localRuntime().createUpload(fileName, source, false))
                   if (!created || !created.file || created.file.enabled || created.file.trusted) {
                      throw new Error(this.copy.createFailed)
@@ -895,6 +1129,21 @@
                this.persistConversations()
                return true
             } catch (error) {
+               var wasCancelled = !!(
+                  controller && controller.signal.aborted ||
+                  error && error.name === 'AbortError'
+               )
+               if (wasCancelled) {
+                  conversation.cancelled = true
+                  conversation.error = ''
+                  conversation.notice = this.copy.stopped
+                  this.recordActivity(conversation, {
+                     type: 'generation_cancelled',
+                     timestamp: Date.now(),
+                  }, apiKey)
+                  this.persistConversations()
+                  return false
+               }
                var errorMessage = error && error.message || String(error || this.copy.createFailed)
                conversation.error = error && error.safeDisplayMessage
                   ? errorMessage
@@ -907,6 +1156,9 @@
                this.persistConversations()
                return false
             } finally {
+               if (generationControllers[conversation.id] === controllerEntry) {
+                  delete generationControllers[conversation.id]
+               }
                conversation.busy = false
                conversation.finishedAt = Date.now()
             }
