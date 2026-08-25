@@ -12,8 +12,11 @@
    var MAX_MESSAGE_LENGTH = 12000
    var MAX_DRAFT_LENGTH = 20000
    var MAX_TITLE_LENGTH = 72
+   var MAX_ACTIVITY_ENTRIES = 120
+   var MAX_ACTIVITY_DETAIL_LENGTH = 4000
    var conversationSequence = 0
    var messageSequence = 0
+   var activitySequence = 0
 
    var STRINGS = {
       en: {
@@ -44,6 +47,25 @@
          leakedKey: 'The AI response included the API key and was discarded.',
          createFailed: 'The generated notation file could not be written safely.',
          fileUnavailable: 'The generated local file is no longer available.',
+         activityTitle: 'Agent activity',
+         activityDetails: 'Details',
+         activityModelWaiting: 'Round {round} ({protocol}): waiting for model',
+         activityModelTools: 'Round {round}: model requested {count} tool call(s)',
+         activityModelResponse: 'Round {round}: final response received',
+         activityReasoning: 'Round {round}: model reasoning ({count} chars received)',
+         activityOutput: 'Round {round}: generating response ({count} chars received)',
+         activityToolPreparing: 'Round {round}: preparing {name} arguments ({count} chars)',
+         activityToolRunning: 'Round {round}: running {name}',
+         activityToolFinished: 'Round {round}: {name} completed',
+         activityToolFailed: 'Round {round}: {name} failed',
+         activityFallback: 'Tool calling unsupported; retrying without tools',
+         activityProtocolFallback: 'Chat Completions unavailable; switched to Responses API',
+         activityStreamFallback: 'Streaming unavailable; continuing with a regular response',
+         activityCompleted: 'Model generation completed',
+         activityWriting: 'Writing generated source to the local editor',
+         activityWritten: 'Generated source written to {file}',
+         activityFailed: 'Generation failed',
+         activitySeconds: '{seconds}s',
       },
       zh: {
          title: 'AI \u8bb0\u53f7',
@@ -73,6 +95,25 @@
          leakedKey: 'AI \u54cd\u5e94\u4e2d\u5305\u542b API Key\uff0c\u5df2\u4e22\u5f03\u8be5\u7ed3\u679c\u3002',
          createFailed: '\u65e0\u6cd5\u5b89\u5168\u5199\u5165\u751f\u6210\u7684\u8bb0\u53f7\u6587\u4ef6\u3002',
          fileUnavailable: '\u751f\u6210\u7684\u672c\u5730\u6587\u4ef6\u5df2\u4e0d\u5b58\u5728\u3002',
+         activityTitle: 'Agent \u6d3b\u52a8',
+         activityDetails: '\u8be6\u7ec6\u4fe1\u606f',
+         activityModelWaiting: '\u7b2c {round} \u8f6e\uff08{protocol}\uff09\uff1a\u7b49\u5f85\u6a21\u578b',
+         activityModelTools: '\u7b2c {round} \u8f6e\uff1a\u6a21\u578b\u8bf7\u6c42 {count} \u4e2a\u5de5\u5177\u8c03\u7528',
+         activityModelResponse: '\u7b2c {round} \u8f6e\uff1a\u5df2\u6536\u5230\u6700\u7ec8\u54cd\u5e94',
+         activityReasoning: '\u7b2c {round} \u8f6e\uff1a\u6a21\u578b\u6b63\u5728\u63a8\u7406\uff08\u5df2\u63a5\u6536 {count} \u4e2a\u5b57\u7b26\uff09',
+         activityOutput: '\u7b2c {round} \u8f6e\uff1a\u6b63\u5728\u751f\u6210\u54cd\u5e94\uff08\u5df2\u63a5\u6536 {count} \u4e2a\u5b57\u7b26\uff09',
+         activityToolPreparing: '\u7b2c {round} \u8f6e\uff1a\u6b63\u5728\u51c6\u5907 {name} \u53c2\u6570\uff08{count} \u4e2a\u5b57\u7b26\uff09',
+         activityToolRunning: '\u7b2c {round} \u8f6e\uff1a\u6b63\u5728\u8fd0\u884c {name}',
+         activityToolFinished: '\u7b2c {round} \u8f6e\uff1a{name} \u5df2\u5b8c\u6210',
+         activityToolFailed: '\u7b2c {round} \u8f6e\uff1a{name} \u5931\u8d25',
+         activityFallback: '\u7aef\u70b9\u4e0d\u652f\u6301\u5de5\u5177\u8c03\u7528\uff1b\u6b63\u5728\u4ee5\u666e\u901a\u751f\u6210\u6a21\u5f0f\u91cd\u8bd5',
+         activityProtocolFallback: 'Chat Completions \u4e0d\u53ef\u7528\uff1b\u5df2\u5207\u6362\u5230 Responses API',
+         activityStreamFallback: '\u7aef\u70b9\u4e0d\u652f\u6301\u6d41\u5f0f\u54cd\u5e94\uff1b\u5df2\u7ee7\u7eed\u4f7f\u7528\u666e\u901a\u54cd\u5e94',
+         activityCompleted: '\u6a21\u578b\u751f\u6210\u5df2\u5b8c\u6210',
+         activityWriting: '\u6b63\u5728\u5c06\u751f\u6210\u6e90\u7801\u5199\u5165\u672c\u5730\u7f16\u8f91\u5668',
+         activityWritten: '\u751f\u6210\u6e90\u7801\u5df2\u5199\u5165 {file}',
+         activityFailed: '\u751f\u6210\u5931\u8d25',
+         activitySeconds: '{seconds} \u79d2',
       },
    }
 
@@ -88,6 +129,26 @@
       var text = typeof value === 'string' ? value : String(value == null ? '' : value)
       if (text.length <= limit) return text
       return text.slice(0, Math.max(0, limit - 16)) + '\n...[truncated]'
+   }
+
+   function safeJson(value) {
+      try { return JSON.parse(value) } catch (error) { return undefined }
+   }
+
+   function escapeRegExp(value) {
+      return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+   }
+
+   function redactSecret(value, secret) {
+      var text = String(value == null ? '' : value)
+      secret = String(secret || '')
+      if (!secret) return text
+      var minimumPrefix = secret.length >= 8 ? 4 : secret.length
+      var patterns = []
+      for (var length = secret.length; length >= minimumPrefix; length--) {
+         patterns.push(escapeRegExp(secret.slice(0, length)))
+      }
+      return text.replace(new RegExp(patterns.join('|'), 'g'), '[REDACTED]')
    }
 
    function randomId(prefix, sequence) {
@@ -106,16 +167,59 @@
       return randomId('msg-', messageSequence)
    }
 
+   function activityId() {
+      activitySequence++
+      return randomId('activity-', activitySequence)
+   }
+
+   function activityDetail(event, secret) {
+      var value
+      if (event.type === 'tool_call_started') {
+         value = { tool: event.name, arguments: event.arguments || {} }
+      } else if (event.type === 'tool_call_preparing') {
+         var parsedArguments = safeJson(event.argumentsText)
+         value = {
+            tool: event.name,
+            arguments: parsedArguments === undefined ? String(event.argumentsText || '') : parsedArguments,
+         }
+      } else if (event.type === 'model_output_stream') {
+         value = String(event.text || '')
+      } else if (event.type === 'model_response_received') {
+         value = String(event.text || '')
+      } else if (event.type === 'tool_call_finished') {
+         value = event.ok
+            ? { tool: event.name, result: event.result }
+            : { tool: event.name, error: event.error || 'Unknown tool error' }
+      } else if (event.type === 'fallback_started' || event.type === 'protocol_fallback_started' ||
+         event.type === 'stream_fallback_started') {
+         value = { reason: event.reason || '' }
+      } else {
+         return ''
+      }
+      var text
+      if (typeof value === 'string') text = value
+      else {
+         try { text = JSON.stringify(value, null, 2) } catch (error) { text = String(value) }
+      }
+      return truncate(redactSecret(text, secret), MAX_ACTIVITY_DETAIL_LENGTH)
+   }
+
    function titleFrom(value) {
       return truncate(String(value == null ? '' : value).replace(/\s+/g, ' ').trim(), MAX_TITLE_LENGTH)
    }
 
    function responseContainsCredential(apiKey, source, raw) {
-      // Short dummy tokens are common on local OpenAI-compatible endpoints and
-      // collide with ordinary source words. Real credentials are long enough
-      // for exact-match scanning to be useful without rejecting normal code.
-      if (String(apiKey || '').length < 8) return false
-      return String(source || '').indexOf(apiKey) !== -1 || String(raw || '').indexOf(apiKey) !== -1
+      var secret = String(apiKey || '')
+      if (!secret) return false
+      var text = String(source || '') + '\n' + String(raw || '')
+      if (secret.length >= 8) return text.indexOf(secret) !== -1
+
+      // Short compatibility keys such as "key" are common for local endpoints.
+      // Treat only standalone token occurrences as credentials so an ordinary
+      // identifier such as "key-sequence" remains usable.
+      var pattern = new RegExp('(^|[^A-Za-z0-9_-])' + escapeRegExp(secret) +
+         '($|[^A-Za-z0-9_-])')
+      return pattern.test(text)
    }
 
    function newConversation() {
@@ -131,6 +235,10 @@
          busy: false,
          error: '',
          notice: '',
+         activity: [],
+         activityAnnouncement: '',
+         startedAt: 0,
+         finishedAt: 0,
          createdAt: now,
          updatedAt: now,
       }
@@ -169,6 +277,10 @@
          busy: false,
          error: '',
          notice: '',
+         activity: [],
+         activityAnnouncement: '',
+         startedAt: 0,
+         finishedAt: 0,
          createdAt: createdAt,
          updatedAt: Number(value.updatedAt) || createdAt,
       }
@@ -247,6 +359,33 @@
                   {{ activeConversation.notice }}
                </div>
 
+               <section v-if="activeConversation.busy || activeConversation.activity.length"
+                  class="ne-ai-page__activity">
+                  <span class="ne-ai-page__activity-live" role="status" aria-live="polite" aria-atomic="true">
+                     {{ activeConversation.activityAnnouncement }}
+                  </span>
+                  <header class="ne-ai-page__activity-header">
+                     <h4>{{ copy.activityTitle }}</h4>
+                     <span v-if="activeConversation.startedAt">
+                        {{ activityElapsed(activeConversation) }}
+                     </span>
+                  </header>
+                  <ol ref="activityLog" class="ne-ai-page__activity-list">
+                     <li v-for="entry in activeConversation.activity" :key="entry.id"
+                        class="ne-ai-page__activity-entry" :class="'is-' + entry.state">
+                        <span class="ne-ai-page__activity-marker" aria-hidden="true"></span>
+                        <div class="ne-ai-page__activity-body">
+                           <span>{{ activityLabel(entry) }}</span>
+                           <details v-if="entry.detail" class="ne-ai-page__activity-details"
+                              :open="activityDetailsOpen(activeConversation, entry)">
+                              <summary>{{ copy.activityDetails }}</summary>
+                              <pre>{{ entry.detail }}</pre>
+                           </details>
+                        </div>
+                     </li>
+                  </ol>
+               </section>
+
                <div class="ne-ai-page__messages" role="log" aria-live="polite">
                   <p v-if="!activeConversation.messages.length" class="ne-ai-page__messages-empty">
                      {{ copy.noMessages }}
@@ -288,6 +427,7 @@
             model: '',
             conversations: [],
             activeConversationId: '',
+            clockNow: Date.now(),
          }
       },
 
@@ -315,6 +455,18 @@
       created: function() {
          this.loadSettings()
          this.loadConversations()
+      },
+
+      mounted: function() {
+         var component = this
+         this._activityClock = setInterval(function() {
+            component.clockNow = Date.now()
+         }, 1000)
+      },
+
+      beforeUnmount: function() {
+         if (this._activityClock) clearInterval(this._activityClock)
+         this._activityClock = null
       },
 
       methods: {
@@ -446,6 +598,157 @@
             this.persistConversations()
             return message
          },
+         recordActivity: function(conversation, event, secret) {
+            if (!conversation || !event || typeof event.type !== 'string') return null
+            if (!Array.isArray(conversation.activity)) conversation.activity = []
+            if (secret === undefined) secret = this.apiKey
+            var eventRound = Number(event.round) || 0
+            var eventKey = typeof event.key === 'string' ? event.key : ''
+            if (event.type === 'model_reasoning_stream' || event.type === 'model_output_stream' ||
+               event.type === 'tool_call_preparing') {
+               for (var streamIndex = conversation.activity.length - 1; streamIndex >= 0; streamIndex--) {
+                  var streamEntry = conversation.activity[streamIndex]
+                  var sameStream = streamEntry.type === event.type && streamEntry.round === eventRound
+                  if (event.type === 'tool_call_preparing') sameStream = sameStream && streamEntry.key === eventKey
+                  if (!sameStream) continue
+                  streamEntry.name = typeof event.name === 'string' ? event.name : streamEntry.name
+                  streamEntry.chars = Math.max(0, Number(event.chars) || 0)
+                  streamEntry.detail = activityDetail(event, secret)
+                  streamEntry.timestamp = Number(event.timestamp) || Date.now()
+                  return streamEntry
+               }
+            }
+            if (event.type === 'model_response_received') {
+               for (var modelIndex = conversation.activity.length - 1; modelIndex >= 0; modelIndex--) {
+                  var modelEntry = conversation.activity[modelIndex]
+                  if (modelEntry.round === eventRound && modelEntry.state === 'running' &&
+                     (modelEntry.type === 'model_request_started' || modelEntry.type === 'model_reasoning_stream' ||
+                     modelEntry.type === 'model_output_stream' || modelEntry.type === 'tool_call_preparing')) {
+                     modelEntry.state = 'done'
+                  }
+               }
+            } else if (event.type === 'fallback_started' || event.type === 'protocol_fallback_started') {
+               for (var fallbackIndex = conversation.activity.length - 1; fallbackIndex >= 0; fallbackIndex--) {
+                  var fallbackEntry = conversation.activity[fallbackIndex]
+                  if (fallbackEntry.round === eventRound && fallbackEntry.state === 'running' &&
+                     (fallbackEntry.type === 'model_request_started' || fallbackEntry.type === 'model_reasoning_stream' ||
+                     fallbackEntry.type === 'model_output_stream' || fallbackEntry.type === 'tool_call_preparing')) {
+                     fallbackEntry.state = 'done'
+                  }
+               }
+            } else if (event.type === 'tool_call_finished') {
+               for (var toolIndex = conversation.activity.length - 1; toolIndex >= 0; toolIndex--) {
+                  var toolEntry = conversation.activity[toolIndex]
+                  if (toolEntry.type === 'tool_call_started' && toolEntry.round === Number(event.round) &&
+                     toolEntry.name === event.name && toolEntry.state === 'running') {
+                     toolEntry.state = event.ok === false ? 'error' : 'done'
+                     break
+                  }
+               }
+            } else if (event.type === 'source_write_finished') {
+               for (var writeIndex = conversation.activity.length - 1; writeIndex >= 0; writeIndex--) {
+                  if (conversation.activity[writeIndex].type === 'source_write_started' && conversation.activity[writeIndex].state === 'running') {
+                     conversation.activity[writeIndex].state = 'done'
+                     break
+                  }
+               }
+            } else if (event.type === 'generation_completed') {
+               conversation.activity.forEach(function(activity) {
+                  if (activity.state === 'running') activity.state = 'done'
+               })
+            } else if (event.type === 'generation_failed') {
+               conversation.activity.forEach(function(activity) {
+                  if (activity.state === 'running') activity.state = 'error'
+               })
+            }
+            var entry = {
+               id: activityId(),
+               type: event.type,
+               round: eventRound,
+               key: eventKey,
+               name: typeof event.name === 'string' ? event.name : '',
+               protocol: typeof event.protocol === 'string' ? event.protocol : '',
+               count: Number(event.toolCallCount) || 0,
+               chars: Math.max(0, Number(event.chars) || 0),
+               elapsedMs: Math.max(0, Number(event.elapsedMs) || 0),
+               ok: event.ok !== false,
+               state: event.type === 'tool_call_started' || event.type === 'model_request_started' ||
+                  event.type === 'model_reasoning_stream' || event.type === 'model_output_stream' ||
+                  event.type === 'tool_call_preparing'
+                  ? 'running' : event.ok === false || event.type === 'generation_failed' ? 'error' : 'done',
+               detail: activityDetail(event, secret),
+               timestamp: Number(event.timestamp) || Date.now(),
+            }
+            conversation.activity = conversation.activity.concat([entry]).slice(-MAX_ACTIVITY_ENTRIES)
+            conversation.activityAnnouncement = this.activityLabel(entry)
+            var component = this
+            if (this.$nextTick) {
+               this.$nextTick(function() {
+                  if (component.activeConversation !== conversation) return
+                  var log = component.$refs && component.$refs.activityLog
+                  if (log) log.scrollTop = log.scrollHeight
+               })
+            }
+            return entry
+         },
+         activityDetailsOpen: function(conversation, entry) {
+            if (!conversation || !entry || !entry.detail) return false
+            var entries = conversation.activity || []
+            for (var index = entries.length - 1; index >= 0; index--) {
+               if (entries[index].detail) return entries[index].id === entry.id
+            }
+            return false
+         },
+         activityLabel: function(entry) {
+            var copy = this.copy
+            var round = String(entry.round || 1)
+            var name = entry.name || 'tool'
+            var protocol = entry.protocol === 'responses' ? 'Responses' :
+               entry.protocol === 'chat_completions' ? 'Chat Completions' : 'API'
+            var label
+            if (entry.type === 'model_request_started') {
+               label = copy.activityModelWaiting.replace('{round}', round).replace('{protocol}', protocol)
+            } else if (entry.type === 'model_reasoning_stream') {
+               label = copy.activityReasoning.replace('{round}', round).replace('{count}', String(entry.chars || 0))
+            } else if (entry.type === 'model_output_stream') {
+               label = copy.activityOutput.replace('{round}', round).replace('{count}', String(entry.chars || 0))
+            } else if (entry.type === 'tool_call_preparing') {
+               label = copy.activityToolPreparing.replace('{round}', round).replace('{name}', name).replace('{count}', String(entry.chars || 0))
+            } else if (entry.type === 'model_response_received') {
+               label = entry.count > 0
+                  ? copy.activityModelTools.replace('{round}', round).replace('{count}', String(entry.count))
+                  : copy.activityModelResponse.replace('{round}', round)
+            } else if (entry.type === 'tool_call_started') {
+               label = copy.activityToolRunning.replace('{round}', round).replace('{name}', name)
+            } else if (entry.type === 'tool_call_finished') {
+               label = (entry.ok ? copy.activityToolFinished : copy.activityToolFailed)
+                  .replace('{round}', round).replace('{name}', name)
+            } else if (entry.type === 'fallback_started') {
+               label = copy.activityFallback
+            } else if (entry.type === 'protocol_fallback_started') {
+               label = copy.activityProtocolFallback
+            } else if (entry.type === 'stream_fallback_started') {
+               label = copy.activityStreamFallback
+            } else if (entry.type === 'generation_completed') {
+               label = copy.activityCompleted
+            } else if (entry.type === 'source_write_started') {
+               label = copy.activityWriting
+            } else if (entry.type === 'source_write_finished') {
+               label = copy.activityWritten.replace('{file}', entry.name)
+            } else if (entry.type === 'generation_failed') {
+               label = copy.activityFailed
+            } else {
+               label = entry.type
+            }
+            if (entry.elapsedMs > 0) label += ' (' + (entry.elapsedMs / 1000).toFixed(entry.elapsedMs < 1000 ? 2 : 1) + 's)'
+            return label
+         },
+         activityElapsed: function(conversation) {
+            if (!conversation || !conversation.startedAt) return ''
+            var end = conversation.busy ? this.clockNow : conversation.finishedAt || this.clockNow
+            var seconds = Math.max(0, Math.floor((end - conversation.startedAt) / 1000))
+            return this.copy.activitySeconds.replace('{seconds}', String(seconds))
+         },
          nextFileName: function() {
             var files = this.localRuntime().listFiles()
             var used = new Set(files.map(function(file) { return String(file.name || '').toLowerCase() }))
@@ -518,12 +821,17 @@
             conversation.busy = true
             conversation.error = ''
             conversation.notice = ''
+            conversation.activity = []
+            conversation.activityAnnouncement = ''
+            conversation.startedAt = Date.now()
+            conversation.finishedAt = 0
             this.saveSettings()
 
             try {
                var linkedFile = this.eligibleFile(conversation)
                var linkedState = this.captureFileState(linkedFile)
                var requestFileName = linkedFile ? linkedFile.name : this.nextFileName()
+               var component = this
                var result = await Promise.resolve(assistant.generate({
                   baseUrl: this.baseUrl,
                   apiKey: apiKey,
@@ -532,14 +840,23 @@
                   history: history,
                   toolMode: conversation.toolMode,
                   fileName: requestFileName,
+                  onProgress: function(event) {
+                     component.recordActivity(conversation, event, apiKey)
+                  },
                }))
                var source = result && typeof result.source === 'string' ? result.source.trim() : ''
                if (!source) throw new Error(this.copy.emptySource)
                var raw = result && typeof result.raw === 'string' ? result.raw : ''
                if (responseContainsCredential(apiKey, source, raw)) {
-                  throw new Error(this.copy.leakedKey)
+                  var leakedKeyError = new Error(this.copy.leakedKey)
+                  leakedKeyError.safeDisplayMessage = true
+                  throw leakedKeyError
                }
 
+               this.recordActivity(conversation, {
+                  type: 'source_write_started',
+                  timestamp: Date.now(),
+               }, apiKey)
                var targetFile
                var currentLinkedFile = this.unchangedFile(linkedState)
                if (currentLinkedFile) {
@@ -555,6 +872,11 @@
                   }
                   targetFile = created.file
                }
+               this.recordActivity(conversation, {
+                  type: 'source_write_finished',
+                  name: targetFile.name,
+                  timestamp: Date.now(),
+               }, apiKey)
 
                this.appendMessage(conversation, 'user', prompt)
                this.appendMessage(conversation, 'assistant', raw || source)
@@ -573,11 +895,20 @@
                this.persistConversations()
                return true
             } catch (error) {
-               conversation.error = error && error.message || String(error || this.copy.createFailed)
+               var errorMessage = error && error.message || String(error || this.copy.createFailed)
+               conversation.error = error && error.safeDisplayMessage
+                  ? errorMessage
+                  : redactSecret(errorMessage, apiKey)
+               this.recordActivity(conversation, {
+                  type: 'generation_failed',
+                  ok: false,
+                  timestamp: Date.now(),
+               }, apiKey)
                this.persistConversations()
                return false
             } finally {
                conversation.busy = false
+               conversation.finishedAt = Date.now()
             }
          },
          openInEditor: async function(conversation) {

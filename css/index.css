@@ -2065,6 +2065,104 @@ html.dark .ne-standalone-readonly__download:hover:not(:disabled) {
   background: #f0fdf4;
   color: #166534;
 }
+.ne-ai-page__activity {
+  margin-bottom: 12px;
+  overflow: hidden;
+  border: 1px solid #d7dce3;
+  border-radius: 4px;
+  background: #f8fafc;
+}
+.ne-ai-page__activity-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.ne-ai-page__activity-header {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border-bottom: 1px solid #d7dce3;
+}
+.ne-ai-page__activity-header h4 {
+  margin: 0;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+.ne-ai-page__activity-header span {
+  color: #667085;
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+.ne-ai-page__activity-list {
+  max-height: 260px;
+  margin: 0;
+  padding: 7px 10px;
+  overflow: auto;
+  list-style: none;
+}
+.ne-ai-page__activity-entry {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 7px;
+  padding: 5px 0;
+  color: #475467;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.ne-ai-page__activity-marker {
+  width: 8px;
+  height: 8px;
+  margin-top: 4px;
+  border: 2px solid #98a2b3;
+  border-radius: 50%;
+}
+.ne-ai-page__activity-entry.is-running .ne-ai-page__activity-marker {
+  border-color: #93c5fd;
+  border-top-color: #2563eb;
+  animation: ne-ai-spin 0.8s linear infinite;
+}
+.ne-ai-page__activity-entry.is-done .ne-ai-page__activity-marker {
+  border-color: #16a34a;
+  background: #16a34a;
+}
+.ne-ai-page__activity-entry.is-error .ne-ai-page__activity-marker {
+  border-color: #dc2626;
+  background: #dc2626;
+}
+.ne-ai-page__activity-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ne-ai-page__activity-details {
+  margin-top: 3px;
+}
+.ne-ai-page__activity-details summary {
+  width: fit-content;
+  color: #1d4ed8;
+  cursor: pointer;
+  font-size: 11px;
+}
+.ne-ai-page__activity-details pre {
+  max-height: 180px;
+  margin: 5px 0 0;
+  padding: 7px 8px;
+  overflow: auto;
+  border: 1px solid #d7dce3;
+  border-radius: 3px;
+  background: #fff;
+  color: #1f2937;
+  white-space: pre-wrap;
+  font: 11px/1.45 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
 .ne-ai-page__messages {
   display: grid;
   min-height: 220px;
@@ -2208,6 +2306,28 @@ html.dark .ne-ai-page__notice {
   background: #132f22;
   color: #bbf7d0;
 }
+html.dark .ne-ai-page__activity {
+  border-color: #4b4f57;
+  background: #222428;
+}
+html.dark .ne-ai-page__activity-header {
+  border-bottom-color: #4b4f57;
+}
+html.dark .ne-ai-page__activity-header h4,
+html.dark .ne-ai-page__activity-entry {
+  color: #d1d5db;
+}
+html.dark .ne-ai-page__activity-header span {
+  color: #9ca3af;
+}
+html.dark .ne-ai-page__activity-details summary {
+  color: #9fb9f5;
+}
+html.dark .ne-ai-page__activity-details pre {
+  border-color: #4b4f57;
+  background: #1d1f22;
+  color: #e5e7eb;
+}
 html.dark .ne-ai-page__messages-empty {
   color: #9ca3af;
 }
@@ -2259,6 +2379,9 @@ html.dark .ne-ai-page__button.is-primary:hover:not(:disabled) {
   .ne-ai-page__messages {
     min-height: 180px;
     max-height: 42vh;
+  }
+  .ne-ai-page__activity-list {
+    max-height: 220px;
   }
   .ne-ai-page__actions {
     align-items: stretch;

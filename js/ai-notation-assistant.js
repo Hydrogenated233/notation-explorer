@@ -87,6 +87,15 @@
       return value + '/v1/chat/completions'
    }
 
+   function normalizeResponsesEndpoint(baseUrl) {
+      var value = String(baseUrl || '').trim().replace(/\/+$/, '')
+      if (!value) value = DEFAULT_BASE_URL
+      if (/\/responses$/i.test(value)) return value
+      if (/\/chat\/completions$/i.test(value)) return value.replace(/\/chat\/completions$/i, '/responses')
+      if (/\/v1$/i.test(value)) return value + '/responses'
+      return value + '/v1/responses'
+   }
+
    function safeJson(value) {
       try { return JSON.parse(value) } catch (error) { return undefined }
    }
@@ -98,11 +107,34 @@
       return text.length > (limit || 20000) ? text.slice(0, limit || 20000) + '\n...[truncated]' : text
    }
 
+   function truncateStreamText(value) {
+      var text = String(value == null ? '' : value)
+      return text.length > 8000 ? text.slice(0, 8000) + '\n...[truncated]' : text
+   }
+
    function errorMessage(error) {
       if (!error) return 'Unknown error.'
       if (typeof error === 'string') return error
       if (error.message) return String(error.message)
       return String(error)
+   }
+
+   function emitProgress(options, event) {
+      if (!options || typeof options.onProgress !== 'function') return
+      try {
+         options.onProgress(Object.assign({ timestamp: Date.now() }, event))
+      } catch (error) {
+         // UI progress reporting must never interrupt generation.
+      }
+   }
+
+   function yieldForProgress(options) {
+      if (!options || typeof options.onProgress !== 'function') return Promise.resolve()
+      return new Promise(function(resolve) {
+         var schedule = root && typeof root.setTimeout === 'function' ? root.setTimeout : null
+         if (schedule) schedule(resolve, 0)
+         else resolve()
+      })
    }
 
    function sanitizeHistory(history) {
@@ -145,6 +177,40 @@
          }).join('')
       }
       return ''
+   }
+
+   function extractResponsesText(response) {
+      if (response && typeof response.output_text === 'string') return response.output_text
+      var output = response && Array.isArray(response.output) ? response.output : []
+      var parts = []
+      output.forEach(function(item) {
+         if (!item || item.type !== 'message' || !Array.isArray(item.content)) return
+         item.content.forEach(function(part) {
+            if (!part) return
+            if ((part.type === 'output_text' || part.type === 'text') && typeof part.text === 'string') {
+               parts.push(part.text)
+            }
+         })
+      })
+      return parts.join('')
+   }
+
+   function validateResponsesResult(response) {
+      if (!response || typeof response !== 'object') return response
+      var status = String(response.status || '').toLowerCase()
+      if (status === 'incomplete') {
+         var incompleteDetails = response.incomplete_details || {}
+         var reason = incompleteDetails.reason || incompleteDetails.message || 'unknown reason'
+         throw new Error('Responses API response was incomplete: ' + reason)
+      }
+      if (status === 'failed') {
+         var failure = response.error || {}
+         throw new Error(failure.message || response.message || 'Responses API response failed.')
+      }
+      if (status === 'cancelled' || status === 'canceled') {
+         throw new Error('Responses API response was cancelled.')
+      }
+      return response
    }
 
    function extractSource(text) {
@@ -229,6 +295,17 @@
             },
          },
       ]
+   }
+
+   function responsesToolDefinitions() {
+      return toolDefinitions().map(function(tool) {
+         return {
+            type: 'function',
+            name: tool.function.name,
+            description: tool.function.description,
+            parameters: tool.function.parameters,
+         }
+      })
    }
 
    function notationById(id) {
@@ -548,6 +625,23 @@
       return []
    }
 
+   function responsesToolCallParts(response) {
+      var output = response && Array.isArray(response.output) ? response.output : []
+      var calls = output.filter(function(item) {
+         return item && item.type === 'function_call' && item.name
+      })
+      if (calls.some(function(item) { return !item.call_id })) {
+         throw new Error('Responses API function call is missing call_id.')
+      }
+      return calls.map(function(item) {
+         return {
+            id: item.call_id,
+            name: item.name,
+            arguments: item.arguments,
+         }
+      })
+   }
+
    async function responseJson(response) {
       var body
       if (response && typeof response.text === 'function') body = await response.text()
@@ -555,10 +649,15 @@
       else body = ''
       var parsed = safeJson(body)
       if (response && (response.ok === false || Number(response.status) >= 400)) {
-         var detail = parsed && parsed.error && (parsed.error.message || parsed.error.code)
+         var detail = parsed && (
+            parsed.error && (parsed.error.message || parsed.error.code) ||
+            parsed.message || parsed.detail
+         )
          var failure = new Error('AI API HTTP ' + response.status + (detail ? ': ' + detail : ''))
          failure.status = response.status
          failure.apiError = parsed && parsed.error
+         failure.apiBody = parsed
+         failure.apiMessage = detail
          throw failure
       }
       if (!parsed) throw new Error('AI API returned invalid JSON.')
@@ -568,10 +667,27 @@
    function toolsUnsupported(error) {
       if (!error) return false
       var status = Number(error.status)
-      if (status === 404 || status === 422) return true
-      if (status !== 400) return false
       var message = errorMessage(error).toLowerCase()
-      return /tool|function.?call|unsupported|unknown field|unrecognized/.test(message)
+      if (status !== 400 && status !== 404 && status !== 422 && status !== 501) return false
+      return /(tool|function.?call).*(unsupported|not supported|unknown|unrecognized|not implemented|不可用|不支持|未启用)|(?:unsupported|not supported|unknown|unrecognized|not implemented|不可用|不支持|未启用).*(tool|function.?call)/.test(message)
+   }
+
+   function chatCompletionsUnsupported(error) {
+      if (!error) return false
+      var status = Number(error.status)
+      var message = (error.apiMessage || errorMessage(error)).toLowerCase()
+      if (streamingUnsupported(error) || toolsUnsupported(error)) return false
+      if (status === 404 || status === 405 || status === 501) return true
+      if (status !== 400 && status !== 502) return false
+      return /(chat.?completions?|chat\/completions).*(unsupported|not enabled|not available|disabled|unavailable|未启用|不支持|不可用)|(?:unsupported|not enabled|not available|disabled|unavailable|未启用|不支持|不可用).*(chat.?completions?|chat\/completions)/i.test(message)
+   }
+
+   function streamingUnsupported(error) {
+      if (!error) return false
+      var status = Number(error.status)
+      if (status !== 400 && status !== 404 && status !== 405 && status !== 422 && status !== 501) return false
+      var message = (error.apiMessage || errorMessage(error)).toLowerCase()
+      return /(stream|streaming).*(unsupported|not supported|unknown|unrecognized|not implemented|不可用|不支持|未启用)|(?:unsupported|not supported|unknown|unrecognized|not implemented|不可用|不支持|未启用).*(stream|streaming)/.test(message)
    }
 
    async function fetchContext() {
@@ -622,6 +738,521 @@
       }))
    }
 
+   function parseSseEvent(block) {
+      var data = String(block || '').split(/\r?\n/).filter(function(line) {
+         return /^data:/.test(line)
+      }).map(function(line) {
+         return line.replace(/^data:\s?/, '')
+      }).join('\n')
+      if (!data || data === '[DONE]') return null
+      return safeJson(data) || null
+   }
+
+   function shouldEmitStreamProgress(state, kind, chars, force, minimumChars) {
+      var now = Date.now()
+      var lastAtKey = kind + 'LastAt'
+      var lastCharsKey = kind + 'LastChars'
+      var lastAt = Number(state[lastAtKey]) || 0
+      var lastChars = Number(state[lastCharsKey]) || 0
+      if (!force && lastAt && now - lastAt < 200 && chars - lastChars < (minimumChars || 128)) return false
+      state[lastAtKey] = now
+      state[lastCharsKey] = chars
+      return true
+   }
+
+   async function requestChatStream(endpoint, body, headers, options, round) {
+      if (!root || typeof root.fetch !== 'function') throw new Error('Fetch is unavailable.')
+      var response = await root.fetch(endpoint, {
+         method: 'POST',
+         headers: headers,
+         body: JSON.stringify(Object.assign({}, body, { stream: true })),
+      })
+      if (response && (response.ok === false || Number(response.status) >= 400)) {
+         return responseJson(response)
+      }
+      if (!response || !response.body || typeof response.body.getReader !== 'function') {
+         return responseJson(response)
+      }
+
+      var Decoder = root && root.TextDecoder
+      if (typeof Decoder !== 'function') return responseJson(response)
+      var reader = response.body.getReader()
+      var decoder = new Decoder()
+      var buffer = ''
+      var sawEvent = false
+      var state = {
+         content: '',
+         reasoning: '',
+         toolCalls: [],
+         finishReason: null,
+      }
+
+      function consumeBlock(block) {
+         var event = parseSseEvent(block)
+         if (!event) return
+         sawEvent = true
+         if (event.error) throw new Error(event.error.message || 'Chat Completions stream failed.')
+         var choice = event.choices && event.choices[0]
+         if (!choice) return
+         var delta = choice.delta || {}
+         var reasoningDelta = typeof delta.reasoning_content === 'string'
+            ? delta.reasoning_content
+            : typeof delta.reasoning === 'string' ? delta.reasoning : ''
+         if (reasoningDelta) {
+            state.reasoning += reasoningDelta
+            if (shouldEmitStreamProgress(state, 'reasoning', state.reasoning.length, false, 128)) {
+               emitProgress(options, {
+                  type: 'model_reasoning_stream',
+                  protocol: 'chat_completions',
+                  round: round,
+                  chars: state.reasoning.length,
+               })
+            }
+         }
+         if (typeof delta.content === 'string' && delta.content) {
+            state.content += delta.content
+            if (shouldEmitStreamProgress(state, 'output', state.content.length, false, 128)) {
+               emitProgress(options, {
+                  type: 'model_output_stream',
+                  protocol: 'chat_completions',
+                  round: round,
+                  chars: state.content.length,
+                  text: truncateStreamText(state.content),
+               })
+            }
+         }
+         if (Array.isArray(delta.tool_calls)) {
+            delta.tool_calls.forEach(function(part) {
+               var toolIndex = Number.isInteger(Number(part.index)) ? Number(part.index) : state.toolCalls.length
+               var call = state.toolCalls[toolIndex]
+               if (!call) {
+                  call = state.toolCalls[toolIndex] = {
+                     id: '',
+                     type: 'function',
+                     function: { name: '', arguments: '' },
+                  }
+               }
+               if (part.id) call.id = part.id
+               var fn = part.function || {}
+               if (fn.name) call.function.name += fn.name
+               if (fn.arguments) call.function.arguments += fn.arguments
+               var callKey = call.id || String(toolIndex)
+               if (shouldEmitStreamProgress(state, 'call-' + callKey, call.function.arguments.length, false, 64)) {
+                  emitProgress(options, {
+                     type: 'tool_call_preparing',
+                     protocol: 'chat_completions',
+                     round: round,
+                     key: callKey,
+                     name: call.function.name || 'tool',
+                     argumentsText: call.function.arguments,
+                     chars: call.function.arguments.length,
+                  })
+               }
+            })
+         }
+         if (choice.finish_reason !== undefined && choice.finish_reason !== null) {
+            state.finishReason = choice.finish_reason
+         }
+      }
+
+      while (true) {
+         var chunk = await reader.read()
+         buffer += decoder.decode(chunk.value || new Uint8Array(0), { stream: !chunk.done })
+         var boundary
+         while ((boundary = buffer.search(/\r?\n\r?\n/)) !== -1) {
+            var block = buffer.slice(0, boundary)
+            var separator = /^\r\n\r\n/.test(buffer.slice(boundary)) ? 4 : 2
+            buffer = buffer.slice(boundary + separator)
+            consumeBlock(block)
+         }
+         if (chunk.done) break
+      }
+      if (buffer.trim()) {
+         if (/^\s*(?:event:|data:)/.test(buffer)) consumeBlock(buffer)
+         else if (!sawEvent) {
+            var parsed = safeJson(buffer)
+            if (parsed) return parsed
+            throw new Error('Chat Completions stream returned invalid JSON.')
+         }
+      }
+
+      if (state.reasoning && shouldEmitStreamProgress(state, 'reasoning', state.reasoning.length, true, 128)) {
+         emitProgress(options, {
+            type: 'model_reasoning_stream',
+            protocol: 'chat_completions',
+            round: round,
+            chars: state.reasoning.length,
+         })
+      }
+      if (state.content && shouldEmitStreamProgress(state, 'output', state.content.length, true, 128)) {
+         emitProgress(options, {
+            type: 'model_output_stream',
+            protocol: 'chat_completions',
+            round: round,
+            chars: state.content.length,
+            text: truncateStreamText(state.content),
+         })
+      }
+      state.toolCalls.forEach(function(call, toolIndex) {
+         if (!call) return
+         var callKey = call.id || String(toolIndex)
+         emitProgress(options, {
+            type: 'tool_call_preparing',
+            protocol: 'chat_completions',
+            round: round,
+            key: callKey,
+            name: call.function.name || 'tool',
+            argumentsText: call.function.arguments,
+            chars: call.function.arguments.length,
+         })
+      })
+
+      var message = { role: 'assistant', content: state.content }
+      if (state.reasoning) message.reasoning_content = state.reasoning
+      var calls = state.toolCalls.filter(function(call) { return !!call })
+      if (calls.length) message.tool_calls = calls
+      if (!state.content && !state.reasoning && !calls.length && !sawEvent) {
+         throw new Error('Chat Completions stream ended without a response.')
+      }
+      return { choices: [{ message: message, finish_reason: state.finishReason }] }
+   }
+
+   async function requestChatRound(endpoint, body, headers, options, round) {
+      if (!options || typeof options.onProgress !== 'function') {
+         return request(endpoint, body, headers)
+      }
+      try {
+         return await requestChatStream(endpoint, body, headers, options, round)
+      } catch (error) {
+         if (!streamingUnsupported(error)) throw error
+         emitProgress(options, {
+            type: 'stream_fallback_started',
+            protocol: 'chat_completions',
+            round: round,
+            reason: errorMessage(error),
+         })
+         return request(endpoint, body, headers)
+      }
+   }
+
+   async function requestResponsesStream(endpoint, body, headers, onEvent) {
+      if (!root || typeof root.fetch !== 'function') throw new Error('Fetch is unavailable.')
+      var streamingBody = Object.assign({}, body, { stream: true })
+      var response = await root.fetch(endpoint, {
+         method: 'POST',
+         headers: headers,
+         body: JSON.stringify(streamingBody),
+      })
+      if (response && (response.ok === false || Number(response.status) >= 400)) {
+         return responseJson(response)
+      }
+      if (!response || !response.body || typeof response.body.getReader !== 'function') {
+         return responseJson(response)
+      }
+
+      var Decoder = root && root.TextDecoder
+      if (typeof Decoder !== 'function') return responseJson(response)
+      var reader = response.body.getReader()
+      var decoder = new Decoder()
+      var buffer = ''
+      var finalResponse
+      var sawEvent = false
+
+      function consumeBlock(block) {
+         var event = parseSseEvent(block)
+         if (!event) return
+         sawEvent = true
+         if (typeof onEvent === 'function') onEvent(event)
+         if (event.type === 'response.completed' && event.response) finalResponse = event.response
+         if (event.type === 'response.incomplete') {
+            var incomplete = event.response || {}
+            var incompleteDetails = incomplete.incomplete_details || event.incomplete_details || {}
+            var reason = incompleteDetails.reason || incompleteDetails.message || 'unknown reason'
+            throw new Error('Responses API response was incomplete: ' + reason)
+         }
+         if (event.type === 'response.failed') {
+            var failure = event.response && event.response.error || event.error || {}
+            throw new Error(failure.message || 'Responses API stream failed.')
+         }
+      }
+
+      while (true) {
+         var chunk = await reader.read()
+         buffer += decoder.decode(chunk.value || new Uint8Array(0), { stream: !chunk.done })
+         var boundary
+         while ((boundary = buffer.search(/\r?\n\r?\n/)) !== -1) {
+            var block = buffer.slice(0, boundary)
+            var separator = /^\r\n\r\n/.test(buffer.slice(boundary)) ? 4 : 2
+            buffer = buffer.slice(boundary + separator)
+            consumeBlock(block)
+         }
+         if (chunk.done) break
+      }
+      if (buffer.trim()) {
+         if (/^\s*(?:event:|data:)/.test(buffer)) consumeBlock(buffer)
+         else if (!sawEvent) finalResponse = safeJson(buffer)
+      }
+      if (!finalResponse) throw new Error('Responses API stream ended without a completed response.')
+      return finalResponse
+   }
+
+   async function requestResponsesRound(endpoint, body, headers, options, round) {
+      var streamState = { reasoningChars: 0, outputChars: 0, outputText: '', calls: Object.create(null) }
+      var response
+      try {
+         response = await requestResponsesStream(
+            endpoint,
+            body,
+            headers,
+            function(event) { emitResponsesStreamProgress(options, event, round, streamState) }
+         )
+      } catch (error) {
+         if (!streamingUnsupported(error)) throw error
+         emitProgress(options, {
+            type: 'stream_fallback_started',
+            protocol: 'responses',
+            round: round,
+            reason: errorMessage(error),
+         })
+         response = await request(endpoint, body, headers)
+      }
+      return validateResponsesResult(response)
+   }
+
+   function emitResponsesStreamProgress(options, event, round, state) {
+      if (!event || !event.type) return
+      if (event.type === 'response.output_item.added' && event.item && event.item.type === 'reasoning') {
+         if (!shouldEmitStreamProgress(state, 'reasoning', state.reasoningChars, false, 1)) return
+         emitProgress(options, {
+            type: 'model_reasoning_stream',
+            protocol: 'responses',
+            round: round,
+            chars: state.reasoningChars,
+         })
+         return
+      }
+      if (event.type === 'response.reasoning_text.delta' || event.type === 'response.reasoning_text.done') {
+         if (event.type === 'response.reasoning_text.done' && typeof event.text === 'string') {
+            state.reasoningChars = event.text.length
+         } else {
+            state.reasoningChars += String(event.delta || '').length
+         }
+         if (!shouldEmitStreamProgress(state, 'reasoning', state.reasoningChars, event.type === 'response.reasoning_text.done', 128)) return
+         emitProgress(options, {
+            type: 'model_reasoning_stream',
+            protocol: 'responses',
+            round: round,
+            chars: state.reasoningChars,
+         })
+         return
+      }
+      if (event.type === 'response.output_text.delta' || event.type === 'response.output_text.done') {
+         var outputDelta = String(event.delta || '')
+         if (event.item_id === 'SSE-Keep-Alive' || (!outputDelta.replace(/[\u200B\u200C\u200D\u2060\uFEFF]/g, '') && event.type !== 'response.output_text.done')) return
+         if (event.type === 'response.output_text.done' && typeof event.text === 'string') {
+            state.outputChars = event.text.length
+            state.outputText = event.text
+         } else {
+            state.outputChars += outputDelta.length
+            state.outputText += outputDelta
+         }
+         if (!shouldEmitStreamProgress(state, 'output', state.outputChars, event.type === 'response.output_text.done', 128)) return
+         emitProgress(options, {
+            type: 'model_output_stream',
+            protocol: 'responses',
+            round: round,
+            chars: state.outputChars,
+            text: truncateStreamText(state.outputText),
+         })
+         return
+      }
+      if (event.type === 'response.output_item.added' && event.item && event.item.type === 'function_call') {
+         var addedKey = event.item.call_id || event.item.id || String(event.output_index)
+         var addedCall = {
+            key: addedKey,
+            name: event.item.name || 'tool',
+            argumentsText: String(event.item.arguments || ''),
+         }
+         state.calls[addedKey] = addedCall
+         if (event.item.id) state.calls[event.item.id] = addedCall
+         if (event.output_index !== undefined) state.calls[String(event.output_index)] = addedCall
+         shouldEmitStreamProgress(state, 'call-' + addedKey, addedCall.argumentsText.length, true, 64)
+         emitProgress(options, {
+            type: 'tool_call_preparing',
+            protocol: 'responses',
+            round: round,
+            key: addedKey,
+            name: addedCall.name,
+            argumentsText: addedCall.argumentsText,
+            chars: addedCall.argumentsText.length,
+         })
+         return
+      }
+      if (event.type === 'response.function_call_arguments.delta' ||
+         event.type === 'response.function_call_arguments.done') {
+         var key = event.call_id || event.item_id || String(event.output_index)
+         var current = state.calls[key]
+         if (!current) {
+            current = state.calls[key] = { key: key, name: event.name || 'tool', argumentsText: '' }
+         }
+         if (event.type === 'response.function_call_arguments.done' && typeof event.arguments === 'string') {
+            current.argumentsText = event.arguments
+         } else {
+            current.argumentsText += String(event.delta || '')
+         }
+         if (!shouldEmitStreamProgress(state, 'call-' + (current.key || key), current.argumentsText.length,
+            event.type === 'response.function_call_arguments.done', 64)) return
+         emitProgress(options, {
+            type: 'tool_call_preparing',
+            protocol: 'responses',
+            round: round,
+            key: current.key || key,
+            name: current.name,
+            argumentsText: current.argumentsText,
+            chars: current.argumentsText.length,
+         })
+      }
+   }
+
+   async function runResponsesProtocol(options, context, model, prompt, history, headers, startingRound) {
+      var endpoint = normalizeResponsesEndpoint(options.baseUrl)
+      var input = history.concat([{ role: 'user', content: prompt }])
+      var initialInput = input.slice()
+      var toolMode = options.toolMode === 'plain' ? 'plain' : 'auto'
+      var tools = toolMode === 'plain' ? [] : responsesToolDefinitions()
+      var usedTools = false
+      var response
+      var pendingToolCalls = false
+      var rounds = Number(startingRound) || 0
+      var protocolRounds = 0
+
+      function responsesBody(currentInput, includeTools) {
+         var body = {
+            model: model,
+            instructions: buildSystemPrompt(context, includeTools),
+            input: currentInput,
+            temperature: options.temperature === undefined ? 0.2 : options.temperature,
+         }
+         if (includeTools) {
+            body.tools = tools
+            body.tool_choice = 'auto'
+         }
+         return body
+      }
+
+      try {
+         while (protocolRounds < MAX_TOOL_ROUNDS) {
+            protocolRounds++
+            rounds++
+            var requestStartedAt = Date.now()
+            emitProgress(options, {
+               type: 'model_request_started',
+               protocol: 'responses',
+               round: rounds,
+               toolsEnabled: tools.length > 0,
+            })
+            response = await requestResponsesRound(
+               endpoint, responsesBody(input, tools.length > 0), headers, options, rounds
+            )
+            var calls = tools.length ? responsesToolCallParts(response) : []
+            emitProgress(options, {
+               type: 'model_response_received',
+               protocol: 'responses',
+               round: rounds,
+               toolCallCount: calls.length,
+               text: truncateStreamText(extractResponsesText(response)),
+               elapsedMs: Date.now() - requestStartedAt,
+            })
+            if (!calls.length) {
+               pendingToolCalls = false
+               break
+            }
+
+            pendingToolCalls = true
+            usedTools = true
+            if (Array.isArray(response.output)) input = input.concat(response.output)
+            for (var index = 0; index < calls.length; index++) {
+               var call = calls[index]
+               var args = typeof call.arguments === 'string' ? safeJson(call.arguments) : call.arguments
+               if (!args || typeof args !== 'object') args = {}
+               var toolStartedAt = Date.now()
+               emitProgress(options, {
+                  type: 'tool_call_started',
+                  protocol: 'responses',
+                  round: rounds,
+                  index: index,
+                  name: call.name,
+                  arguments: args,
+               })
+               await yieldForProgress(options)
+               var result
+               try {
+                  result = { ok: true, result: runTool(call.name, args) }
+               } catch (error) {
+                  result = { ok: false, error: errorMessage(error) }
+               }
+               emitProgress(options, {
+                  type: 'tool_call_finished',
+                  protocol: 'responses',
+                  round: rounds,
+                  index: index,
+                  name: call.name,
+                  ok: result.ok,
+                  result: result.result,
+                  error: result.error,
+                  elapsedMs: Date.now() - toolStartedAt,
+               })
+               input.push({
+                  type: 'function_call_output',
+                  call_id: call.id,
+                  output: stringify(result, 30000),
+               })
+            }
+         }
+         if (pendingToolCalls) throw new Error('The AI tool loop exceeded its safety limit.')
+      } catch (error) {
+         if (!tools.length || usedTools || !toolsUnsupported(error)) throw error
+         emitProgress(options, {
+            type: 'fallback_started',
+            protocol: 'responses',
+            round: rounds,
+            reason: errorMessage(error),
+         })
+         toolMode = 'plain'
+         tools = []
+         rounds++
+         var fallbackStartedAt = Date.now()
+         emitProgress(options, {
+            type: 'model_request_started',
+            protocol: 'responses',
+            round: rounds,
+            toolsEnabled: false,
+            fallback: true,
+         })
+         response = await requestResponsesRound(
+            endpoint, responsesBody(initialInput, false), headers, options, rounds
+         )
+         emitProgress(options, {
+            type: 'model_response_received',
+            protocol: 'responses',
+            round: rounds,
+            toolCallCount: 0,
+            text: truncateStreamText(extractResponsesText(response)),
+            elapsedMs: Date.now() - fallbackStartedAt,
+            fallback: true,
+         })
+         usedTools = false
+      }
+
+      return {
+         text: extractResponsesText(response),
+         endpoint: endpoint,
+         usedTools: usedTools,
+         toolMode: toolMode,
+         rounds: rounds,
+      }
+   }
+
    async function generate(options) {
       options = options || {}
       var apiKey = String(options.apiKey || '').trim()
@@ -649,6 +1280,8 @@
       var rounds = 0
       var response
       var pendingToolCalls = false
+      var protocol = 'chat_completions'
+      var generatedText = ''
 
       function chatBody(requestMessages, includeTools) {
          var body = {
@@ -664,11 +1297,29 @@
       }
 
       try {
-         while (rounds++ < MAX_TOOL_ROUNDS) {
-            response = await request(endpoint, chatBody(messages, tools.length > 0), headers)
+         while (rounds < MAX_TOOL_ROUNDS) {
+            rounds++
+            var requestStartedAt = Date.now()
+            emitProgress(options, {
+               type: 'model_request_started',
+               protocol: protocol,
+               round: rounds,
+               toolsEnabled: tools.length > 0,
+            })
+            response = await requestChatRound(
+               endpoint, chatBody(messages, tools.length > 0), headers, options, rounds
+            )
             var choice = response.choices && response.choices[0]
             var message = choice && choice.message
             var calls = tools.length ? toolCallParts(message) : []
+            emitProgress(options, {
+               type: 'model_response_received',
+               protocol: protocol,
+               round: rounds,
+               toolCallCount: calls.length,
+               text: truncateStreamText(extractText(response)),
+               elapsedMs: Date.now() - requestStartedAt,
+            })
             if (!calls.length) {
                pendingToolCalls = false
                break
@@ -681,11 +1332,32 @@
                var args = typeof call.arguments === 'string' ? safeJson(call.arguments) : call.arguments
                if (!args || typeof args !== 'object') args = {}
                var result
+               var toolStartedAt = Date.now()
+               emitProgress(options, {
+                  type: 'tool_call_started',
+                  protocol: protocol,
+                  round: rounds,
+                  index: index,
+                  name: call.name,
+                  arguments: args,
+               })
+               await yieldForProgress(options)
                try {
                   result = { ok: true, result: runTool(call.name, args) }
                } catch (error) {
                   result = { ok: false, error: errorMessage(error) }
                }
+               emitProgress(options, {
+                  type: 'tool_call_finished',
+                  protocol: protocol,
+                  round: rounds,
+                  index: index,
+                  name: call.name,
+                  ok: result.ok,
+                  result: result.result,
+                  error: result.error,
+                  elapsedMs: Date.now() - toolStartedAt,
+               })
                messages.push({
                   role: 'tool',
                   tool_call_id: call.id,
@@ -696,15 +1368,61 @@
          }
          if (pendingToolCalls) throw new Error('The AI tool loop exceeded its safety limit.')
       } catch (error) {
-         if (!tools.length || usedTools || !toolsUnsupported(error)) throw error
-         // Some compatible endpoints reject the tools field. Retry once in
-         // ordinary chat mode while preserving the same user request/context.
-         response = await request(endpoint, chatBody(requestMessages(false), false), headers)
-         usedTools = false
-         toolMode = 'plain'
+         if (!usedTools && chatCompletionsUnsupported(error)) {
+            emitProgress(options, {
+               type: 'protocol_fallback_started',
+               from: protocol,
+               to: 'responses',
+               round: rounds,
+               reason: errorMessage(error),
+            })
+            var responsesResult = await runResponsesProtocol(
+               options, context, model, prompt, history, headers, rounds
+            )
+            protocol = 'responses'
+            endpoint = responsesResult.endpoint
+            generatedText = responsesResult.text
+            usedTools = responsesResult.usedTools
+            toolMode = responsesResult.toolMode
+            rounds = responsesResult.rounds
+            pendingToolCalls = false
+         } else {
+            if (!tools.length || usedTools || !toolsUnsupported(error)) throw error
+            // Some compatible endpoints reject the tools field. Retry once in
+            // ordinary chat mode while preserving the same user request/context.
+            emitProgress(options, {
+               type: 'fallback_started',
+               protocol: protocol,
+               round: rounds,
+               reason: errorMessage(error),
+            })
+            rounds++
+            var fallbackStartedAt = Date.now()
+            emitProgress(options, {
+               type: 'model_request_started',
+               protocol: protocol,
+               round: rounds,
+               toolsEnabled: false,
+               fallback: true,
+            })
+            response = await requestChatRound(
+               endpoint, chatBody(requestMessages(false), false), headers, options, rounds
+            )
+            emitProgress(options, {
+               type: 'model_response_received',
+               protocol: protocol,
+               round: rounds,
+               toolCallCount: 0,
+               text: truncateStreamText(extractText(response)),
+               elapsedMs: Date.now() - fallbackStartedAt,
+               fallback: true,
+            })
+            usedTools = false
+            toolMode = 'plain'
+         }
       }
 
-      var text = extractText(response)
+      var text = generatedText || extractText(response)
       if (!text) throw new Error('AI API returned no assistant content.')
       var source = extractSource(text)
       if (source.length > MAX_OUTPUT_LENGTH) throw new Error('Generated source is too large.')
@@ -713,6 +1431,14 @@
          source: source,
          file_name: options.fileName || 'ai-generated.js',
       })
+      emitProgress(options, {
+         type: 'generation_completed',
+         round: rounds,
+         rounds: rounds,
+         usedTools: usedTools,
+         toolMode: toolMode,
+         protocol: protocol,
+      })
       return {
          source: source,
          raw: text,
@@ -720,6 +1446,7 @@
          endpoint: endpoint,
          usedTools: usedTools,
          toolMode: toolMode,
+         protocol: protocol,
          validation: validation,
       }
    }
@@ -740,6 +1467,7 @@
       sanitizeHistory: sanitizeHistory,
       toolDefinitions: toolDefinitions,
       normalizeEndpoint: normalizeEndpoint,
+      normalizeResponsesEndpoint: normalizeResponsesEndpoint,
       readSessionSettings: readSessionSettings,
       writeSessionSettings: writeSessionSettings,
       clearSessionApiKey: clearSessionApiKey,

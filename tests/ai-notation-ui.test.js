@@ -76,9 +76,11 @@ test('conversation tabs persist in session storage without the API key', () => {
       assert.equal(vm.closeConversation(second.id), false)
 
       vm.apiKey = 'must-not-be-in-conversations'
+      second.activity = [{ id: 'activity-secret', type: 'tool_call_finished', detail: 'ephemeral-output' }]
       vm.persistConversations()
       const serialized = store.values.get('ne-ai-conversations-v1')
       assert.doesNotMatch(serialized, /must-not-be-in-conversations/)
+      assert.doesNotMatch(serialized, /ephemeral-output|activity-secret/)
 
       const restored = createVm()
       restored.loadConversations()
@@ -226,6 +228,182 @@ test('another conversation can be opened while a request is running', async () =
    }
 })
 
+test('the active conversation exposes live agent-loop progress before completion', async () => {
+   const originalAssistant = globalThis.AINotationAssistant
+   const originalRuntime = globalThis.localNotationManager
+   let reportProgress
+   let resolveGeneration
+
+   globalThis.localNotationManager = {
+      listFiles() { return [] },
+      createUpload(name, source, trusted) {
+         return { file: { id: 'progress-file', name, source, enabled: false, trusted: !!trusted } }
+      },
+   }
+   globalThis.AINotationAssistant = {
+      writeSessionSettings() {},
+      generate(options) {
+         reportProgress = options.onProgress
+         return new Promise((resolve) => { resolveGeneration = resolve })
+      },
+   }
+
+   const vm = createVm({ apiKey: 'session-key' })
+   const conversation = {
+      id: 'progress', title: '', draft: 'Create one', messages: [], toolMode: 'auto',
+      fileId: '', fileName: '', busy: false, error: '', notice: '', activity: [],
+      startedAt: 0, finishedAt: 0, createdAt: 1, updatedAt: 1,
+   }
+   vm.conversations = [conversation]
+   vm.activeConversationId = conversation.id
+
+   try {
+      const generation = vm.generate()
+      await Promise.resolve()
+      assert.equal(typeof reportProgress, 'function')
+
+      reportProgress({
+         type: 'model_request_started', protocol: 'responses', round: 1,
+         toolsEnabled: true, timestamp: 100,
+      })
+      reportProgress({ type: 'model_reasoning_stream', round: 1, chars: 12, timestamp: 100 })
+      reportProgress({ type: 'model_reasoning_stream', round: 1, chars: 48, timestamp: 101 })
+      reportProgress({
+         type: 'tool_call_preparing', round: 1, key: 'call-list', name: 'list_notations',
+         argumentsText: '{}', chars: 2, timestamp: 101,
+      })
+      reportProgress({
+         type: 'tool_call_started', round: 1, name: 'list_notations', arguments: {}, timestamp: 101,
+      })
+      reportProgress({
+         type: 'tool_call_finished', round: 1, name: 'list_notations', ok: true,
+         result: { main: [{ id: 'fixture' }] }, elapsedMs: 2, timestamp: 103,
+      })
+      reportProgress({
+         type: 'model_output_stream', round: 2, chars: 42,
+         text: '```js\nregister.push({ id: "preview" });\n```', timestamp: 104,
+      })
+
+      assert.deepEqual(
+         conversation.activity.map((entry) => entry.type),
+         [
+            'model_request_started',
+            'model_reasoning_stream',
+            'tool_call_preparing',
+            'tool_call_started',
+            'tool_call_finished',
+            'model_output_stream',
+         ]
+      )
+      assert.equal(conversation.activity[1].chars, 48)
+      assert.match(vm.activityLabel(conversation.activity[0]), /Responses/)
+      assert.match(conversation.activity[2].detail, /list_notations/)
+      assert.match(conversation.activity[3].detail, /list_notations|\{\}/)
+      assert.match(conversation.activity[4].detail, /fixture/)
+      assert.match(conversation.activity[5].detail, /register\.push/)
+      assert.match(component.template, /ne-ai-page__activity/)
+
+      resolveGeneration({
+         source: 'register.push({ id: "progress" });',
+         raw: 'progress result',
+         validation: { valid: true },
+      })
+      assert.equal(await generation, true)
+      assert.equal(conversation.busy, false)
+   } finally {
+      globalThis.AINotationAssistant = originalAssistant
+      globalThis.localNotationManager = originalRuntime
+   }
+})
+
+test('progress redaction stays bound to the key captured by its request', async () => {
+   const originalAssistant = globalThis.AINotationAssistant
+   const originalRuntime = globalThis.localNotationManager
+   let reportProgress
+   let resolveGeneration
+   const requestKey = 'request-secret-12345'
+
+   globalThis.localNotationManager = {
+      listFiles() { return [] },
+      createUpload(name, source, trusted) {
+         return { file: { id: 'redaction-file', name, source, enabled: false, trusted: !!trusted } }
+      },
+   }
+   globalThis.AINotationAssistant = {
+      writeSessionSettings() {},
+      generate(options) {
+         reportProgress = options.onProgress
+         return new Promise((resolve) => { resolveGeneration = resolve })
+      },
+   }
+
+   const vm = createVm({ apiKey: requestKey })
+   const conversation = {
+      id: 'redaction', title: '', draft: 'Create one', messages: [], toolMode: 'auto',
+      fileId: '', fileName: '', busy: false, error: '', notice: '', activity: [],
+      startedAt: 0, finishedAt: 0, createdAt: 1, updatedAt: 1,
+   }
+   vm.conversations = [conversation]
+   vm.activeConversationId = conversation.id
+
+   try {
+      const generation = vm.generate()
+      await Promise.resolve()
+      vm.apiKey = 'different-session-key-67890'
+      reportProgress({
+         type: 'model_output_stream', round: 1, chars: 30,
+         text: 'echo ' + requestKey.slice(0, 10), timestamp: 100,
+      })
+      assert.doesNotMatch(JSON.stringify(conversation.activity), new RegExp(requestKey.slice(0, 10)))
+      assert.match(JSON.stringify(conversation.activity), /\[REDACTED\]/)
+
+      resolveGeneration({
+         source: 'register.push({ id: "redacted" });',
+         raw: 'safe result',
+         validation: { valid: true },
+      })
+      assert.equal(await generation, true)
+   } finally {
+      globalThis.AINotationAssistant = originalAssistant
+      globalThis.localNotationManager = originalRuntime
+   }
+})
+
+test('fallback and completion events settle prior running activity', () => {
+   const vm = createVm()
+   const conversation = {
+      id: 'fallback-state', activity: [], activityAnnouncement: '',
+   }
+
+   vm.recordActivity(conversation, {
+      type: 'model_request_started', protocol: 'chat_completions', round: 1, timestamp: 100,
+   }, 'secret-key')
+   vm.recordActivity(conversation, {
+      type: 'protocol_fallback_started', round: 1, timestamp: 101,
+   }, 'secret-key')
+   assert.equal(conversation.activity[0].state, 'done')
+
+   vm.recordActivity(conversation, {
+      type: 'model_request_started', protocol: 'responses', round: 2, timestamp: 102,
+   }, 'secret-key')
+   vm.recordActivity(conversation, {
+      type: 'model_response_received', protocol: 'responses', round: 2,
+      text: 'final response preview', timestamp: 103,
+   }, 'secret-key')
+   vm.recordActivity(conversation, {
+      type: 'model_output_stream', protocol: 'responses', round: 3,
+      chars: 12, text: 'final output', timestamp: 104,
+   }, 'secret-key')
+   vm.recordActivity(conversation, {
+      type: 'generation_completed', protocol: 'responses', round: 3, timestamp: 105,
+   }, 'secret-key')
+
+   assert.equal(conversation.activity.filter((entry) => entry.state === 'running').length, 0)
+   assert.match(conversation.activity[3].detail, /final response preview/)
+   assert.match(component.template, /activity-live[^>]*role="status"/)
+   assert.doesNotMatch(component.template, /ne-ai-page__activity" aria-live/)
+})
+
 test('generation rechecks linked-file trust after the API request', async () => {
    const originalAssistant = globalThis.AINotationAssistant
    const originalRuntime = globalThis.localNotationManager
@@ -366,6 +544,52 @@ test('short compatibility placeholder keys do not reject ordinary source words',
 
    assert.equal(created.trusted, false)
    assert.match(created.source, /key-sequence/)
+})
+
+test('standalone short API keys are discarded and API errors are redacted', async () => {
+   const originalAssistant = globalThis.AINotationAssistant
+   const originalRuntime = globalThis.localNotationManager
+   let createCalls = 0
+   globalThis.localNotationManager = {
+      listFiles() { return [] },
+      createUpload() { createCalls++ },
+   }
+   const vm = createVm({ apiKey: 'key' })
+   const conversation = {
+      id: 'short-key-leak', title: '', draft: 'Create one', messages: [], toolMode: 'auto',
+      fileId: '', fileName: '', busy: false, error: '', notice: '', activity: [],
+      createdAt: 1, updatedAt: 1,
+   }
+   vm.conversations = [conversation]
+   vm.activeConversationId = conversation.id
+
+   try {
+      globalThis.AINotationAssistant = {
+         writeSessionSettings() {},
+         async generate() {
+            return {
+               source: 'register.push({ id: "leaked", apiKey: "key" });',
+               raw: 'Credential: key',
+               validation: { valid: true },
+            }
+         },
+      }
+      assert.equal(await vm.generate(), false)
+      assert.equal(createCalls, 0)
+      assert.match(conversation.error, /API key/i)
+
+      conversation.draft = 'Retry'
+      globalThis.AINotationAssistant = {
+         writeSessionSettings() {},
+         async generate() { throw new Error('Upstream echoed key in an error') },
+      }
+      assert.equal(await vm.generate(), false)
+      assert.doesNotMatch(conversation.error, /key/)
+      assert.match(conversation.error, /\[REDACTED\]/)
+   } finally {
+      globalThis.AINotationAssistant = originalAssistant
+      globalThis.localNotationManager = originalRuntime
+   }
 })
 
 test('API failures preserve the draft and do not create a local file', async () => {

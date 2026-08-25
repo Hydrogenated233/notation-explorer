@@ -54,6 +54,28 @@ function fixtureNotation() {
    }
 }
 
+function sseResponse(events) {
+   const encoder = new TextEncoder()
+   const chunks = events.map((event) => encoder.encode(
+      'event: ' + event.type + '\n' + 'data: ' + JSON.stringify(event) + '\n\n'
+   ))
+   let index = 0
+   return {
+      ok: true,
+      status: 200,
+      body: {
+         getReader() {
+            return {
+               async read() {
+                  if (index >= chunks.length) return { done: true, value: undefined }
+                  return { done: false, value: chunks[index++] }
+               },
+            }
+         },
+      },
+   }
+}
+
 test('tool definitions use valid Chat Completions function schemas', () => {
    const tools = assistant.toolDefinitions()
    assert.deepEqual(
@@ -241,6 +263,58 @@ test('generation sends only the current conversation text history before the new
    assert.equal(requests[0].messages[3].content, 'Refine the prior notation.')
 })
 
+test('tool loops report model rounds and tool execution before the final result', async () => {
+   const events = []
+   const responses = [
+      {
+         ok: true,
+         async text() {
+            return JSON.stringify({ choices: [{ message: {
+               tool_calls: [{ id: 'call-list', function: { name: 'list_notations', arguments: '{}' } }],
+            } }] })
+         },
+      },
+      {
+         ok: true,
+         async text() {
+            return JSON.stringify({ choices: [{ message: {
+               content: '```js\nregister.push({ id: "progress" });\n```',
+            } }] })
+         },
+      },
+   ]
+
+   await withGlobalsAsync({
+      register: [],
+      analysis_register: [],
+      fetch: async () => responses.shift(),
+      sessionStorage: { setItem() {}, removeItem() {}, getItem() { return null } },
+   }, async () => {
+      await assistant.generate({
+         apiKey: 'key',
+         baseUrl: 'https://example.test',
+         prompt: 'Show progress.',
+         context: 'ctx',
+         onProgress(event) { events.push(event) },
+      })
+   })
+
+   assert.deepEqual(events.map((event) => event.type), [
+      'model_request_started',
+      'model_response_received',
+      'tool_call_started',
+      'tool_call_finished',
+      'model_request_started',
+      'model_response_received',
+      'generation_completed',
+   ])
+   assert.equal(events[0].round, 1)
+   assert.equal(events[2].name, 'list_notations')
+   assert.deepEqual(events[2].arguments, {})
+   assert.equal(events[3].ok, true)
+   assert.equal(events[4].round, 2)
+})
+
 test('tool incompatibility retries once without tools, but tool-loop errors do not downgrade', async () => {
    const calls = []
    const responses = [
@@ -270,6 +344,406 @@ test('tool incompatibility retries once without tools, but tool-loop errors do n
       assert.equal(Object.prototype.hasOwnProperty.call(calls[0], 'tools'), true)
       assert.equal(Object.prototype.hasOwnProperty.call(calls[1], 'tools'), false)
    })
+})
+
+test('an unavailable Chat Completions endpoint falls back to a Responses tool loop', async () => {
+   const requests = []
+   const events = []
+   const responses = [
+      {
+         ok: false,
+         status: 502,
+         async text() {
+            return JSON.stringify({ status: 'failed', message: '当前中转未启用 Chat Completions 协议代理' })
+         },
+      },
+      {
+         ok: true,
+         async text() {
+            return JSON.stringify({
+               id: 'response-1',
+               output: [
+                  {
+                     type: 'reasoning',
+                     id: 'reasoning-1',
+                     status: 'completed',
+                     content: [],
+                     encrypted_content: 'opaque-reasoning',
+                  },
+                  {
+                     type: 'function_call',
+                     id: 'item-1',
+                     call_id: 'call-list',
+                     name: 'list_notations',
+                     arguments: '{}',
+                  },
+               ],
+            })
+         },
+      },
+      {
+         ok: true,
+         async text() {
+            return JSON.stringify({
+               id: 'response-2',
+               output: [{
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{
+                     type: 'output_text',
+                     text: '```js\nregister.push({ id: "responses-fallback" });\n```',
+                  }],
+               }],
+            })
+         },
+      },
+   ]
+
+   await withGlobalsAsync({
+      register: [],
+      analysis_register: [],
+      fetch: async (endpoint, options) => {
+         requests.push({ endpoint, body: JSON.parse(options.body) })
+         return responses.shift()
+      },
+      sessionStorage: { setItem() {}, removeItem() {}, getItem() { return null } },
+   }, async () => {
+      const result = await assistant.generate({
+         apiKey: 'key',
+         baseUrl: 'http://127.0.0.1:57321/v1',
+         model: 'deepseek-v4-flash',
+         prompt: 'Create a notation.',
+         context: 'ctx',
+         onProgress(event) { events.push(event) },
+      })
+
+      assert.equal(result.protocol, 'responses')
+      assert.equal(result.usedTools, true)
+      assert.match(result.source, /responses-fallback/)
+      assert.match(result.endpoint, /\/v1\/responses$/)
+   })
+
+   assert.equal(requests.length, 3)
+   assert.match(requests[0].endpoint, /\/v1\/chat\/completions$/)
+   assert.match(requests[1].endpoint, /\/v1\/responses$/)
+   assert.equal(requests[1].body.tools[0].name, 'list_notations')
+   assert.equal(Object.prototype.hasOwnProperty.call(requests[1].body.tools[0], 'function'), false)
+   assert.deepEqual(
+      requests[2].body.input.slice(-3).map((item) => item.type),
+      ['reasoning', 'function_call', 'function_call_output']
+   )
+   assert.equal(Object.prototype.hasOwnProperty.call(requests[2].body, 'previous_response_id'), false)
+   const protocolFallback = events.find((event) => event.type === 'protocol_fallback_started')
+   assert.equal(protocolFallback.round, 1)
+   const finalResponse = events.filter((event) => event.type === 'model_response_received').at(-1)
+   assert.match(finalResponse.text, /responses-fallback/)
+})
+
+test('Responses streaming reports reasoning, tool preparation, and output deltas live', async () => {
+   const events = []
+   const responses = [
+      {
+         ok: false,
+         status: 502,
+         async text() {
+            return JSON.stringify({ status: 'failed', message: 'Chat Completions not enabled' })
+         },
+      },
+      sseResponse([
+         { type: 'response.output_text.delta', item_id: 'SSE-Keep-Alive', delta: '\u200b' },
+         { type: 'response.created', response: { id: 'response-stream-1', output: [] } },
+         { type: 'response.reasoning_text.delta', delta: 'planning ' },
+         { type: 'response.reasoning_text.delta', delta: 'tools' },
+         { type: 'response.reasoning_text.done', text: 'planning tools' },
+         {
+            type: 'response.output_item.added',
+            output_index: 1,
+            item: {
+               type: 'function_call', id: 'item-list', call_id: 'call-list',
+               name: 'list_notations', arguments: '',
+            },
+         },
+         {
+            type: 'response.function_call_arguments.delta',
+            output_index: 1, item_id: 'item-list', delta: '{}',
+         },
+         {
+            type: 'response.function_call_arguments.done',
+            output_index: 1, item_id: 'item-list', arguments: '{}',
+         },
+         {
+            type: 'response.completed',
+            response: {
+               id: 'response-stream-1',
+               output: [{
+                  type: 'function_call', id: 'item-list', call_id: 'call-list',
+                  name: 'list_notations', arguments: '{}',
+               }],
+            },
+         },
+      ]),
+      sseResponse([
+         { type: 'response.output_text.delta', delta: '```js\n' },
+         { type: 'response.output_text.delta', delta: 'register.push({ id: "streamed" });\n```' },
+         { type: 'response.output_text.done', text: '```js\nregister.push({ id: "streamed" });\n```' },
+         {
+            type: 'response.completed',
+            response: {
+               id: 'response-stream-2',
+               output: [{
+                  type: 'message', role: 'assistant',
+                  content: [{ type: 'output_text', text: '```js\nregister.push({ id: "streamed" });\n```' }],
+               }],
+            },
+         },
+      ]),
+   ]
+
+   await withGlobalsAsync({
+      register: [],
+      analysis_register: [],
+      fetch: async () => responses.shift(),
+      sessionStorage: { setItem() {}, removeItem() {}, getItem() { return null } },
+   }, async () => {
+      const result = await assistant.generate({
+         apiKey: 'key',
+         baseUrl: 'http://example.test/v1',
+         prompt: 'Stream progress.',
+         context: 'ctx',
+         onProgress(event) { events.push(event) },
+      })
+      assert.match(result.source, /streamed/)
+      assert.equal(result.protocol, 'responses')
+   })
+
+   const reasoning = events.filter((event) => event.type === 'model_reasoning_stream')
+   const preparing = events.filter((event) => event.type === 'tool_call_preparing')
+   const output = events.filter((event) => event.type === 'model_output_stream')
+   assert.equal(reasoning.at(-1).chars, 'planning tools'.length)
+   assert.equal(preparing.at(-1).name, 'list_notations')
+   assert.equal(preparing.at(-1).argumentsText, '{}')
+   assert.equal(output.at(-1).chars > 20, true)
+   assert.match(output.at(-1).text, /register\.push/)
+   assert.equal(output.some((event) => event.chars === 1), false)
+})
+
+test('Responses incomplete streams report the endpoint reason', async () => {
+   const responses = [
+      {
+         ok: false,
+         status: 502,
+         async text() { return JSON.stringify({ message: 'Chat Completions not enabled' }) },
+      },
+      sseResponse([{
+         type: 'response.incomplete',
+         response: {
+            id: 'incomplete-1',
+            status: 'incomplete',
+            incomplete_details: { reason: 'max_output_tokens' },
+            output: [],
+         },
+      }]),
+   ]
+
+   await assert.rejects(
+      () => withGlobalsAsync({
+         fetch: async () => responses.shift(),
+         sessionStorage: { setItem() {}, removeItem() {}, getItem() { return null } },
+      }, () => assistant.generate({
+         apiKey: 'key', baseUrl: 'https://example.test/v1', prompt: 'incomplete', context: 'ctx',
+         onProgress() {},
+      })),
+      /incomplete: max_output_tokens/
+   )
+})
+
+test('non-streaming Responses fallback rejects incomplete and failed results', async () => {
+   async function rejectsTerminalResult(result, expected) {
+      const responses = [
+         {
+            ok: false,
+            status: 502,
+            async text() { return JSON.stringify({ message: 'Chat Completions not enabled' }) },
+         },
+         {
+            ok: false,
+            status: 501,
+            async text() { return JSON.stringify({ message: 'Streaming not implemented' }) },
+         },
+         {
+            ok: true,
+            status: 200,
+            async text() { return JSON.stringify(result) },
+         },
+      ]
+      await assert.rejects(
+         () => withGlobalsAsync({
+            fetch: async () => responses.shift(),
+            sessionStorage: { setItem() {}, removeItem() {}, getItem() { return null } },
+         }, () => assistant.generate({
+            apiKey: 'key', baseUrl: 'https://example.test/v1', prompt: 'terminal state',
+            context: 'ctx', onProgress() {},
+         })),
+         expected
+      )
+   }
+
+   await rejectsTerminalResult({
+      status: 'incomplete',
+      incomplete_details: { reason: 'max_output_tokens' },
+      output_text: '```js\nregister.push({ id: "partial" });\n```',
+   }, /incomplete: max_output_tokens/)
+
+   await rejectsTerminalResult({
+      status: 'failed',
+      error: { message: 'upstream generation failed' },
+      output: [],
+   }, /upstream generation failed/)
+})
+
+test('Chat Completions streaming exposes reasoning and tool argument progress', async () => {
+   const requests = []
+   const events = []
+   const responses = [
+      sseResponse([
+         {
+            type: 'chat.completion.chunk',
+            choices: [{ delta: { reasoning_content: 'checking tools' }, finish_reason: null }],
+         },
+         {
+            type: 'chat.completion.chunk',
+            choices: [{ delta: {
+               tool_calls: [{
+                  index: 0, id: 'call-list', type: 'function',
+                  function: { name: 'list_notations', arguments: '' },
+               }],
+            }, finish_reason: null }],
+         },
+         {
+            type: 'chat.completion.chunk',
+            choices: [{ delta: {
+               tool_calls: [{ index: 0, function: { arguments: '{}' } }],
+            }, finish_reason: 'tool_calls' }],
+         },
+      ]),
+      sseResponse([
+         {
+            type: 'chat.completion.chunk',
+            choices: [{ delta: { content: '```js\n' }, finish_reason: null }],
+         },
+         {
+            type: 'chat.completion.chunk',
+            choices: [{
+               delta: { content: 'register.push({ id: "chat-stream" });\n```' },
+               finish_reason: 'stop',
+            }],
+         },
+      ]),
+   ]
+
+   await withGlobalsAsync({
+      register: [],
+      analysis_register: [],
+      fetch: async (_endpoint, options) => {
+         requests.push(JSON.parse(options.body))
+         return responses.shift()
+      },
+      sessionStorage: { setItem() {}, removeItem() {}, getItem() { return null } },
+   }, async () => {
+      const result = await assistant.generate({
+         apiKey: 'key',
+         baseUrl: 'https://example.test/v1',
+         prompt: 'Use a tool.',
+         context: 'ctx',
+         onProgress(event) { events.push(event) },
+      })
+      assert.equal(result.protocol, 'chat_completions')
+      assert.equal(result.usedTools, true)
+      assert.match(result.source, /chat-stream/)
+   })
+
+   assert.equal(requests.every((body) => body.stream === true), true)
+   assert.equal(requests[1].messages.some((message) => message.role === 'tool'), true)
+   assert.equal(events.some((event) => event.type === 'model_reasoning_stream'), true)
+   const preparing = events.filter((event) => event.type === 'tool_call_preparing')
+   assert.equal(preparing.at(-1).name, 'list_notations')
+   assert.equal(preparing.at(-1).argumentsText, '{}')
+   assert.equal(events.some((event) => event.type === 'model_output_stream'), true)
+   assert.match(events.filter((event) => event.type === 'model_output_stream').at(-1).text, /chat-stream/)
+})
+
+test('stream and tool capability errors stay on Chat Completions fallbacks', async () => {
+   const streamRequests = []
+   const streamEvents = []
+   const streamResponses = [
+      {
+         ok: false,
+         status: 501,
+         async text() { return JSON.stringify({ message: 'Streaming not implemented' }) },
+      },
+      {
+         ok: true,
+         async text() {
+            return JSON.stringify({ choices: [{ message: {
+               content: '```js\nregister.push({ id: "non-stream-chat" });\n```',
+            } }] })
+         },
+      },
+   ]
+   await withGlobalsAsync({
+      fetch: async (endpoint, options) => {
+         streamRequests.push({ endpoint, body: JSON.parse(options.body) })
+         return streamResponses.shift()
+      },
+      sessionStorage: { setItem() {}, removeItem() {}, getItem() { return null } },
+   }, async () => {
+      const result = await assistant.generate({
+         apiKey: 'key', baseUrl: 'https://example.test/v1', prompt: 'fallback', context: 'ctx',
+         onProgress(event) { streamEvents.push(event) },
+      })
+      assert.equal(result.protocol, 'chat_completions')
+      assert.match(result.source, /non-stream-chat/)
+   })
+   assert.equal(streamRequests.length, 2)
+   assert.equal(streamRequests[0].body.stream, true)
+   assert.equal(Object.prototype.hasOwnProperty.call(streamRequests[1].body, 'stream'), false)
+   assert.equal(streamRequests.every((request) => /chat\/completions$/.test(request.endpoint)), true)
+   assert.equal(streamEvents.some((event) => event.type === 'stream_fallback_started'), true)
+
+   const toolRequests = []
+   const toolResponses = [
+      {
+         ok: false,
+         status: 404,
+         async text() { return JSON.stringify({ message: 'Function tools are not supported' }) },
+      },
+      {
+         ok: true,
+         async text() {
+            return JSON.stringify({ choices: [{ message: {
+               content: '```js\nregister.push({ id: "plain-chat" });\n```',
+            } }] })
+         },
+      },
+   ]
+   await withGlobalsAsync({
+      fetch: async (endpoint, options) => {
+         toolRequests.push({ endpoint, body: JSON.parse(options.body) })
+         return toolResponses.shift()
+      },
+      sessionStorage: { setItem() {}, removeItem() {}, getItem() { return null } },
+   }, async () => {
+      const result = await assistant.generate({
+         apiKey: 'key', baseUrl: 'https://example.test/v1', prompt: 'fallback', context: 'ctx',
+         onProgress() {},
+      })
+      assert.equal(result.protocol, 'chat_completions')
+      assert.equal(result.toolMode, 'plain')
+      assert.match(result.source, /plain-chat/)
+   })
+   assert.equal(toolRequests.length, 2)
+   assert.equal(toolRequests.every((request) => /chat\/completions$/.test(request.endpoint)), true)
+   assert.equal(Object.prototype.hasOwnProperty.call(toolRequests[1].body, 'tools'), false)
 })
 
 test('tool loop stops with a safety error after the configured round limit', async () => {
