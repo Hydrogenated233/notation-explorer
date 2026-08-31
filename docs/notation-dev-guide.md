@@ -381,6 +381,12 @@ if (this.notation.drawDiagram != null) {
 | `line` | `x1, y1, x2, y2, color` | 线段，颜色默认 `#666` |
 | `text` | `x, y, text, fontSize` | 文本标签 |
 
+### ne-rewritten 图表兼容
+
+使用 `register_notation(...)` 的 `ne-rewritten` 记号可以把 `draw_diagram` 控制器附在定义上。图表转换层接受上游的 `stroke_color` / `fill_color` 颜色对象，也接受 `text`、`background`、`red` 等语义颜色标记，并将它们转换为 Canvas 可用的 CSS 颜色。
+
+控制器的 `default_data`、`settings` 和 `handle_action` 会保留在注册后的 `notation.diagramControl` 中；绘图函数可接收第三个参数覆盖当前图表数据。设置控件和滚动动作由宿主应用决定，不应由记号文件通过 `MutationObserver`、`window` 全局变量或直接 DOM 修改来注入设置栏。这样的模块级副作用不属于记号文件契约，在没有对应宿主结构时也不会生效。
+
 ### Diagram.js 双重加载
 
 `Diagram.js` 在两个环境中运行：

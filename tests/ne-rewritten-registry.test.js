@@ -191,6 +191,101 @@ test('diagram conversion maps elements and extra text to legacy canvas actions',
    )
 })
 
+test('diagram conversion accepts upstream semantic colors and equivalent element fields', () => {
+   const raw = rawDefinition({
+      id: 'semantic-colors',
+      draw_diagram: {
+         default_data: {},
+         draw_diagram() {
+            return {
+               width: 32,
+               height: 24,
+               elements: [
+                  {
+                     type: 'line',
+                     start: { x: 1, y: 2 },
+                     end: { x: 3, y: 4 },
+                     color: { type: 'text' },
+                  },
+                  {
+                     type: 'circle',
+                     center: { x: 5, y: 6 },
+                     radius: 7,
+                     stroke_color: { type: 'red' },
+                     fill_color: { type: 'background' },
+                  },
+                  {
+                     type: 'text',
+                     x: 8,
+                     y: 9,
+                     text: 'node',
+                     fill_color: { type: 'text' },
+                     fontSize: 12,
+                  },
+               ],
+               extra_text: [
+                  { text: 'label', x: 10, y: 11, color: { type: 'red' }, fontSize: 10 },
+               ],
+            }
+         },
+      },
+   })
+
+   const hub = new NotationRegistryHub()
+   const diagram = hub.main.registerNotation(raw, bundleFor(raw)).drawDiagram('expr')
+   const styleValues = diagram.actions
+      .filter((action) => action.type === 'strokeStyle' || action.type === 'fillStyle')
+      .map((action) => action.value)
+
+   assert.deepEqual(styleValues, [
+      'rgba(0, 0, 0, 1)',
+      'rgba(255, 0, 0, 1)',
+      'rgba(255, 255, 255, 1)',
+      'rgba(0, 0, 0, 1)',
+      'rgba(255, 0, 0, 1)',
+   ])
+   assert.equal(diagram.actions.find((action) => action.type === 'line').start.x, 1)
+   assert.equal(diagram.actions.find((action) => action.type === 'circle').radius, 7)
+   assert.equal(diagram.actions.find((action) => action.type === 'font').size, 12)
+   assert.ok(styleValues.every((value) => !value.includes('undefined')))
+})
+
+test('rewritten diagram controls stay data-driven instead of requiring host DOM mutation', () => {
+   let receivedData
+   const raw = rawDefinition({
+      id: 'controlled-diagram',
+      draw_diagram: {
+         default_data: { offset: 0, max_display: 40 },
+         settings: [{ type: 'number', field_name: 'offset', min: 0 }],
+         draw_diagram(expression, data) {
+            receivedData = data
+            return { width: 1, height: 1, elements: [], extra_text: [] }
+         },
+         handle_action(data, action) {
+            if (action.type === 'scroll' && action.direction === 'down') {
+               return { ...data, offset: data.offset + action.step }
+            }
+            return null
+         },
+      },
+   })
+
+   const hub = new NotationRegistryHub()
+   const notation = hub.main.registerNotation(raw, bundleFor(raw))
+   const diagram = notation.drawDiagram('expr', undefined, { offset: 3 })
+
+   assert.equal(diagram.width, 1)
+   assert.equal(receivedData.offset, 3)
+   assert.equal(receivedData.max_display, 40)
+   assert.deepEqual(notation.diagramControl.settings, [
+      { type: 'number', field_name: 'offset', min: 0 },
+   ])
+   assert.deepEqual(
+      notation.diagramControl.handleAction({ offset: 3 }, { type: 'scroll', direction: 'down', step: 2 }),
+      { offset: 5, max_display: 40 }
+   )
+})
+
 test('bundle decoration keeps the local primary implementation and adds equivalent metadata only', () => {
    const localDisplay = () => 'local'
    const localFS = () => ['local-fs']

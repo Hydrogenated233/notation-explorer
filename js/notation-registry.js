@@ -110,10 +110,51 @@
       }
    }
 
+   var REWRITTEN_COLOR_TYPES = {
+      text: 'rgba(0, 0, 0, 1)',
+      black: 'rgba(0, 0, 0, 1)',
+      background: 'rgba(255, 255, 255, 1)',
+      white: 'rgba(255, 255, 255, 1)',
+      red: 'rgba(255, 0, 0, 1)',
+      gray: 'rgba(128, 128, 128, 1)',
+      grey: 'rgba(128, 128, 128, 1)',
+      transparent: 'rgba(0, 0, 0, 0)',
+   }
+
+   function finiteColorChannel(value) {
+      var channel = Number(value)
+      if (!Number.isFinite(channel)) return undefined
+      return Math.max(0, Math.min(255, channel))
+   }
+
    function rgba(color, fallback) {
-      if (!color || typeof color !== 'object') return fallback || 'rgba(0, 0, 0, 1)'
-      var alpha = color.a === undefined ? 1 : color.a
-      return 'rgba(' + color.r + ', ' + color.g + ', ' + color.b + ', ' + alpha + ')'
+      fallback = fallback || 'rgba(0, 0, 0, 1)'
+      if (typeof color === 'string') {
+         var text = color.trim()
+         if (!text) return fallback
+         return REWRITTEN_COLOR_TYPES[text.toLowerCase()] || text
+      }
+      if (!color || typeof color !== 'object') return fallback
+
+      var semanticType = [color.type, color.name, color.id].find(function (value) {
+         return typeof value === 'string' && value.trim() !== ''
+      })
+      if (semanticType) {
+         var semanticColor = REWRITTEN_COLOR_TYPES[semanticType.trim().toLowerCase()]
+         if (semanticColor) return semanticColor
+      }
+
+      var css = color.css || color.value
+      if (typeof css === 'string' && css.trim() !== '') return css.trim()
+
+      var red = finiteColorChannel(color.r)
+      var green = finiteColorChannel(color.g)
+      var blue = finiteColorChannel(color.b)
+      if (red === undefined || green === undefined || blue === undefined) return fallback
+      var alpha = color.a === undefined ? 1 : Number(color.a)
+      if (!Number.isFinite(alpha)) alpha = 1
+      alpha = Math.max(0, Math.min(1, alpha))
+      return 'rgba(' + red + ', ' + green + ', ' + blue + ', ' + alpha + ')'
    }
 
    function plainDiagramText(value, isHtml) {
@@ -159,28 +200,43 @@
          if (!element || typeof element !== 'object') return
          if (element.type === 'circle') {
             if (element.stroke === false && element.fill === false) return
+            var circleCenter = element.center && typeof element.center === 'object'
+               ? element.center
+               : { x: element.x, y: element.y }
             actions.push({ type: 'lineWidth', value: element.width || 1 })
             actions.push({
                type: 'strokeStyle',
                value: element.stroke === false
                   ? 'rgba(0, 0, 0, 0)'
-                  : rgba(element.stroke_color),
+                  : rgba(element.stroke_color === undefined ? element.color : element.stroke_color),
             })
-            actions.push({ type: 'fillStyle', value: rgba(element.fill_color) })
+            actions.push({
+               type: 'fillStyle',
+               value: rgba(element.fill_color === undefined ? element.color : element.fill_color),
+            })
             actions.push({
                type: 'circle',
-               center: { x: element.x, y: element.y },
-               radius: element.r,
+               center: { x: circleCenter.x, y: circleCenter.y },
+               radius: element.r === undefined ? element.radius : element.r,
                fill: element.fill !== false,
             })
          } else if (element.type === 'line') {
             if (element.stroke === false) return
+            var lineStart = element.start && typeof element.start === 'object'
+               ? element.start
+               : { x: element.x1, y: element.y1 }
+            var lineEnd = element.end && typeof element.end === 'object'
+               ? element.end
+               : { x: element.x2, y: element.y2 }
             actions.push({ type: 'lineWidth', value: element.width || 1 })
-            actions.push({ type: 'strokeStyle', value: rgba(element.stroke_color) })
+            actions.push({
+               type: 'strokeStyle',
+               value: rgba(element.stroke_color === undefined ? element.color : element.stroke_color),
+            })
             actions.push({
                type: 'line',
-               start: { x: element.x1, y: element.y1 },
-               end: { x: element.x2, y: element.y2 },
+               start: { x: lineStart.x, y: lineStart.y },
+               end: { x: lineEnd.x, y: lineEnd.y },
             })
          } else if (element.type === 'text') {
             if (element.fill === false) return
@@ -189,8 +245,8 @@
                element.text,
                element.x,
                element.y,
-               element.size,
-               element.fill_color,
+               element.size === undefined ? element.fontSize : element.size,
+               element.fill_color === undefined ? element.color : element.fill_color,
                element.align,
                false
             )
@@ -206,8 +262,8 @@
             entry.text,
             entry.x,
             entry.y,
-            entry.size,
-            entry.color,
+            entry.size === undefined ? entry.fontSize : entry.size,
+            entry.color === undefined ? entry.fill_color : entry.color,
             entry.align,
             entry.display_html === true
          )
@@ -231,14 +287,32 @@
    function createRewrittenDrawDiagram(raw) {
       var control = raw && raw.draw_diagram
       if (!control || typeof control.draw_diagram !== 'function') return undefined
-      return function (expression, equivalentId) {
-         var defaults = control.default_data
-         var data = defaults && typeof defaults === 'object' && !Array.isArray(defaults)
-            ? Object.assign({}, defaults)
-            : {}
+      var defaults = control.default_data && typeof control.default_data === 'object' && !Array.isArray(control.default_data)
+         ? Object.assign({}, control.default_data)
+         : {}
+      var drawDiagram = function (expression, equivalentId, dataOverride) {
+         var data = dataOverride && typeof dataOverride === 'object' && !Array.isArray(dataOverride)
+            ? Object.assign({}, defaults, dataOverride)
+            : Object.assign({}, defaults)
          data.current_equiv = rewrittenDiagramEquivalentId(raw, equivalentId)
          return convertRewrittenDiagram(control.draw_diagram(expression, data))
       }
+      drawDiagram.diagramControl = {
+         defaultData: Object.assign({}, defaults),
+         settings: Array.isArray(control.settings) ? control.settings.slice() : [],
+         handleAction: typeof control.handle_action === 'function'
+            ? function (data, action) {
+               var current = data && typeof data === 'object' && !Array.isArray(data)
+                  ? Object.assign({}, defaults, data)
+                  : Object.assign({}, defaults)
+               var next = control.handle_action(current, action)
+               return next && typeof next === 'object' && !Array.isArray(next)
+                  ? Object.assign({}, next)
+                  : next
+            }
+            : undefined,
+      }
+      return drawDiagram
    }
 
    function isRewrittenDefinition(entry) {
@@ -312,7 +386,10 @@
       if (typeof raw.credit_text_id === 'string') adapted.credit_text_id = raw.credit_text_id
       if (raw.debug !== undefined) adapted.debug = raw.debug
       var drawDiagram = createRewrittenDrawDiagram(raw)
-      if (drawDiagram) adapted.drawDiagram = drawDiagram
+      if (drawDiagram) {
+         adapted.drawDiagram = drawDiagram
+         adapted.diagramControl = drawDiagram.diagramControl
+      }
       return adapted
    }
 
@@ -342,11 +419,12 @@
       }
 
       var remoteDraw = createRewrittenDrawDiagram(raw)
+      if (remoteDraw) target.diagramControl = remoteDraw.diagramControl
       if (remoteDraw && equivalents && Object.keys(equivalents).length) {
          var originalDraw = typeof target.drawDiagram === 'function' ? target.drawDiagram : undefined
          target.drawDiagram = function (expression, equivalentId) {
             if (typeof equivalentId === 'string' && hasOwn(equivalents, equivalentId)) {
-               return remoteDraw(expression, equivalentId)
+               return remoteDraw.apply(this, arguments)
             }
             return originalDraw ? originalDraw.apply(this, arguments) : undefined
          }
